@@ -1,0 +1,70 @@
+"use client";
+
+import { useState } from "react";
+import { Plus, Megaphone } from "lucide-react";
+import { Table, type Column } from "@/components/ui/Table";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card, CardHeader } from "@/components/ui/Card";
+import { CampanhaForm } from "./CampanhaForm";
+import { formatDateTime } from "@/lib/utils";
+import type { Campanha } from "@/types/database";
+
+const STATUS_VARIANT = { rascunho: "gray", agendada: "yellow", enviada: "green" } as const;
+const STATUS_LABEL = { rascunho: "Rascunho", agendada: "Agendada", enviada: "Enviada" } as const;
+
+export function CampanhasList({ campanhas, userId }: { campanhas: Campanha[]; userId: string }) {
+  const [open, setOpen] = useState(false);
+
+  const columns: Column<Campanha>[] = [
+    {
+      header: "Campanha",
+      accessor: (c) => (
+        <div>
+          <p className="font-medium text-gray-900">{c.titulo}</p>
+          <p className="max-w-sm truncate text-xs text-gray-400">{c.mensagem}</p>
+        </div>
+      ),
+    },
+    {
+      header: "Público",
+      accessor: (c) => (
+        <span className="text-gray-500">
+          {c.clientes_alvo === "todos" ? "Todos" : `Filtro: ${JSON.stringify(c.filtro_json ?? {})}`}
+        </span>
+      ),
+    },
+    {
+      header: "Agendada para",
+      accessor: (c) => <span className="text-gray-500">{formatDateTime(c.agendada_para)}</span>,
+    },
+    {
+      header: "Status",
+      accessor: (c) => <Badge variant={STATUS_VARIANT[c.status]}>{STATUS_LABEL[c.status]}</Badge>,
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader
+        title="Campanhas"
+        description="Mensagens em massa enviadas via WhatsApp/Instagram."
+        action={
+          <Button size="sm" onClick={() => setOpen(true)}>
+            <Plus size={15} /> Nova campanha
+          </Button>
+        }
+      />
+      {campanhas.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-12 text-gray-300">
+          <Megaphone size={36} />
+          <p className="text-sm text-gray-400">Nenhuma campanha criada ainda.</p>
+        </div>
+      ) : (
+        <Table columns={columns} data={campanhas} keyField={(c) => c.id} />
+      )}
+
+      <CampanhaForm open={open} onClose={() => setOpen(false)} userId={userId} />
+    </Card>
+  );
+}

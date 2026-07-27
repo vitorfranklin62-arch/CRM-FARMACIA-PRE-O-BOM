@@ -1,0 +1,89 @@
+"use client";
+
+import { useFormState, useFormStatus } from "react-dom";
+import { Pill, Lock, Mail } from "lucide-react";
+import { loginAction, type LoginState } from "./actions";
+
+const initialState: LoginState = { error: null };
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="w-full rounded-lg bg-blue-600 py-2.5 font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {pending ? "Entrando..." : "Entrar"}
+    </button>
+  );
+}
+
+export default function LoginPage() {
+  const [state, formAction] = useFormState(loginAction, initialState);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 flex flex-col items-center gap-2">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+            <Pill size={28} />
+          </div>
+          <h1 className="text-xl font-semibold text-gray-900">Farmácia Preço Bom</h1>
+          <p className="text-sm text-gray-500">Painel de atendimento</p>
+        </div>
+
+        <form action={formAction} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-gray-700">
+                E-mail
+              </label>
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  className="w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="voce@farmaciaprecobom.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-gray-700">
+                Senha
+              </label>
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  minLength={6}
+                  className="w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+
+            {state.error && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{state.error}</p>
+            )}
+
+            <SubmitButton />
+          </div>
+        </form>
+
+        <p className="mt-6 text-center text-xs text-gray-400">
+          Acesso restrito à equipe da Farmácia Preço Bom.
+        </p>
+      </div>
+    </div>
+  );
+}
