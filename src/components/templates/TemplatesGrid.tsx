@@ -7,6 +7,7 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
+import { logAudit } from "@/lib/audit";
 import { TemplateForm } from "./TemplateForm";
 import type { TemplateMensagem, TemplateCategoria } from "@/types/database";
 
@@ -36,6 +37,7 @@ export function TemplatesGrid({ templates, isDona }: { templates: TemplateMensag
     if (!confirm("Excluir este template?")) return;
     const supabase = createClient();
     await supabase.from("templates_mensagem").delete().eq("id", id);
+    await logAudit(supabase, "template_excluido", "templates_mensagem", id);
     router.refresh();
   }
 

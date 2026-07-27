@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireDona } from "@/lib/auth";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { logAudit } from "@/lib/audit";
 import { usuarioCreateSchema, senhaUpdateSchema } from "@/lib/validation";
 
 const CONFIG_KEYS = [
@@ -19,7 +20,7 @@ export interface ActionState {
 }
 
 export async function updateConfiguracoesAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  await requireDona();
+  const dona = await requireDona();
   const supabase = await createClient();
 
   const rows = CONFIG_KEYS.filter((key) => formData.has(key)).map((key) => ({
@@ -33,12 +34,14 @@ export async function updateConfiguracoesAction(_prev: ActionState, formData: Fo
   const { error } = await supabase.from("configuracoes").upsert(rows, { onConflict: "chave" });
   if (error) return { error: "Não foi possível salvar as configurações." };
 
+  await logAudit(supabase, "configuracoes_atualizadas", "configuracoes", null, { chaves: rows.map((r) => r.chave) }, dona.id);
+
   revalidatePath("/configuracoes");
   return { error: null, success: true };
 }
 
 export async function criarUsuarioAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  await requireDona();
+  const dona = await requireDona();
 
   const parsed = usuarioCreateSchema.safeParse({
     email: formData.get("email"),
@@ -72,14 +75,17 @@ export async function criarUsuarioAction(_prev: ActionState, formData: FormData)
     return { error: "Não foi possível salvar o perfil do usuário." };
   }
 
+  await logAudit(service, "usuario_criado", "usuarios", created.user.id, { email: parsed.data.email, role: parsed.data.role }, dona.id);
+
   revalidatePath("/configuracoes");
   return { error: null, success: true };
 }
 
 export async function alternarAtivoUsuarioAction(usuarioId: string, ativo: boolean) {
-  await requireDona();
+  const dona = await requireDona();
   const supabase = await createClient();
   await supabase.from("usuarios").update({ ativo }).eq("id", usuarioId);
+  await logAudit(supabase, "usuario_status_alterado", "usuarios", usuarioId, { ativo }, dona.id);
   revalidatePath("/configuracoes");
 }
 
@@ -90,6 +96,7 @@ export async function removerUsuarioAction(usuarioId: string) {
   const service = createServiceClient();
   await service.from("usuarios").delete().eq("id", usuarioId);
   await service.auth.admin.deleteUser(usuarioId);
+  await logAudit(service, "usuario_removido", "usuarios", usuarioId, undefined, dona.id);
   revalidatePath("/configuracoes");
 }
 
@@ -113,6 +120,8 @@ export async function alterarSenhaAction(_prev: ActionState, formData: FormData)
 
   const { error } = await supabase.auth.updateUser({ password: parsed.data.novaSenha });
   if (error) return { error: "Não foi possível alterar a senha." };
+
+  await logAudit(supabase, "senha_alterada", "usuarios", usuario.id, undefined, usuario.id);
 
   return { error: null, success: true };
 }

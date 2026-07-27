@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Label, Input, Textarea, Select } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
+import { logAudit } from "@/lib/audit";
 import { campanhaCreateSchema } from "@/lib/validation";
 import type { ClientesAlvo, OrigemChat } from "@/types/database";
 
@@ -54,21 +55,27 @@ export function CampanhaForm({
 
     setSaving(true);
     const supabase = createClient();
-    const { error: dbError } = await supabase.from("campanhas").insert({
-      titulo: parsed.data.titulo,
-      mensagem: parsed.data.mensagem,
-      clientes_alvo: parsed.data.clientes_alvo,
-      filtro_json: parsed.data.filtro_json ?? null,
-      agendada_para: parsed.data.agendada_para,
-      status: parsed.data.agendada_para ? "agendada" : "rascunho",
-      criado_por: userId,
-    });
+    const { data, error: dbError } = await supabase
+      .from("campanhas")
+      .insert({
+        titulo: parsed.data.titulo,
+        mensagem: parsed.data.mensagem,
+        clientes_alvo: parsed.data.clientes_alvo,
+        filtro_json: parsed.data.filtro_json ?? null,
+        agendada_para: parsed.data.agendada_para,
+        status: parsed.data.agendada_para ? "agendada" : "rascunho",
+        criado_por: userId,
+      })
+      .select("id")
+      .single();
     setSaving(false);
 
     if (dbError) {
       setError("Não foi possível criar a campanha.");
       return;
     }
+
+    await logAudit(supabase, "campanha_criada", "campanhas", data?.id, { titulo: parsed.data.titulo });
 
     reset();
     onClose();

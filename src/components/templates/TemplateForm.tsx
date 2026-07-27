@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Label, Input, Textarea, Select } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
+import { logAudit } from "@/lib/audit";
 import { templateCreateSchema } from "@/lib/validation";
 import type { TemplateCategoria, TemplateMensagem } from "@/types/database";
 
@@ -46,15 +47,19 @@ export function TemplateForm({
 
     setSaving(true);
     const supabase = createClient();
-    const { error: dbError } = template
-      ? await supabase.from("templates_mensagem").update(parsed.data).eq("id", template.id)
-      : await supabase.from("templates_mensagem").insert(parsed.data);
+    const { data, error: dbError } = template
+      ? await supabase.from("templates_mensagem").update(parsed.data).eq("id", template.id).select("id").single()
+      : await supabase.from("templates_mensagem").insert(parsed.data).select("id").single();
     setSaving(false);
 
     if (dbError) {
       setError("Não foi possível salvar o template.");
       return;
     }
+
+    await logAudit(supabase, template ? "template_atualizado" : "template_criado", "templates_mensagem", data?.id, {
+      titulo: parsed.data.titulo,
+    });
 
     onClose();
     router.refresh();

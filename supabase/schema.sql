@@ -125,6 +125,19 @@ create table if not exists login_tentativas (
   criado_em timestamptz not null default now()
 );
 
+-- audit_log: registro básico de quem fez o quê (ações administrativas e
+-- operacionais relevantes — não cobre cada mensagem de chat, que já tem
+-- seu próprio histórico completo na tabela `mensagens`).
+create table if not exists audit_log (
+  id uuid primary key default gen_random_uuid(),
+  usuario_id uuid references usuarios(id),
+  acao text not null,
+  entidade text not null,
+  entidade_id uuid,
+  detalhes jsonb,
+  criado_em timestamptz not null default now()
+);
+
 -- ============================================================================
 -- ÍNDICES
 -- ============================================================================
@@ -138,6 +151,8 @@ create index if not exists idx_mensagens_conversa_id on mensagens(conversa_id);
 create index if not exists idx_clientes_telefone on clientes(telefone);
 create index if not exists idx_vendas_log_data_venda on vendas_log(data_venda);
 create index if not exists idx_login_tentativas_email on login_tentativas(email);
+create index if not exists idx_audit_log_criado_em on audit_log(criado_em desc);
+create index if not exists idx_audit_log_usuario_id on audit_log(usuario_id);
 
 -- ============================================================================
 -- updated_at triggers
@@ -206,6 +221,7 @@ alter table campanhas enable row level security;
 alter table vendas_log enable row level security;
 alter table configuracoes enable row level security;
 alter table login_tentativas enable row level security;
+alter table audit_log enable row level security;
 
 -- usuarios: cada um vê o próprio registro; dona vê e gerencia todos
 drop policy if exists usuarios_select on usuarios;
@@ -327,6 +343,13 @@ create policy configuracoes_update on configuracoes for update using (is_dona())
 -- login_tentativas: só dona lê; ninguém escreve via client (só service role, usado pelo backend)
 drop policy if exists login_tentativas_select on login_tentativas;
 create policy login_tentativas_select on login_tentativas for select using (is_dona());
+
+-- audit_log: só dona lê (auditoria); qualquer usuário ativo registra as próprias ações
+drop policy if exists audit_log_select on audit_log;
+create policy audit_log_select on audit_log for select using (is_dona());
+drop policy if exists audit_log_insert on audit_log;
+create policy audit_log_insert on audit_log for insert
+  with check (is_usuario_ativo() and (usuario_id = auth.uid() or usuario_id is null));
 
 -- ============================================================================
 -- Realtime (pedidos, mensagens e conversas precisam de updates em tempo real)

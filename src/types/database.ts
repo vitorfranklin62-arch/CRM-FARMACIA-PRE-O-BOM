@@ -125,6 +125,31 @@ export type LoginTentativa = {
   criado_em: string;
 }
 
+export type AuditAcao =
+  | "pedido_status_atualizado"
+  | "cliente_observacao_atualizada"
+  | "template_criado"
+  | "template_atualizado"
+  | "template_excluido"
+  | "campanha_criada"
+  | "campanha_atualizada"
+  | "campanha_excluida"
+  | "configuracoes_atualizadas"
+  | "usuario_criado"
+  | "usuario_status_alterado"
+  | "usuario_removido"
+  | "senha_alterada";
+
+export type AuditLog = {
+  id: string;
+  usuario_id: string | null;
+  acao: AuditAcao;
+  entidade: string;
+  entidade_id: string | null;
+  detalhes: Record<string, unknown> | null;
+  criado_em: string;
+}
+
 type Relationship = {
   foreignKeyName: string;
   columns: string[];
@@ -231,6 +256,18 @@ export interface Database {
       vendas_log: TableDef<VendaLog>;
       configuracoes: TableDef<Configuracao>;
       login_tentativas: TableDef<LoginTentativa>;
+      audit_log: TableDef<
+        AuditLog,
+        [
+          {
+            foreignKeyName: "audit_log_usuario_id_fkey";
+            columns: ["usuario_id"];
+            isOneToOne: false;
+            referencedRelation: "usuarios";
+            referencedColumns: ["id"];
+          },
+        ]
+      >;
     };
     Views: Record<never, never>;
     Functions: Record<never, never>;

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { logAudit } from "@/lib/audit";
 import { PedidoCard } from "./PedidoCard";
 import type { PedidoCompleto } from "@/types/relations";
 import type { PedidoStatus } from "@/types/database";
@@ -44,6 +45,8 @@ export function PedidosBoard({ initialPedidos }: { initialPedidos: PedidoComplet
 
     if (error) {
       router.refresh();
+    } else {
+      await logAudit(supabase, "pedido_status_atualizado", "pedidos", id, { status });
     }
     setUpdatingId(null);
   }

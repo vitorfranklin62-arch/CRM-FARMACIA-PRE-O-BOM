@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
+import { logAudit } from "@/lib/audit";
 import { formatRelativeTime, maskPhone } from "@/lib/utils";
 import type { Cliente } from "@/types/database";
 
@@ -28,6 +29,7 @@ export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
     setSaving(true);
     const supabase = createClient();
     await supabase.from("clientes").update({ observacoes }).eq("id", editing.id);
+    await logAudit(supabase, "cliente_observacao_atualizada", "clientes", editing.id);
     setSaving(false);
     setEditing(null);
     router.refresh();
