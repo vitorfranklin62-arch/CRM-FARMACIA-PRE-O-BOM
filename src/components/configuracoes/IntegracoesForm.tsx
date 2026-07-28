@@ -22,10 +22,12 @@ export function IntegracoesForm({
   uaizapUrl,
   n8nUrl,
   n8nChatWebhookUrl,
+  n8nCampanhaWebhookUrl,
 }: {
   uaizapUrl: string;
   n8nUrl: string;
   n8nChatWebhookUrl: string;
+  n8nCampanhaWebhookUrl: string;
 }) {
   const [state, formAction] = useFormState(updateConfiguracoesAction, initialState);
 
@@ -60,6 +62,19 @@ export function IntegracoesForm({
           <p className="mt-1 text-xs text-gray-400">
             Quando uma funcionária responde pelo Chat ao vivo, o painel chama essa URL pra o N8N entregar a
             mensagem via UAIZAP/WhatsApp.
+          </p>
+        </div>
+        <div>
+          <Label htmlFor="integracao_n8n_campanha_webhook_url">Webhook do N8N para disparar campanhas</Label>
+          <Input
+            id="integracao_n8n_campanha_webhook_url"
+            name="integracao_n8n_campanha_webhook_url"
+            defaultValue={n8nCampanhaWebhookUrl}
+            placeholder="https://seu-n8n.exemplo.com/webhook/disparar-campanha"
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            Usado pelo botão &quot;Disparar agora&quot; em Campanhas. Campanhas agendadas também são pegas
+            automaticamente pelo N8N no horário marcado.
           </p>
         </div>
         <p className="text-xs text-gray-400">

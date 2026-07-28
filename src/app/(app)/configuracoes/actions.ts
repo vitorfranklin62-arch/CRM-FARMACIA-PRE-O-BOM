@@ -13,6 +13,7 @@ const CONFIG_KEYS = [
   "integracao_uaizap_url",
   "integracao_n8n_url",
   "integracao_n8n_chat_webhook_url",
+  "integracao_n8n_campanha_webhook_url",
 ] as const;
 
 export interface ActionState {

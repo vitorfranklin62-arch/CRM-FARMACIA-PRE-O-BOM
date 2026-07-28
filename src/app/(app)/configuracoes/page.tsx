@@ -39,6 +39,7 @@ export default async function ConfiguracoesPage() {
           uaizapUrl={config.get("integracao_uaizap_url") ?? ""}
           n8nUrl={config.get("integracao_n8n_url") ?? ""}
           n8nChatWebhookUrl={config.get("integracao_n8n_chat_webhook_url") ?? ""}
+          n8nCampanhaWebhookUrl={config.get("integracao_n8n_campanha_webhook_url") ?? ""}
         />
       </div>
 
