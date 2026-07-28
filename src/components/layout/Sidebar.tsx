@@ -10,11 +10,11 @@ import {
   Megaphone,
   FileText,
   Settings,
-  Pill,
   Boxes,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LogoMark } from "@/components/ui/Logo";
 import type { UsuarioRole } from "@/types/database";
 
 interface NavItem {
@@ -40,18 +40,16 @@ export function Sidebar({ role }: { role: UsuarioRole }) {
   const items = NAV_ITEMS.filter((item) => !item.donaOnly || role === "dona");
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-gray-100 bg-white md:flex">
-      <div className="flex items-center gap-2 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white">
-          <Pill size={18} />
-        </div>
+    <aside className="hidden w-60 shrink-0 flex-col bg-navy-900 md:flex">
+      <div className="flex items-center gap-2.5 border-b border-white/10 px-5 py-5">
+        <LogoMark size={34} />
         <div>
-          <p className="text-sm font-semibold leading-tight text-gray-900">Preço Bom</p>
-          <p className="text-xs leading-tight text-gray-400">Painel CRM</p>
+          <p className="text-[13px] font-semibold leading-tight tracking-wide text-white">Preço Bom</p>
+          <p className="text-[10.5px] leading-tight text-white/60">Painel CRM</p>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-2">
+      <nav className="flex-1 space-y-0.5 px-3 py-3">
         {items.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
@@ -60,8 +58,10 @@ export function Sidebar({ role }: { role: UsuarioRole }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
-                active ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                "flex items-center gap-3 rounded-lg border-l-[3px] px-3 py-2.5 text-[13.5px] font-medium transition",
+                active
+                  ? "border-accent-500 bg-accent-500/15 font-semibold text-white"
+                  : "border-transparent text-white/75 hover:bg-white/[0.06] hover:text-white"
               )}
             >
               <Icon size={18} />

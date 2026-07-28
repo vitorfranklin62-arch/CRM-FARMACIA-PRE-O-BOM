@@ -64,7 +64,7 @@ export function CampanhasList({ campanhas, userId }: { campanhas: Campanha[]; us
           <button
             onClick={() => handleDisparar(c)}
             disabled={disparando === c.id}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 disabled:opacity-50"
           >
             <Send size={13} /> {disparando === c.id ? "Disparando..." : "Disparar agora"}
           </button>

@@ -77,7 +77,7 @@ export function ProdutosTable({ produtos, isDona }: { produtos: Produto[]; isDon
               <div className="flex justify-end gap-1">
                 <button
                   onClick={() => openEdit(p)}
-                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-blue-600"
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-brand-600"
                 >
                   <Pencil size={14} />
                 </button>

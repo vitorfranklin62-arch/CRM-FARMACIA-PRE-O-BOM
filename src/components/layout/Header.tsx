@@ -16,7 +16,7 @@ export function Header({ usuario, title }: { usuario: Usuario; title?: string })
           <p className="text-sm font-medium leading-tight text-gray-900">{usuario.nome}</p>
           <p className="text-xs capitalize leading-tight text-gray-400">{usuario.role}</p>
         </div>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-navy-50 text-sm font-semibold text-navy-900">
           {initials(usuario.nome)}
         </div>
         <form action={logoutAction}>

@@ -11,9 +11,9 @@ import type { ConversaCompleta, MensagemComUsuario } from "@/types/relations";
 import type { TemplateMensagem } from "@/types/database";
 
 const REMETENTE_STYLE = {
-  ia: { align: "justify-start", bubble: "bg-purple-50 text-purple-900", icon: Bot, label: "IA" },
-  cliente: { align: "justify-start", bubble: "bg-gray-100 text-gray-900", icon: User, label: "Cliente" },
-  funcionaria: { align: "justify-end", bubble: "bg-blue-600 text-white", icon: Headset, label: "Você" },
+  ia: { align: "justify-start", bubble: "bg-[#EEF1F4] text-gray-900", icon: Bot, label: "IA" },
+  cliente: { align: "justify-start", bubble: "bg-brand-600 text-white", icon: User, label: "Cliente" },
+  funcionaria: { align: "justify-end", bubble: "bg-emerald-600 text-white", icon: Headset, label: "Você" },
 } as const;
 
 export function MessageThread({
@@ -133,7 +133,7 @@ export function MessageThread({
             type="button"
             onClick={() => setShowTemplates((v) => !v)}
             title="Usar template"
-            className="rounded-lg p-2.5 text-gray-400 transition hover:bg-gray-100 hover:text-blue-600"
+            className="rounded-lg p-2.5 text-gray-400 transition hover:bg-gray-100 hover:text-brand-600"
           >
             <FileText size={18} />
           </button>
@@ -148,12 +148,12 @@ export function MessageThread({
             }}
             rows={1}
             placeholder="Digite uma mensagem..."
-            className="flex-1 resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="flex-1 resize-none rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
           />
           <button
             type="submit"
             disabled={sending || !texto.trim()}
-            className="rounded-lg bg-blue-600 p-2.5 text-white transition hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg bg-accent-500 p-2.5 text-white transition hover:bg-accent-600 disabled:opacity-50"
           >
             <Send size={18} />
           </button>

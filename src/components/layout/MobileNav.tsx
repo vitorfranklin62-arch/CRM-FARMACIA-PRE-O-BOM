@@ -29,7 +29,7 @@ export function MobileNav({ role }: { role: UsuarioRole }) {
             href={item.href}
             className={cn(
               "flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium",
-              active ? "text-blue-700" : "text-gray-400"
+              active ? "text-accent-600" : "text-gray-400"
             )}
           >
             <Icon size={20} />

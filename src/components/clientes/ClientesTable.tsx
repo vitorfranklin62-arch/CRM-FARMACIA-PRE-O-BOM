@@ -69,7 +69,7 @@ export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
       accessor: (c) => (
         <button
           onClick={() => openEditor(c)}
-          className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50"
+          className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50"
         >
           <NotebookPen size={13} /> Anotar
         </button>

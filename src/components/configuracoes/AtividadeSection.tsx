@@ -61,7 +61,7 @@ export function AtividadeSection({ logs }: { logs: AuditLogComUsuario[] }) {
         title="Atividade recente"
         description="Registro das últimas ações realizadas no painel."
         action={
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
             <History size={18} />
           </div>
         }

@@ -37,7 +37,7 @@ export function IntegracoesForm({
         title="Integrações"
         description="Conecte o UAIZAP e o N8N que orquestram o atendimento automatizado."
         action={
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
             <Zap size={18} />
           </div>
         }

@@ -81,7 +81,7 @@ export function UsuariosSection({ usuarios, currentUserId }: { usuarios: Usuario
         description="Dona e funcionárias com acesso ao painel."
         action={
           <div className="flex items-center gap-2">
-            <div className="hidden h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 sm:flex">
+            <div className="hidden h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600 sm:flex">
               <UserCog size={18} />
             </div>
             <Button size="sm" onClick={() => setFormOpen(true)}>

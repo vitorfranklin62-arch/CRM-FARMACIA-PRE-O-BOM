@@ -75,7 +75,7 @@ export function TemplatesGrid({ templates, isDona }: { templates: TemplateMensag
                       <div className="flex shrink-0 gap-1">
                         <button
                           onClick={() => openEdit(t)}
-                          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-blue-600"
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-brand-600"
                         >
                           <Pencil size={14} />
                         </button>
