@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ChatConversaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const usuario = await requireUser();
+  await requireUser();
   const supabase = await createClient();
 
   const conversasRes = await supabase
@@ -39,7 +39,6 @@ export default async function ChatConversaPage({ params }: { params: Promise<{ i
           conversa={conversaRes.data as ConversaCompleta}
           initialMensagens={(mensagensRes.data as MensagemComUsuario[]) ?? []}
           templates={(templatesRes.data as TemplateMensagem[]) ?? []}
-          currentUserId={usuario.id}
         />
       </ChatShell>
     </div>

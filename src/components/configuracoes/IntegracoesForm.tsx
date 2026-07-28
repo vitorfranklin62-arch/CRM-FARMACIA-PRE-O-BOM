@@ -18,7 +18,15 @@ function SaveButton() {
   );
 }
 
-export function IntegracoesForm({ uaizapUrl, n8nUrl }: { uaizapUrl: string; n8nUrl: string }) {
+export function IntegracoesForm({
+  uaizapUrl,
+  n8nUrl,
+  n8nChatWebhookUrl,
+}: {
+  uaizapUrl: string;
+  n8nUrl: string;
+  n8nChatWebhookUrl: string;
+}) {
   const [state, formAction] = useFormState(updateConfiguracoesAction, initialState);
 
   return (
@@ -40,6 +48,19 @@ export function IntegracoesForm({ uaizapUrl, n8nUrl }: { uaizapUrl: string; n8nU
         <div>
           <Label htmlFor="integracao_n8n_url">URL base do N8N</Label>
           <Input id="integracao_n8n_url" name="integracao_n8n_url" defaultValue={n8nUrl} placeholder="https://..." />
+        </div>
+        <div>
+          <Label htmlFor="integracao_n8n_chat_webhook_url">Webhook do N8N para enviar mensagens do chat</Label>
+          <Input
+            id="integracao_n8n_chat_webhook_url"
+            name="integracao_n8n_chat_webhook_url"
+            defaultValue={n8nChatWebhookUrl}
+            placeholder="https://seu-n8n.exemplo.com/webhook/enviar-mensagem"
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            Quando uma funcionária responde pelo Chat ao vivo, o painel chama essa URL pra o N8N entregar a
+            mensagem via UAIZAP/WhatsApp.
+          </p>
         </div>
         <p className="text-xs text-gray-400">
           Chaves de API e tokens secretos são configurados por variáveis de ambiente no servidor, não aqui.

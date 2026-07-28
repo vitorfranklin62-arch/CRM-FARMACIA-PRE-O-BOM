@@ -60,6 +60,18 @@ export const mensagemCreateSchema = z.object({
   conteudo: z.string().trim().min(1).max(4000),
 });
 
+export const mensagemWebhookSchema = z.object({
+  cliente: z.object({
+    id: z.string().uuid().optional(),
+    nome: z.string().trim().min(1).max(200),
+    telefone: z.string().trim().min(8).max(30),
+    origem_chat: z.enum(["whatsapp", "instagram"]).optional(),
+  }),
+  remetente: z.enum(["ia", "cliente"]),
+  conteudo: z.string().trim().min(1).max(4000),
+  conversa_status: z.enum(["aberta", "aguardando_humano", "fechada"]).optional(),
+});
+
 export const clienteUpdateSchema = z.object({
   observacoes: z.string().trim().max(2000).nullable().optional(),
 });

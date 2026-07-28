@@ -368,5 +368,6 @@ insert into configuracoes (chave, valor, tipo) values
   ('farmacia_telefone', '', 'string'),
   ('farmacia_horario', 'Seg a Sáb, 08h às 20h', 'string'),
   ('integracao_uaizap_url', '', 'string'),
-  ('integracao_n8n_url', '', 'string')
+  ('integracao_n8n_url', '', 'string'),
+  ('integracao_n8n_chat_webhook_url', '', 'string')
 on conflict (chave) do nothing;

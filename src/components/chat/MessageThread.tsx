@@ -20,12 +20,10 @@ export function MessageThread({
   conversa,
   initialMensagens,
   templates,
-  currentUserId,
 }: {
   conversa: ConversaCompleta;
   initialMensagens: MensagemComUsuario[];
   templates: TemplateMensagem[];
-  currentUserId: string;
 }) {
   const [mensagens, setMensagens] = useState(initialMensagens);
   const [texto, setTexto] = useState("");
@@ -61,15 +59,13 @@ export function MessageThread({
     if (!trimmed || sending) return;
 
     setSending(true);
-    const supabase = createClient();
-    const { error } = await supabase.from("mensagens").insert({
-      conversa_id: conversa.id,
-      remetente: "funcionaria",
-      usuario_id: currentUserId,
-      conteudo: trimmed,
+    const res = await fetch("/api/chat/enviar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversa_id: conversa.id, conteudo: trimmed }),
     });
 
-    if (!error) {
+    if (res.ok) {
       setTexto("");
       router.refresh();
     }
