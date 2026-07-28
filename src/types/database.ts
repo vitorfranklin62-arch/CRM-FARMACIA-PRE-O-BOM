@@ -138,7 +138,10 @@ export type AuditAcao =
   | "usuario_criado"
   | "usuario_status_alterado"
   | "usuario_removido"
-  | "senha_alterada";
+  | "senha_alterada"
+  | "produto_criado"
+  | "produto_atualizado"
+  | "produto_excluido";
 
 export type AuditLog = {
   id: string;

@@ -72,6 +72,14 @@ export const mensagemWebhookSchema = z.object({
   conversa_status: z.enum(["aberta", "aguardando_humano", "fechada"]).optional(),
 });
 
+export const produtoCreateSchema = z.object({
+  nome: z.string().trim().min(1).max(300),
+  laboratorio: z.string().trim().max(200).nullable().optional(),
+  preco: z.number().nonnegative(),
+  estoque: z.number().int().nonnegative(),
+  sku: z.string().trim().max(100).nullable().optional(),
+});
+
 export const clienteUpdateSchema = z.object({
   observacoes: z.string().trim().max(2000).nullable().optional(),
 });

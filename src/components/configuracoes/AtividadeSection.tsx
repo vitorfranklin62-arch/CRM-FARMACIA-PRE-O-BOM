@@ -19,6 +19,9 @@ const ACAO_LABEL: Record<AuditAcao, string> = {
   usuario_status_alterado: "Ativou/desativou usuária",
   usuario_removido: "Removeu usuária",
   senha_alterada: "Alterou a própria senha",
+  produto_criado: "Criou produto",
+  produto_atualizado: "Editou produto",
+  produto_excluido: "Excluiu produto",
 };
 
 const ENTIDADE_LABEL: Record<string, string> = {
@@ -28,6 +31,7 @@ const ENTIDADE_LABEL: Record<string, string> = {
   campanhas: "Campanha",
   configuracoes: "Configurações",
   usuarios: "Usuária",
+  produtos: "Produto",
 };
 
 export function AtividadeSection({ logs }: { logs: AuditLogComUsuario[] }) {
