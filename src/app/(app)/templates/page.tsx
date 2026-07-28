@@ -14,8 +14,8 @@ export default async function TemplatesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Templates</h1>
-        <p className="text-sm text-gray-500">Respostas prontas para agilizar o atendimento.</p>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Templates</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Respostas prontas para agilizar o atendimento.</p>
       </div>
 
       <TemplatesGrid templates={(data as TemplateMensagem[]) ?? []} isDona={usuario.role === "dona"} />

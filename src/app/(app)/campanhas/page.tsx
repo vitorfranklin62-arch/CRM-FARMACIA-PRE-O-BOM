@@ -14,8 +14,8 @@ export default async function CampanhasPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Campanhas</h1>
-        <p className="text-sm text-gray-500">Crie e agende campanhas de mensagens para seus clientes.</p>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Campanhas</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Crie e agende campanhas de mensagens para seus clientes.</p>
       </div>
 
       <CampanhasList campanhas={(data as Campanha[]) ?? []} userId={usuario.id} />

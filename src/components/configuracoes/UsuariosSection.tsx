@@ -38,8 +38,8 @@ export function UsuariosSection({ usuarios, currentUserId }: { usuarios: Usuario
       header: "Nome",
       accessor: (u) => (
         <div>
-          <p className="font-medium text-gray-900">{u.nome}</p>
-          <p className="text-xs text-gray-400">{u.email}</p>
+          <p className="font-medium text-gray-900 dark:text-white">{u.nome}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">{u.email}</p>
         </div>
       ),
     },

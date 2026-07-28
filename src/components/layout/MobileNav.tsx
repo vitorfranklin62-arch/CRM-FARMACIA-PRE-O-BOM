@@ -19,7 +19,7 @@ export function MobileNav({ role }: { role: UsuarioRole }) {
   const items = ITEMS.filter((item) => !item.donaOnly || role === "dona");
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-gray-100 bg-white md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-gray-100 bg-white dark:border-white/10 dark:bg-navy-950 md:hidden">
       {items.map((item) => {
         const active = pathname === item.href || pathname.startsWith(item.href + "/");
         const Icon = item.icon;
@@ -29,7 +29,7 @@ export function MobileNav({ role }: { role: UsuarioRole }) {
             href={item.href}
             className={cn(
               "flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium",
-              active ? "text-accent-600" : "text-gray-400"
+              active ? "text-accent-600" : "text-gray-400 dark:text-gray-500"
             )}
           >
             <Icon size={20} />

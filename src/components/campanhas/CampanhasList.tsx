@@ -36,22 +36,22 @@ export function CampanhasList({ campanhas, userId }: { campanhas: Campanha[]; us
       header: "Campanha",
       accessor: (c) => (
         <div>
-          <p className="font-medium text-gray-900">{c.titulo}</p>
-          <p className="max-w-sm truncate text-xs text-gray-400">{c.mensagem}</p>
+          <p className="font-medium text-gray-900 dark:text-white">{c.titulo}</p>
+          <p className="max-w-sm truncate text-xs text-gray-400 dark:text-gray-500">{c.mensagem}</p>
         </div>
       ),
     },
     {
       header: "Público",
       accessor: (c) => (
-        <span className="text-gray-500">
+        <span className="text-gray-500 dark:text-gray-400">
           {c.clientes_alvo === "todos" ? "Todos" : `Filtro: ${JSON.stringify(c.filtro_json ?? {})}`}
         </span>
       ),
     },
     {
       header: "Agendada para",
-      accessor: (c) => <span className="text-gray-500">{formatDateTime(c.agendada_para)}</span>,
+      accessor: (c) => <span className="text-gray-500 dark:text-gray-400">{formatDateTime(c.agendada_para)}</span>,
     },
     {
       header: "Status",
@@ -87,7 +87,7 @@ export function CampanhasList({ campanhas, userId }: { campanhas: Campanha[]; us
       {campanhas.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-12 text-gray-300">
           <Megaphone size={36} />
-          <p className="text-sm text-gray-400">Nenhuma campanha criada ainda.</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500">Nenhuma campanha criada ainda.</p>
         </div>
       ) : (
         <Table columns={columns} data={campanhas} keyField={(c) => c.id} />

@@ -54,13 +54,13 @@ export function ProdutosTable({ produtos, isDona }: { produtos: Produto[]; isDon
       header: "Produto",
       accessor: (p) => (
         <div>
-          <p className="font-medium text-gray-900">{p.nome}</p>
-          {p.laboratorio && <p className="text-xs text-gray-400">{p.laboratorio}</p>}
+          <p className="font-medium text-gray-900 dark:text-white">{p.nome}</p>
+          {p.laboratorio && <p className="text-xs text-gray-400 dark:text-gray-500">{p.laboratorio}</p>}
         </div>
       ),
     },
-    { header: "SKU", accessor: (p) => <span className="text-gray-500">{p.sku || "—"}</span> },
-    { header: "Preço", accessor: (p) => <span className="font-medium text-gray-900">{formatCurrency(p.preco)}</span> },
+    { header: "SKU", accessor: (p) => <span className="text-gray-500 dark:text-gray-400">{p.sku || "—"}</span> },
+    { header: "Preço", accessor: (p) => <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(p.preco)}</span> },
     {
       header: "Estoque",
       accessor: (p) => (

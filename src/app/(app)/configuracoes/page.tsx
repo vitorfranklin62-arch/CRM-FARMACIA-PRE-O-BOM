@@ -25,8 +25,8 @@ export default async function ConfiguracoesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Configurações</h1>
-        <p className="text-sm text-gray-500">Dados da farmácia, usuários, segurança e integrações.</p>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Configurações</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Dados da farmácia, usuários, segurança e integrações.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">

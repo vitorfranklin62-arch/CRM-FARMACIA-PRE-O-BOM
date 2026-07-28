@@ -40,8 +40,8 @@ export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
       header: "Cliente",
       accessor: (c) => (
         <div>
-          <p className="font-medium text-gray-900">{c.nome}</p>
-          <p className="text-xs text-gray-400">{maskPhone(c.telefone)}</p>
+          <p className="font-medium text-gray-900 dark:text-white">{c.nome}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">{maskPhone(c.telefone)}</p>
         </div>
       ),
     },
@@ -58,11 +58,11 @@ export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
     },
     {
       header: "Última interação",
-      accessor: (c) => <span className="text-gray-500">{formatRelativeTime(c.ultima_interacao)}</span>,
+      accessor: (c) => <span className="text-gray-500 dark:text-gray-400">{formatRelativeTime(c.ultima_interacao)}</span>,
     },
     {
       header: "Observações",
-      accessor: (c) => <p className="max-w-xs truncate text-gray-500">{c.observacoes || "—"}</p>,
+      accessor: (c) => <p className="max-w-xs truncate text-gray-500 dark:text-gray-400">{c.observacoes || "—"}</p>,
     },
     {
       header: "",

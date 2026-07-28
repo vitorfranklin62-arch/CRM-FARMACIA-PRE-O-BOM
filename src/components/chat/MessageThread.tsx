@@ -11,7 +11,7 @@ import type { ConversaCompleta, MensagemComUsuario } from "@/types/relations";
 import type { TemplateMensagem } from "@/types/database";
 
 const REMETENTE_STYLE = {
-  ia: { align: "justify-start", bubble: "bg-[#EEF1F4] text-gray-900", icon: Bot, label: "IA" },
+  ia: { align: "justify-start", bubble: "bg-[#EEF1F4] text-gray-900 dark:bg-white/10 dark:text-gray-100", icon: Bot, label: "IA" },
   cliente: { align: "justify-start", bubble: "bg-brand-600 text-white", icon: User, label: "Cliente" },
   funcionaria: { align: "justify-end", bubble: "bg-emerald-600 text-white", icon: Headset, label: "Você" },
 } as const;
@@ -74,13 +74,13 @@ export function MessageThread({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-3.5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600">
+      <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-3.5 dark:border-white/10">
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600 dark:bg-white/10 dark:text-gray-300">
           {initials(conversa.clientes?.nome ?? "?")}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-gray-900">{conversa.clientes?.nome ?? "Cliente"}</p>
-          <p className="flex items-center gap-1 text-xs text-gray-400">
+          <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{conversa.clientes?.nome ?? "Cliente"}</p>
+          <p className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
             {conversa.clientes?.origem_chat === "instagram" ? <Camera size={11} /> : <MessageSquare size={11} />}
             {maskPhone(conversa.clientes?.telefone)}
           </p>
@@ -91,7 +91,9 @@ export function MessageThread({
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
-        {mensagens.length === 0 && <p className="py-10 text-center text-sm text-gray-400">Sem mensagens ainda.</p>}
+        {mensagens.length === 0 && (
+          <p className="py-10 text-center text-sm text-gray-400 dark:text-gray-500">Sem mensagens ainda.</p>
+        )}
         {mensagens.map((msg) => {
           const style = REMETENTE_STYLE[msg.remetente];
           const Icon = style.icon;
@@ -111,7 +113,7 @@ export function MessageThread({
         <div ref={bottomRef} />
       </div>
 
-      <div className="border-t border-gray-100 p-3">
+      <div className="border-t border-gray-100 p-3 dark:border-white/10">
         {showTemplates && (
           <TemplatePicker
             templates={templates}

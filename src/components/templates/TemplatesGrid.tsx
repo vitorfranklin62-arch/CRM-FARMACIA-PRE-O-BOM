@@ -64,13 +64,13 @@ export function TemplatesGrid({ templates, isDona }: { templates: TemplateMensag
           <div key={cat.key} className="space-y-3">
             <div className="flex items-center gap-2 px-1">
               <Badge variant={cat.variant}>{cat.label}</Badge>
-              <span className="text-xs text-gray-400">{items.length} template(s)</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">{items.length} template(s)</span>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {items.map((t) => (
                 <Card key={t.id} className="flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold text-gray-900">{t.titulo}</p>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-white">{t.titulo}</p>
                     {isDona && (
                       <div className="flex shrink-0 gap-1">
                         <button
@@ -88,7 +88,7 @@ export function TemplatesGrid({ templates, isDona }: { templates: TemplateMensag
                       </div>
                     )}
                   </div>
-                  <p className="text-sm text-gray-500">{t.conteudo}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{t.conteudo}</p>
                 </Card>
               ))}
             </div>
@@ -99,7 +99,7 @@ export function TemplatesGrid({ templates, isDona }: { templates: TemplateMensag
       {templates.length === 0 && (
         <div className="flex flex-col items-center gap-2 py-16 text-gray-300">
           <FileText size={36} />
-          <p className="text-sm text-gray-400">Nenhum template cadastrado ainda.</p>
+          <p className="text-sm text-gray-400 dark:text-gray-500">Nenhum template cadastrado ainda.</p>
         </div>
       )}
 

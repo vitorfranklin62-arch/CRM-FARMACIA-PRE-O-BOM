@@ -39,11 +39,11 @@ export function AtividadeSection({ logs }: { logs: AuditLogComUsuario[] }) {
   const columns: Column<AuditLogComUsuario>[] = [
     {
       header: "Quando",
-      accessor: (l) => <span className="text-gray-500">{formatDateTime(l.criado_em)}</span>,
+      accessor: (l) => <span className="text-gray-500 dark:text-gray-400">{formatDateTime(l.criado_em)}</span>,
     },
     {
       header: "Quem",
-      accessor: (l) => <span className="font-medium text-gray-900">{l.usuarios?.nome ?? "Sistema"}</span>,
+      accessor: (l) => <span className="font-medium text-gray-900 dark:text-white">{l.usuarios?.nome ?? "Sistema"}</span>,
     },
     {
       header: "Ação",
@@ -51,7 +51,7 @@ export function AtividadeSection({ logs }: { logs: AuditLogComUsuario[] }) {
     },
     {
       header: "Onde",
-      accessor: (l) => <span className="text-gray-500">{ENTIDADE_LABEL[l.entidade] ?? l.entidade}</span>,
+      accessor: (l) => <span className="text-gray-500 dark:text-gray-400">{ENTIDADE_LABEL[l.entidade] ?? l.entidade}</span>,
     },
   ];
 

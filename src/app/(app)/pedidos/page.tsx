@@ -18,8 +18,8 @@ export default async function PedidosPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Pedidos</h1>
-        <p className="text-sm text-gray-500">Fila de separação — arraste o pedido até a entrega.</p>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Pedidos</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Fila de separação — arraste o pedido até a entrega.</p>
       </div>
 
       <PedidosBoard initialPedidos={(data as PedidoCompleto[]) ?? []} />

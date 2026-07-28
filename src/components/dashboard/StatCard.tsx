@@ -17,7 +17,7 @@ export function StatCard({
   const isDown = trend < 0;
 
   return (
-    <Card className="flex flex-col gap-3 border-transparent bg-[#142868] shadow-card-md">
+    <Card className="flex flex-col gap-3 border-transparent bg-[#142868] shadow-card-md dark:border-white/10 dark:bg-[#142868]">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-white/80">{label}</p>
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-white">{icon}</div>

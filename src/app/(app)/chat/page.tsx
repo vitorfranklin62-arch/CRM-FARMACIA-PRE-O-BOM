@@ -18,8 +18,8 @@ export default async function ChatPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Chat ao vivo</h1>
-        <p className="text-sm text-gray-500">Acompanhe e intervenha nas conversas com clientes.</p>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Chat ao vivo</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Acompanhe e intervenha nas conversas com clientes.</p>
       </div>
       <ChatShell conversas={(data as ConversaCompleta[]) ?? []} />
     </div>

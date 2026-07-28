@@ -8,7 +8,12 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-2xl border border-gray-100 bg-white p-5 shadow-card", className)}>
+    <div
+      className={cn(
+        "rounded-2xl border border-gray-100 bg-white p-5 shadow-card dark:border-white/10 dark:bg-navy-800/60 dark:shadow-none",
+        className
+      )}
+    >
       {children}
     </div>
   );
