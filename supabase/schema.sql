@@ -206,6 +206,22 @@ returns boolean as $$
 $$ language sql stable security definer set search_path = public;
 
 -- ============================================================================
+-- Busca de produtos (usada pela IA via RPC) — ignora espaços e diferenças de
+-- caixa na comparação, pra "500mg", "500 mg" e "500MG" encontrarem o mesmo
+-- produto independente de como o texto veio (evita falso "sem estoque").
+-- ============================================================================
+
+create or replace function buscar_produtos(termo text)
+returns setof produtos as $$
+  select *
+  from produtos
+  where regexp_replace(lower(nome), '[^a-z0-9]', '', 'g')
+        ilike '%' || regexp_replace(lower(termo), '[^a-z0-9]', '', 'g') || '%'
+  order by nome
+  limit 10;
+$$ language sql stable;
+
+-- ============================================================================
 -- RLS
 -- ============================================================================
 
