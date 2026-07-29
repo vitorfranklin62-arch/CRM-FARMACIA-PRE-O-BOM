@@ -13,6 +13,34 @@ cp .env.example .env.local
 
 Preencha `.env.local` com as credenciais do seu projeto Supabase e o token secreto dos webhooks.
 
+## Instalar como app (PWA)
+
+O painel é um Progressive Web App — dá pra "instalar" ele no computador ou no celular, ganhando um ícone próprio e abrindo numa janela separada, sem barra de endereço do navegador (como um app nativo). Continua sendo o mesmo site, só que com atalho direto; precisa de internet pra funcionar (não é um app offline).
+
+**Windows/Mac/Linux (Chrome ou Edge):**
+1. Abra o painel no navegador.
+2. Clique no ícone de instalação que aparece na barra de endereço (perto do favorito ⭐), ou no menu **⋮ → Instalar Preço Bom / Instalar aplicativo**.
+3. Confirma. Um atalho aparece na área de trabalho / menu iniciar, abrindo numa janela própria.
+
+**Android (Chrome):**
+1. Abra o painel no Chrome.
+2. Toque no menu **⋮ → Adicionar à tela inicial** (ou vai aparecer um banner automático oferecendo instalar).
+3. Confirma. Ícone aparece na tela inicial como um app normal.
+
+**iPhone/iPad (Safari):**
+- O iOS não mostra um botão de "instalar" automático — precisa ser manual:
+1. Abra o painel no **Safari** (não funciona pelo Chrome no iOS).
+2. Toque no ícone de compartilhar (quadrado com seta pra cima).
+3. Toque em **"Adicionar à Tela de Início"**.
+4. Confirma. Ícone aparece na tela inicial, abre em tela cheia sem a barra do Safari.
+
+### Detalhes técnicos
+
+- `src/app/manifest.ts` — gera o Web App Manifest (`/manifest.webmanifest`) com nome, ícones e cor do tema.
+- `public/sw.js` — service worker mínimo, só pra habilitar a instalação. **Não faz cache de páginas** — o painel depende de dados ao vivo do Supabase, e cada página é servida com um nonce de segurança (CSP) novo a cada acesso; um service worker "normal" que guarda páginas em cache serviria HTML com nonce desatualizado e quebraria o app. Por isso o app só funciona online.
+- Ícones em `public/icon-192.png`, `icon-512.png`, `icon-maskable-512.png` e `apple-touch-icon.png`.
+- Tanto o manifest quanto o `sw.js` precisam ficar acessíveis **sem estar logado** (o navegador verifica isso antes mesmo do usuário abrir o app) — por isso estão na lista de exceções do middleware de autenticação (`src/middleware.ts`).
+
 ## Banco de dados
 
 No SQL editor do Supabase, rode nesta ordem:
