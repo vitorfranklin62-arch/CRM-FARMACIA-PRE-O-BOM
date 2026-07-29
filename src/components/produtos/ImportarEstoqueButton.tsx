@@ -11,6 +11,7 @@ interface ResultadoImportacao {
   criados: number;
   erros: number;
   ignoradas: number;
+  primeiroErro?: string | null;
 }
 
 export function ImportarEstoqueButton() {
@@ -23,31 +24,47 @@ export function ImportarEstoqueButton() {
     if (!file) return;
 
     setLoading(true);
-    const formData = new FormData();
-    formData.append("file", file);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
 
-    const res = await fetch("/api/produtos/importar-estoque", { method: "POST", body: formData });
-    const data = await res.json();
-    setLoading(false);
-    if (inputRef.current) inputRef.current.value = "";
+      const res = await fetch("/api/produtos/importar-estoque", { method: "POST", body: formData });
 
-    if (!res.ok) {
-      alert(data.error ?? "Não foi possível importar o arquivo.");
-      return;
+      let data: unknown;
+      try {
+        data = await res.json();
+      } catch {
+        alert(`O servidor respondeu algo inesperado (status ${res.status}). Veja o Console/Network do navegador.`);
+        return;
+      }
+
+      if (!res.ok) {
+        const message = (data as { error?: string })?.error ?? `Não foi possível importar o arquivo (status ${res.status}).`;
+        alert(message);
+        return;
+      }
+
+      const r = data as ResultadoImportacao;
+      const partes = [
+        `${r.total} produto(s) encontrados no arquivo`,
+        `${r.criados} novo(s) cadastrado(s)`,
+        `${r.atualizados} atualizado(s) (estoque/custo)`,
+      ];
+      if (r.erros > 0) {
+        partes.push(`⚠️ ${r.erros} com erro ao salvar`);
+        if (r.primeiroErro) partes.push(`Detalhe do erro: ${r.primeiroErro}`);
+      }
+      if (r.ignoradas > 0) partes.push(`${r.ignoradas} linha(s) ignorada(s) (sem nome)`);
+      if (r.criados > 0) partes.push(`\nProdutos novos entraram com preço = custo — revise antes de vender.`);
+
+      alert(`Importação concluída!\n\n${partes.join("\n")}`);
+      router.refresh();
+    } catch (err) {
+      alert(`Erro de conexão ao importar: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setLoading(false);
+      if (inputRef.current) inputRef.current.value = "";
     }
-
-    const r = data as ResultadoImportacao;
-    const partes = [
-      `${r.total} produto(s) encontrados no arquivo`,
-      `${r.criados} novo(s) cadastrado(s)`,
-      `${r.atualizados} atualizado(s) (estoque/custo)`,
-    ];
-    if (r.erros > 0) partes.push(`⚠️ ${r.erros} com erro ao salvar`);
-    if (r.ignoradas > 0) partes.push(`${r.ignoradas} linha(s) ignorada(s) (sem nome)`);
-    if (r.criados > 0) partes.push(`\nProdutos novos entraram com preço = custo — revise antes de vender.`);
-
-    alert(`Importação concluída!\n\n${partes.join("\n")}`);
-    router.refresh();
   }
 
   return (
