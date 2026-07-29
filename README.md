@@ -56,6 +56,35 @@ Todas as rotas abaixo exigem o header `Authorization: Bearer <N8N_WEBHOOK_SECRET
 
 Quando uma funcionária/dona responde pelo Chat ao vivo, o painel chama `POST /api/chat/enviar` (autenticado por sessão, não pelo token do N8N). Essa rota salva a mensagem no Supabase e, em seguida, notifica o N8N via a URL configurada em **Configurações → Integrações → Webhook do N8N para enviar mensagens do chat** (chave `integracao_n8n_chat_webhook_url`), enviando `Authorization: Bearer <N8N_WEBHOOK_SECRET>` para o N8N validar a origem. Cabe ao workflow do N8N entregar essa mensagem via UAIZAP/WhatsApp.
 
+## Importação de estoque
+
+Em **Produtos → Importar estoque**, a dona pode subir o relatório de inventário exportado pelo sistema da farmácia (arquivo `.fp3`, o "Livro Registro de Inventário") pra atualizar custo e quantidade em estoque de uma vez, sem precisar cadastrar produto por produto.
+
+### Formato do arquivo
+
+O `.fp3` não é um PDF de verdade — é um XML de "relatório preparado" (formato usado por sistemas de gestão de farmácia baseados em FastReport). Cada produto aparece como um bloco `<b1 t="...">...</b1>` com campos numerados `<dN u="valor"/>`. O parser (`src/lib/estoque-import.ts`) usa este mapeamento, validado manualmente contra um arquivo real (custo unitário × quantidade bate com o "Custo Total" impresso no relatório em várias linhas conferidas):
+
+| Campo no arquivo | Significado | Vai para |
+|---|---|---|
+| `d1` | Nome do produto | `produtos.nome` |
+| `d4` | Laboratório | `produtos.laboratorio` |
+| `d11` | Custo unitário | `produtos.custo` |
+| `d13` | Quantidade em estoque | `produtos.estoque` |
+| `d16` | Código interno do produto no sistema da farmácia | `produtos.sku` |
+
+Números vêm no formato brasileiro (`1.234,56`) e são convertidos automaticamente. O sufixo `" sem dados"` que aparece colado em alguns nomes de produto (defeito da exportação do sistema de origem) é removido automaticamente.
+
+### O que a importação faz (e o que NÃO faz)
+
+- **Casa produtos pelo código interno (`sku`).** Se o código já existe no catálogo, atualiza **nome, laboratório, custo e estoque** desse produto. Se não existe, cria um produto novo.
+- **Nunca apaga nada.** Produtos que estão no catálogo mas não vieram nesse arquivo continuam exatamente como estavam — a importação só adiciona/atualiza, nunca remove (evita quebrar pedidos antigos que referenciam esses produtos, e respeita que o preço é sempre atualizado manualmente pela dona, não pelo arquivo do fornecedor).
+- **Nunca sobrescreve o preço de venda de um produto que já existe.** O arquivo só traz o *custo* (quanto a farmácia pagou), não o preço pro cliente — o campo `preco` de produtos já cadastrados não é tocado pela importação.
+- **Produtos novos entram com `preco = custo`** como valor inicial (só pra não ficar com preço zerado, o que faria a IA cotar de graça pro cliente) — aparecem na lista com o selo amarelo **"Revisar preço"** até a dona ajustar manualmente o preço de venda de verdade.
+
+### Rota
+
+`POST /api/produtos/importar-estoque` — autenticada por sessão, só a dona pode chamar. Recebe o arquivo via `multipart/form-data` (campo `file`), processa em lotes de 500 linhas e devolve um resumo (`total`, `criados`, `atualizados`, `erros`, `ignoradas`). Cada importação fica registrada em Configurações → Atividade.
+
 ## Estrutura
 
 ```

@@ -34,6 +34,7 @@ export type Produto = {
   nome: string;
   laboratorio: string | null;
   preco: number;
+  custo: number | null;
   estoque: number;
   sku: string | null;
   criado_em: string;
@@ -142,7 +143,8 @@ export type AuditAcao =
   | "produto_criado"
   | "produto_atualizado"
   | "produto_excluido"
-  | "campanha_disparada";
+  | "campanha_disparada"
+  | "estoque_importado";
 
 export type AuditLog = {
   id: string;

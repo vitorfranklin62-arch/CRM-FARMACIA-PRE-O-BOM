@@ -34,11 +34,15 @@ create table if not exists produtos (
   nome text not null,
   laboratorio text,
   preco decimal(10, 2) not null,
+  custo decimal(10, 2),
   estoque integer not null default 0,
   sku text unique,
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now()
 );
+
+-- Se a tabela produtos já existia antes desta coluna ser adicionada, rode:
+-- alter table produtos add column if not exists custo decimal(10, 2);
 
 create table if not exists pedidos (
   id uuid primary key default gen_random_uuid(),

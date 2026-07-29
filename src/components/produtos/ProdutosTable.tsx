@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import { logAudit } from "@/lib/audit";
 import { formatCurrency } from "@/lib/utils";
 import { ProdutoForm } from "./ProdutoForm";
+import { ImportarEstoqueButton } from "./ImportarEstoqueButton";
 import type { Produto } from "@/types/database";
 
 export function ProdutosTable({ produtos, isDona }: { produtos: Produto[]; isDona: boolean }) {
@@ -60,7 +61,19 @@ export function ProdutosTable({ produtos, isDona }: { produtos: Produto[]; isDon
       ),
     },
     { header: "SKU", accessor: (p) => <span className="text-gray-500 dark:text-gray-400">{p.sku || "—"}</span> },
-    { header: "Preço", accessor: (p) => <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(p.preco)}</span> },
+    {
+      header: "Preço",
+      accessor: (p) => (
+        <div className="flex items-center gap-1.5">
+          <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(p.preco)}</span>
+          {p.custo !== null && p.preco === p.custo && (
+            <Badge variant="yellow" className="text-[10px]">
+              Revisar preço
+            </Badge>
+          )}
+        </div>
+      ),
+    },
     {
       header: "Estoque",
       accessor: (p) => (
@@ -102,9 +115,12 @@ export function ProdutosTable({ produtos, isDona }: { produtos: Produto[]; isDon
         description={`${produtos.length} produto(s) cadastrado(s)`}
         action={
           isDona && (
-            <Button size="sm" onClick={openNew}>
-              <Plus size={15} /> Novo produto
-            </Button>
+            <div className="flex gap-2">
+              <ImportarEstoqueButton />
+              <Button size="sm" onClick={openNew}>
+                <Plus size={15} /> Novo produto
+              </Button>
+            </div>
           )
         }
       />
