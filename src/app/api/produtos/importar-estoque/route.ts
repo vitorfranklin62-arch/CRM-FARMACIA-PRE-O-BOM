@@ -26,11 +26,16 @@ export async function POST(request: Request) {
     await requireDona();
 
     const formData = await request.formData();
-    const file = formData.get("file");
+    const fileEntry = formData.get("file");
 
-    if (!(file instanceof File)) {
+    // Evita `instanceof File`: o construtor global File só existe em
+    // versões mais novas do Node, e pode não estar disponível dependendo
+    // do runtime — checar por string (formulário sem arquivo) é suficiente.
+    if (!fileEntry || typeof fileEntry === "string") {
       return NextResponse.json({ error: "Nenhum arquivo enviado." }, { status: 400 });
     }
+
+    const file = fileEntry as File;
 
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json({ error: "Arquivo muito grande (máximo 15MB)." }, { status: 400 });
