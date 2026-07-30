@@ -379,6 +379,12 @@ alter publication supabase_realtime add table pedidos;
 alter publication supabase_realtime add table mensagens;
 alter publication supabase_realtime add table conversas;
 
+-- Por padrão, um UPDATE via realtime só manda a chave primária em "old" — pra
+-- comparar o status anterior com o novo (e notificar só quando a conversa
+-- ENTRA em aguardando_humano, não a cada update) precisamos da linha antiga
+-- inteira.
+alter table conversas replica identity full;
+
 -- ============================================================================
 -- Seed inicial de configurações (opcional)
 -- ============================================================================

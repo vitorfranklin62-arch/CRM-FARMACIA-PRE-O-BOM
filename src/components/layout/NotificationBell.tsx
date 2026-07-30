@@ -11,25 +11,36 @@ const VOLUME_GAIN: Record<Volume, number> = { mudo: 0, medio: 0.15, alto: 0.4 };
 const VOLUME_LABEL: Record<Volume, string> = { mudo: "Mudo", medio: "Médio", alto: "Alto" };
 const STORAGE_KEY = "precobom-notif-volume";
 
-function playChime(gain: number) {
+type ChimeVariant = "pedido" | "atendimento";
+
+// "pedido": ding-ding ascendente. "atendimento": 3 bipes curtos no mesmo tom,
+// mais parecido com um alerta — dá pra distinguir os dois de ouvido.
+const CHIME_TONES: Record<ChimeVariant, number[]> = {
+  pedido: [880, 1174.66],
+  atendimento: [660, 660, 660],
+};
+
+function playChime(gain: number, variant: ChimeVariant = "pedido") {
   if (gain <= 0) return;
   try {
     const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = new AudioCtx();
     const now = ctx.currentTime;
+    const step = variant === "pedido" ? 0.15 : 0.13;
+    const decay = variant === "pedido" ? 0.35 : 0.2;
 
-    [880, 1174.66].forEach((freq, i) => {
+    CHIME_TONES[variant].forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gainNode = ctx.createGain();
       osc.type = "sine";
       osc.frequency.value = freq;
-      const start = now + i * 0.15;
+      const start = now + i * step;
       gainNode.gain.setValueAtTime(0, start);
       gainNode.gain.linearRampToValueAtTime(gain, start + 0.02);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, start + 0.35);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, start + decay);
       osc.connect(gainNode).connect(ctx.destination);
       osc.start(start);
-      osc.stop(start + 0.4);
+      osc.stop(start + decay + 0.05);
     });
 
     setTimeout(() => ctx.close(), 800);
@@ -62,13 +73,29 @@ export function NotificationBell() {
   }, [open]);
 
   useEffect(() => {
+    function notificar(variant: ChimeVariant) {
+      playChime(VOLUME_GAIN[volumeRef.current], variant);
+      setPulse(true);
+      setTimeout(() => setPulse(false), 2000);
+    }
+
+    function statusVirouAguardandoHumano(novo: unknown, antigo: unknown) {
+      const novoStatus = (novo as { status?: string } | null)?.status;
+      const statusAntigo = (antigo as { status?: string } | null)?.status;
+      return novoStatus === "aguardando_humano" && statusAntigo !== "aguardando_humano";
+    }
+
     const supabase = createClient();
     const channel = supabase
-      .channel("pedidos-notificacoes")
+      .channel("notificacoes-globais")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "pedidos" }, () => {
-        playChime(VOLUME_GAIN[volumeRef.current]);
-        setPulse(true);
-        setTimeout(() => setPulse(false), 2000);
+        notificar("pedido");
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "conversas" }, (payload) => {
+        if (statusVirouAguardandoHumano(payload.new, payload.old)) notificar("atendimento");
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "conversas" }, (payload) => {
+        if (statusVirouAguardandoHumano(payload.new, null)) notificar("atendimento");
       })
       .subscribe();
 
@@ -92,7 +119,7 @@ export function NotificationBell() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        title="Notificações de novo pedido"
+        title="Notificações (pedido novo / cliente precisando de você)"
         className={cn(
           "rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200",
           pulse && "text-accent-500 dark:text-accent-400"
@@ -104,7 +131,7 @@ export function NotificationBell() {
       {open && (
         <div className="absolute right-0 top-full z-30 mt-2 w-48 rounded-xl border border-gray-100 bg-white p-1.5 shadow-card dark:border-white/10 dark:bg-navy-800">
           <p className="px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-            Som de novo pedido
+            Som de notificação
           </p>
           {(Object.keys(VOLUME_GAIN) as Volume[]).map((v) => {
             const VIcon = v === "mudo" ? BellOff : v === "medio" ? Volume1 : Volume2;
