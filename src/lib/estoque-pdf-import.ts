@@ -21,29 +21,30 @@
  */
 
 import path from "node:path";
-import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { parseNumeroBR } from "@/lib/estoque-import";
 import { garantirPolyfillDOMMatrix } from "@/lib/dommatrix-polyfill";
 
 /**
- * Sem isso, o pdfjs não acha os dados de fontes padrão/cmaps (usados pra
- * decodificar texto de fontes não-embutidas, como a "Courier New" usada
- * nesse relatório) quando o caminho relativo automático dele não bate com
- * onde o Next.js realmente coloca os arquivos em produção — resolve pelo
- * node_modules diretamente em vez de depender desse caminho automático.
+ * O pdfjs resolve seus próprios arquivos auxiliares (dados de
+ * fontes/cmaps e o "worker" que faz o parsing) por caminho relativo ao
+ * módulo em que está rodando. Isso quebra assim que o Next.js empacota a
+ * rota (o arquivo físico não fica mais do lado do módulo bundlado) — daí
+ * os erros "standardFontDataUrl not provided" e depois "Cannot find
+ * module '.../pdf.worker.mjs'". `__filename`/`createRequire` também não
+ * servem aqui: dentro do bundle do webpack, `__filename` vira um ID de
+ * módulo (não um caminho) e `createRequire` some silenciosamente. A única
+ * coisa confiável em produção é `process.cwd()` (raiz do projeto, onde o
+ * `next start` roda) — monta o caminho até o pacote via node_modules
+ * direto, sem depender de nenhuma resolução dinâmica de módulo.
  */
-function resolverPastasDadosPdfjs(): { standardFontDataUrl: string; cMapUrl: string } | undefined {
-  try {
-    const require = createRequire(__filename);
-    const raizPdfjs = path.dirname(require.resolve("pdfjs-dist/package.json"));
-    return {
-      standardFontDataUrl: pathToFileURL(path.join(raizPdfjs, "standard_fonts") + path.sep).toString(),
-      cMapUrl: pathToFileURL(path.join(raizPdfjs, "cmaps") + path.sep).toString(),
-    };
-  } catch {
-    return undefined;
-  }
+function resolverCaminhosPdfjs() {
+  const raizPdfjs = path.join(process.cwd(), "node_modules", "pdfjs-dist");
+  return {
+    standardFontDataUrl: pathToFileURL(path.join(raizPdfjs, "standard_fonts") + path.sep).toString(),
+    cMapUrl: pathToFileURL(path.join(raizPdfjs, "cmaps") + path.sep).toString(),
+    workerSrc: pathToFileURL(path.join(raizPdfjs, "legacy", "build", "pdf.worker.mjs")).toString(),
+  };
 }
 
 const NAME_COL_END = 180;
@@ -94,9 +95,12 @@ function bucket(items: { x: number; text: string }[], lo: number, hi: number): s
 
 export async function parseEstoquePdf(buffer: ArrayBuffer): Promise<ParseEstoquePdfResult> {
   garantirPolyfillDOMMatrix();
-  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-  const doc = await getDocument({ data: new Uint8Array(buffer), ...resolverPastasDadosPdfjs() }).promise;
+  const { standardFontDataUrl, cMapUrl, workerSrc } = resolverCaminhosPdfjs();
+  GlobalWorkerOptions.workerSrc = workerSrc;
+
+  const doc = await getDocument({ data: new Uint8Array(buffer), standardFontDataUrl, cMapUrl }).promise;
 
   const linhas: EstoquePdfRow[] = [];
   const paginasDuvidosasSet = new Set<number>();
