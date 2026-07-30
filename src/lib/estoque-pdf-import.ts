@@ -21,6 +21,7 @@
  */
 
 import { parseNumeroBR } from "@/lib/estoque-import";
+import { garantirPolyfillDOMMatrix } from "@/lib/dommatrix-polyfill";
 
 const NAME_COL_END = 180;
 const APRES_COL_END = 330;
@@ -63,6 +64,7 @@ function bucket(items: { x: number; text: string }[], lo: number, hi: number): s
 }
 
 export async function parseEstoquePdf(buffer: ArrayBuffer): Promise<ParseEstoquePdfResult> {
+  garantirPolyfillDOMMatrix();
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
   const doc = await getDocument({ data: new Uint8Array(buffer), useSystemFonts: true }).promise;
