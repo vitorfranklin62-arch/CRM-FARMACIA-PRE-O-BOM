@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, MessageSquare, NotebookPen } from "lucide-react";
+import { Camera, MessageSquare, NotebookPen, Search } from "lucide-react";
 import { Table, type Column } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
-import { Textarea } from "@/components/ui/Field";
+import { Textarea, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
 import { logAudit } from "@/lib/audit";
@@ -17,7 +17,20 @@ export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
   const [editing, setEditing] = useState<Cliente | null>(null);
   const [observacoes, setObservacoes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [busca, setBusca] = useState("");
   const router = useRouter();
+
+  const filtrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return clientes;
+    const digitos = termo.replace(/\D/g, "");
+    return clientes.filter(
+      (c) =>
+        c.nome.toLowerCase().includes(termo) ||
+        (digitos && c.telefone.replace(/\D/g, "").includes(digitos)) ||
+        c.observacoes?.toLowerCase().includes(termo)
+    );
+  }, [clientes, busca]);
 
   function openEditor(cliente: Cliente) {
     setEditing(cliente);
@@ -80,7 +93,22 @@ export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
 
   return (
     <>
-      <Table columns={columns} data={clientes} keyField={(c) => c.id} emptyMessage="Nenhum cliente cadastrado." />
+      <div className="relative mb-4 max-w-sm">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+        <Input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar por nome, telefone ou observação..."
+          className="pl-9"
+        />
+      </div>
+
+      <Table
+        columns={columns}
+        data={filtrados}
+        keyField={(c) => c.id}
+        emptyMessage={clientes.length === 0 ? "Nenhum cliente cadastrado." : "Nenhum cliente encontrado."}
+      />
 
       <Modal open={!!editing} onClose={() => setEditing(null)} title={`Observações — ${editing?.nome ?? ""}`}>
         <Textarea
