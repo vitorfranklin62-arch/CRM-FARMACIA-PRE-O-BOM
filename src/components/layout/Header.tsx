@@ -2,6 +2,7 @@ import { LogOut } from "lucide-react";
 import { logoutAction } from "@/app/auth/login/actions";
 import { initials } from "@/lib/utils";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import type { Usuario } from "@/types/database";
 
 export function Header({ usuario, title }: { usuario: Usuario; title?: string }) {
@@ -13,6 +14,7 @@ export function Header({ usuario, title }: { usuario: Usuario; title?: string })
       {title && <h1 className="hidden text-lg font-semibold text-gray-900 dark:text-white md:block">{title}</h1>}
 
       <div className="ml-auto flex items-center gap-3">
+        <NotificationBell />
         <ThemeToggle />
         <div className="hidden text-right sm:block">
           <p className="text-sm font-medium leading-tight text-gray-900 dark:text-white">{usuario.nome}</p>
