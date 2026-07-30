@@ -35,10 +35,20 @@ function decodeXmlEntities(text: string): string {
 }
 
 /** Converte número no formato brasileiro ("1.234,56") para number. */
-function parseNumeroBR(text: string): number {
+export function parseNumeroBR(text: string): number {
   const cleaned = text.trim().replace(/\./g, "").replace(",", ".");
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** Normaliza um nome de produto pra comparação (case/acento/espaço-insensível). */
+export function normalizarNome(nome: string): string {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function extractField(block: string, tag: string): string {

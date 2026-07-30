@@ -12,6 +12,7 @@ interface ResultadoImportacao {
   erros: number;
   ignoradas: number;
   primeiroErro?: string | null;
+  paginasParaRevisar?: number[];
 }
 
 export function ImportarEstoqueButton() {
@@ -54,8 +55,13 @@ export function ImportarEstoqueButton() {
         partes.push(`⚠️ ${r.erros} com erro ao salvar`);
         if (r.primeiroErro) partes.push(`Detalhe do erro: ${r.primeiroErro}`);
       }
-      if (r.ignoradas > 0) partes.push(`${r.ignoradas} linha(s) ignorada(s) (sem nome)`);
-      if (r.criados > 0) partes.push(`\nProdutos novos entraram com preço = custo — revise antes de vender.`);
+      if (r.ignoradas > 0) partes.push(`${r.ignoradas} linha(s) ignorada(s) (sem nome ou dados não conferem)`);
+      if (r.paginasParaRevisar?.length) {
+        partes.push(`⚠️ Confira manualmente a página ${r.paginasParaRevisar.join(", ")} do PDF (nome/valores não bateram).`);
+      }
+      if (r.criados > 0) {
+        partes.push(`\nProdutos novos cadastrados — confira o preço de venda de cada um (os marcados "Revisar preço" ainda não têm preço definido).`);
+      }
 
       alert(`Importação concluída!\n\n${partes.join("\n")}`);
       router.refresh();
@@ -69,7 +75,13 @@ export function ImportarEstoqueButton() {
 
   return (
     <>
-      <input ref={inputRef} type="file" accept=".fp3,.xml,text/xml" className="hidden" onChange={handleFile} />
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".fp3,.xml,text/xml,.pdf,application/pdf"
+        className="hidden"
+        onChange={handleFile}
+      />
       <Button size="sm" variant="secondary" disabled={loading} onClick={() => inputRef.current?.click()}>
         <Upload size={15} /> {loading ? "Importando..." : "Importar estoque"}
       </Button>

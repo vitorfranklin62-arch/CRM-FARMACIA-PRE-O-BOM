@@ -86,11 +86,11 @@ Quando uma funcionária/dona responde pelo Chat ao vivo, o painel chama `POST /a
 
 ## Importação de estoque
 
-Em **Produtos → Importar estoque**, a dona pode subir o relatório de inventário exportado pelo sistema da farmácia (arquivo `.fp3`, o "Livro Registro de Inventário") pra atualizar custo e quantidade em estoque de uma vez, sem precisar cadastrar produto por produto.
+Em **Produtos → Importar estoque**, a dona pode subir o relatório de inventário exportado pelo sistema da farmácia pra atualizar custo e quantidade em estoque de uma vez, sem precisar cadastrar produto por produto. Dois formatos de arquivo são aceitos, detectados automaticamente pela extensão.
 
-### Formato do arquivo
+### Formato 1: `.fp3` / `.xml` ("Livro Registro de Inventário")
 
-O `.fp3` não é um PDF de verdade — é um XML de "relatório preparado" (formato usado por sistemas de gestão de farmácia baseados em FastReport). Cada produto aparece como um bloco `<b1 t="...">...</b1>` com campos numerados `<dN u="valor"/>`. O parser (`src/lib/estoque-import.ts`) usa este mapeamento, validado manualmente contra um arquivo real (custo unitário × quantidade bate com o "Custo Total" impresso no relatório em várias linhas conferidas):
+Não é um PDF de verdade — é um XML de "relatório preparado" (formato usado por sistemas de gestão de farmácia baseados em FastReport). Cada produto aparece como um bloco `<b1 t="...">...</b1>` com campos numerados `<dN u="valor"/>`. O parser (`src/lib/estoque-import.ts`) usa este mapeamento, validado manualmente contra um arquivo real (custo unitário × quantidade bate com o "Custo Total" impresso no relatório em várias linhas conferidas):
 
 | Campo no arquivo | Significado | Vai para |
 |---|---|---|
@@ -102,16 +102,24 @@ O `.fp3` não é um PDF de verdade — é um XML de "relatório preparado" (form
 
 Números vêm no formato brasileiro (`1.234,56`) e são convertidos automaticamente. O sufixo `" sem dados"` que aparece colado em alguns nomes de produto (defeito da exportação do sistema de origem) é removido automaticamente.
 
-### O que a importação faz (e o que NÃO faz)
+**Casa produtos pelo código interno (`sku`).** Se o código já existe no catálogo, atualiza nome/laboratório/custo/estoque. Se não existe, cria um produto novo com `preco = custo` (valor inicial, só pra não ficar zerado — aparece com o selo **"Revisar preço"** até a dona ajustar).
 
-- **Casa produtos pelo código interno (`sku`).** Se o código já existe no catálogo, atualiza **nome, laboratório, custo e estoque** desse produto. Se não existe, cria um produto novo.
-- **Nunca apaga nada.** Produtos que estão no catálogo mas não vieram nesse arquivo continuam exatamente como estavam — a importação só adiciona/atualiza, nunca remove (evita quebrar pedidos antigos que referenciam esses produtos, e respeita que o preço é sempre atualizado manualmente pela dona, não pelo arquivo do fornecedor).
-- **Nunca sobrescreve o preço de venda de um produto que já existe.** O arquivo só traz o *custo* (quanto a farmácia pagou), não o preço pro cliente — o campo `preco` de produtos já cadastrados não é tocado pela importação.
-- **Produtos novos entram com `preco = custo`** como valor inicial (só pra não ficar com preço zerado, o que faria a IA cotar de graça pro cliente) — aparecem na lista com o selo amarelo **"Revisar preço"** até a dona ajustar manualmente o preço de venda de verdade.
+### Formato 2: `.pdf` (relatório "Nome do Produto / Apresentação / Laboratório / Cla / Qtde / Custo / Total Custo / Venda / Total Venda")
+
+Esse relatório vem de outro sistema de gestão de farmácia e é um PDF de verdade, mas com um bug de geração: quando o nome do produto ocupa 2 linhas, a 2ª linha é desenhada na mesma altura da linha seguinte da tabela em vez de aumentar a altura da linha — então não dá pra reconstruir as linhas simplesmente agrupando por coordenada Y. O parser (`src/lib/estoque-pdf-import.ts`, usando `pdfjs-dist` para extrair texto com posição) caminha pelos itens de texto na ordem em que o PDF os desenha (que segue sempre "nome do produto, em 1 ou 2 linhas" → "resto das colunas daquela linha") e reconstrói cada linha por esse padrão, não pela posição vertical.
+
+Esse formato **não tem código/SKU de produto**, então a importação casa por **nome normalizado** (sem acento, maiúsculas/minúsculas e espaços). Diferente do `.fp3`, esse relatório traz o preço de venda real (coluna "Venda") — produtos novos já entram com esse preço, sem precisar do selo "Revisar preço".
+
+Cada linha reconstruída é conferida por aritmética antes de ser aceita (`quantidade × custo ≈ Total Custo` e `quantidade × venda ≈ Total Venda`, com tolerância de 2 centavos) — numa amostra real, ~3,5% das linhas não bateram (nomes colados em cascata quando 2+ produtos seguidos têm nome de 2 linhas) e foram automaticamente deixadas de fora da importação; as páginas do PDF com essas linhas voltam na resposta (`paginasParaRevisar`) pra dona conferir manualmente.
+
+### O que a importação faz (e o que NÃO faz), nos dois formatos
+
+- **Nunca apaga nada.** Produtos que estão no catálogo mas não vieram no arquivo continuam exatamente como estavam.
+- **Nunca sobrescreve o preço de venda de um produto que já existe** — só laboratório, custo e estoque são atualizados pra produtos já cadastrados; o preço é sempre ajustado manualmente pela dona.
 
 ### Rota
 
-`POST /api/produtos/importar-estoque` — autenticada por sessão, só a dona pode chamar. Recebe o arquivo via `multipart/form-data` (campo `file`), processa em lotes de 500 linhas e devolve um resumo (`total`, `criados`, `atualizados`, `erros`, `ignoradas`). Cada importação fica registrada em Configurações → Atividade.
+`POST /api/produtos/importar-estoque` — autenticada por sessão, só a dona pode chamar. Recebe o arquivo via `multipart/form-data` (campo `file`), processa em lotes de 500 linhas e devolve um resumo (`total`, `criados`, `atualizados`, `erros`, `ignoradas`, e `paginasParaRevisar` no caso do PDF). Cada importação fica registrada em Configurações → Atividade.
 
 ## Estrutura
 
