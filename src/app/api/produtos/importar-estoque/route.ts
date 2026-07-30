@@ -64,11 +64,12 @@ export async function POST(request: Request) {
 
     if (ehPdf) {
       const buffer = await file.arrayBuffer();
-      const { linhas, duvidosas, paginasDuvidosas } = await parseEstoquePdf(buffer);
+      const { linhas, duvidosas, paginasDuvidosas, diagnostico } = await parseEstoquePdf(buffer);
 
       if (linhas.length === 0) {
+        const detalhe = `[diagnóstico: ${diagnostico.paginas} página(s), ${diagnostico.itensDeTexto} item(ns) de texto, ${duvidosas} linha(s) reconhecida(s) mas reprovada(s) na conferência. Amostra: ${diagnostico.amostraTexto || "(vazio)"}]`;
         return NextResponse.json(
-          { error: "Não encontrei nenhum produto nesse PDF. Confirma se é o arquivo certo?" },
+          { error: `Não encontrei nenhum produto nesse PDF. Confirma se é o arquivo certo? ${detalhe}` },
           { status: 400 }
         );
       }

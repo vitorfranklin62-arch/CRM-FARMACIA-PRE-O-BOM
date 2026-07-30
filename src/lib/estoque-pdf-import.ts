@@ -20,8 +20,31 @@
  * checagem — essas ficam de fora da importação automática.
  */
 
+import path from "node:path";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { parseNumeroBR } from "@/lib/estoque-import";
 import { garantirPolyfillDOMMatrix } from "@/lib/dommatrix-polyfill";
+
+/**
+ * Sem isso, o pdfjs não acha os dados de fontes padrão/cmaps (usados pra
+ * decodificar texto de fontes não-embutidas, como a "Courier New" usada
+ * nesse relatório) quando o caminho relativo automático dele não bate com
+ * onde o Next.js realmente coloca os arquivos em produção — resolve pelo
+ * node_modules diretamente em vez de depender desse caminho automático.
+ */
+function resolverPastasDadosPdfjs(): { standardFontDataUrl: string; cMapUrl: string } | undefined {
+  try {
+    const require = createRequire(__filename);
+    const raizPdfjs = path.dirname(require.resolve("pdfjs-dist/package.json"));
+    return {
+      standardFontDataUrl: pathToFileURL(path.join(raizPdfjs, "standard_fonts") + path.sep).toString(),
+      cMapUrl: pathToFileURL(path.join(raizPdfjs, "cmaps") + path.sep).toString(),
+    };
+  } catch {
+    return undefined;
+  }
+}
 
 const NAME_COL_END = 180;
 const APRES_COL_END = 330;
@@ -47,6 +70,12 @@ export interface ParseEstoquePdfResult {
   linhas: EstoquePdfRow[];
   duvidosas: number;
   paginasDuvidosas: number[];
+  /** Dados de diagnóstico — ajudam a entender uma importação com 0 resultados. */
+  diagnostico: {
+    paginas: number;
+    itensDeTexto: number;
+    amostraTexto: string;
+  };
 }
 
 interface TextItem {
@@ -67,11 +96,13 @@ export async function parseEstoquePdf(buffer: ArrayBuffer): Promise<ParseEstoque
   garantirPolyfillDOMMatrix();
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-  const doc = await getDocument({ data: new Uint8Array(buffer), useSystemFonts: true }).promise;
+  const doc = await getDocument({ data: new Uint8Array(buffer), ...resolverPastasDadosPdfjs() }).promise;
 
   const linhas: EstoquePdfRow[] = [];
   const paginasDuvidosasSet = new Set<number>();
   let duvidosas = 0;
+  let itensDeTexto = 0;
+  const amostraPartes: string[] = [];
 
   for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
     const page = await doc.getPage(pageNo);
@@ -120,6 +151,11 @@ export async function parseEstoquePdf(buffer: ArrayBuffer): Promise<ParseEstoque
       const x = item.transform[4];
       const text = item.str;
 
+      if (text.trim()) {
+        itensDeTexto += 1;
+        if (amostraPartes.length < 40) amostraPartes.push(text.trim());
+      }
+
       if (x < NAME_COL_END) {
         if (phase === "dados" && outros.length > 0) {
           flush();
@@ -134,5 +170,10 @@ export async function parseEstoquePdf(buffer: ArrayBuffer): Promise<ParseEstoque
     flush();
   }
 
-  return { linhas, duvidosas, paginasDuvidosas: Array.from(paginasDuvidosasSet).sort((a, b) => a - b) };
+  return {
+    linhas,
+    duvidosas,
+    paginasDuvidosas: Array.from(paginasDuvidosasSet).sort((a, b) => a - b),
+    diagnostico: { paginas: doc.numPages, itensDeTexto, amostraTexto: amostraPartes.join(" | ") },
+  };
 }
