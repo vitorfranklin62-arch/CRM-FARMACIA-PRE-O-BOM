@@ -84,18 +84,24 @@ export async function POST(request: Request) {
       const paraCriar = linhas.filter((l) => !nomeParaId.has(normalizarNome(l.nome)));
 
       for (const grupo of chunk(paraAtualizar, CHUNK_SIZE)) {
-        for (const l of grupo) {
-          const id = nomeParaId.get(normalizarNome(l.nome))!;
-          const { error } = await supabase
-            .from("produtos")
-            .update({ laboratorio: l.laboratorio, custo: l.custo, estoque: l.estoque })
-            .eq("id", id);
-          if (error) {
-            erros += 1;
-            primeiroErro ??= error.message;
-          } else {
-            atualizados += 1;
-          }
+        // upsert em lote por `id` (a chave primária real) em vez de um
+        // UPDATE por linha — com catálogos grandes, uma chamada de rede
+        // por produto (centenas/milhares delas, em série) deixava a
+        // importação lenta a ponto de parecer travada.
+        const { error } = await supabase.from("produtos").upsert(
+          grupo.map((l) => ({
+            id: nomeParaId.get(normalizarNome(l.nome))!,
+            laboratorio: l.laboratorio,
+            custo: l.custo,
+            estoque: l.estoque,
+          })),
+          { onConflict: "id" }
+        );
+        if (error) {
+          erros += grupo.length;
+          primeiroErro ??= error.message;
+        } else {
+          atualizados += grupo.length;
         }
       }
 

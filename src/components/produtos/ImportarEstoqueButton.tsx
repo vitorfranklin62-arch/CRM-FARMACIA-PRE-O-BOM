@@ -25,11 +25,20 @@ export function ImportarEstoqueButton() {
     if (!file) return;
 
     setLoading(true);
+    // Sem isso, se o servidor travar (ou o proxy do servidor derrubar a
+    // conexão sem avisar o navegador) o botão fica em "Importando..." pra
+    // sempre — o timeout garante que o usuário sempre recebe uma resposta.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120_000);
     try {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/produtos/importar-estoque", { method: "POST", body: formData });
+      const res = await fetch("/api/produtos/importar-estoque", {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      });
 
       let data: unknown;
       try {
@@ -66,8 +75,15 @@ export function ImportarEstoqueButton() {
       alert(`Importação concluída!\n\n${partes.join("\n")}`);
       router.refresh();
     } catch (err) {
-      alert(`Erro de conexão ao importar: ${err instanceof Error ? err.message : String(err)}`);
+      if (err instanceof DOMException && err.name === "AbortError") {
+        alert(
+          "A importação demorou mais de 2 minutos e foi cancelada. Isso pode indicar lentidão no servidor — tenta de novo, e se continuar acontecendo avisa a equipe técnica."
+        );
+      } else {
+        alert(`Erro de conexão ao importar: ${err instanceof Error ? err.message : String(err)}`);
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
       if (inputRef.current) inputRef.current.value = "";
     }
