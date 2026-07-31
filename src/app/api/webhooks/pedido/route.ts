@@ -102,6 +102,29 @@ export async function POST(request: Request) {
     parsed.data.total ??
     itensResolvidos.reduce((acc, i) => acc + i.quantidade * i.preco_unitario, 0) + (taxa_entrega ?? 0);
 
+  // Trava contra duplicata: se o N8N reenviar o mesmo webhook (retry por
+  // falha, reprocessamento após reinício, etc.), o mesmo cliente confirmando
+  // uma compra do mesmo valor de novo dentro de pouco tempo é sinal de
+  // duplicata, não de dois pedidos de verdade — devolve o pedido que já
+  // existe em vez de criar outro.
+  const duasHorasAtras = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const { data: pedidoRecente } = await supabase
+    .from("pedidos")
+    .select("id, total")
+    .eq("cliente_id", clienteId)
+    .eq("total", total)
+    .gte("criado_em", duasHorasAtras)
+    .order("criado_em", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (pedidoRecente) {
+    return NextResponse.json(
+      { id: pedidoRecente.id, cliente_id: clienteId, total, duplicado: true },
+      { status: 200 }
+    );
+  }
+
   // 3. Criar pedido
   const { data: pedido, error: pedidoError } = await supabase
     .from("pedidos")
