@@ -108,14 +108,15 @@ Números vêm no formato brasileiro (`1.234,56`) e são convertidos automaticame
 
 Esse relatório vem de outro sistema de gestão de farmácia e é um PDF de verdade, mas com um bug de geração: quando o nome do produto ocupa 2 linhas, a 2ª linha é desenhada na mesma altura da linha seguinte da tabela em vez de aumentar a altura da linha — então não dá pra reconstruir as linhas simplesmente agrupando por coordenada Y. O parser (`src/lib/estoque-pdf-import.ts`, usando `pdfjs-dist` para extrair texto com posição) caminha pelos itens de texto na ordem em que o PDF os desenha (que segue sempre "nome do produto, em 1 ou 2 linhas" → "resto das colunas daquela linha") e reconstrói cada linha por esse padrão, não pela posição vertical.
 
-Esse formato **não tem código/SKU de produto**, então a importação casa por **nome normalizado** (sem acento, maiúsculas/minúsculas e espaços). Diferente do `.fp3`, esse relatório traz o preço de venda real (coluna "Venda") — produtos novos já entram com esse preço, sem precisar do selo "Revisar preço".
+Esse formato **não tem código/SKU de produto**, então a importação casa por **nome normalizado** (sem acento, maiúsculas/minúsculas e espaços). Diferente do `.fp3`, esse relatório traz o preço de venda real (coluna "Venda") — **por isso esse formato também atualiza o preço de produtos já existentes** (não só dos novos), sempre que a linha do PDF tiver uma venda válida (> 0); nas raras linhas sem venda, o preço já cadastrado não é tocado.
 
 Cada linha reconstruída é conferida por aritmética antes de ser aceita (`quantidade × custo ≈ Total Custo` e `quantidade × venda ≈ Total Venda`, com tolerância de 2 centavos) — numa amostra real, ~3,5% das linhas não bateram (nomes colados em cascata quando 2+ produtos seguidos têm nome de 2 linhas) e foram automaticamente deixadas de fora da importação; as páginas do PDF com essas linhas voltam na resposta (`paginasParaRevisar`) pra dona conferir manualmente.
 
-### O que a importação faz (e o que NÃO faz), nos dois formatos
+### O que a importação faz (e o que NÃO faz)
 
 - **Nunca apaga nada.** Produtos que estão no catálogo mas não vieram no arquivo continuam exatamente como estavam.
-- **Nunca sobrescreve o preço de venda de um produto que já existe** — só laboratório, custo e estoque são atualizados pra produtos já cadastrados; o preço é sempre ajustado manualmente pela dona.
+- **`.fp3`: nunca sobrescreve o preço de venda de um produto que já existe** — só laboratório, custo e estoque são atualizados; sem preço de venda nesse formato, o preço é sempre ajustado manualmente pela dona.
+- **`.pdf`: atualiza o preço de produtos já existentes com o valor real da coluna "Venda"** do relatório (quando essa linha tiver uma venda válida) — esse formato traz preço de venda de verdade, então é tratado como fonte confiável pra reajuste de preço em massa.
 
 ### Rota
 

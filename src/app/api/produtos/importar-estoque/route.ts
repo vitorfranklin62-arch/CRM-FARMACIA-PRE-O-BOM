@@ -17,14 +17,15 @@ function chunk<T>(items: T[], size: number): T[][] {
 /**
  * POST /api/produtos/importar-estoque
  * Importa o relatório de inventário exportado pelo sistema da farmácia, em
- * um de dois formatos:
- *  - .fp3/.xml: casa pelo código interno (sku). Produtos novos entram com
- *    preco = custo (esse formato não tem preço de venda, precisa revisão).
- *  - .pdf: esse formato não tem código de produto, então casa pelo nome
- *    (normalizado). Tem preço de venda real (coluna "Venda"), então
- *    produtos novos já entram com o preço correto.
- * Em ambos os casos: nunca apaga produtos e nunca sobrescreve o preço de
- * venda de produtos já cadastrados — só atualiza laboratório/custo/estoque.
+ * um de dois formatos. Nenhum dos dois apaga produtos — só cria/atualiza.
+ *  - .fp3/.xml: casa pelo código interno (sku). Só tem custo, não tem preço
+ *    de venda, então NUNCA toca no preço de produto já existente — produtos
+ *    novos entram com preco = custo (precisa de revisão manual).
+ *  - .pdf: não tem código de produto, então casa pelo nome (normalizado).
+ *    Tem preço de venda real (coluna "Venda"), então esse formato TAMBÉM
+ *    atualiza o preço de produtos já existentes (só quando a linha do PDF
+ *    tem uma venda válida > 0 — sem isso, o preço que já estava cadastrado
+ *    não é tocado).
  */
 export async function POST(request: Request) {
   try {
@@ -83,11 +84,39 @@ export async function POST(request: Request) {
       const paraAtualizar = linhas.filter((l) => nomeParaId.has(normalizarNome(l.nome)));
       const paraCriar = linhas.filter((l) => !nomeParaId.has(normalizarNome(l.nome)));
 
-      for (const grupo of chunk(paraAtualizar, CHUNK_SIZE)) {
+      // Diferente do .fp3 (que só tem custo), esse PDF traz o preço de
+      // venda de verdade — por isso, ao contrário do .fp3, essa importação
+      // TAMBÉM atualiza o preço de produtos já existentes, mas só quando o
+      // PDF tem uma venda válida (> 0) pra essa linha; nas raras linhas sem
+      // venda no PDF, o preço que já estava cadastrado não é tocado (pra
+      // nunca zerar um preço que já existia).
+      const paraAtualizarComPreco = paraAtualizar.filter((l) => l.venda > 0);
+      const paraAtualizarSemPreco = paraAtualizar.filter((l) => l.venda <= 0);
+
+      for (const grupo of chunk(paraAtualizarComPreco, CHUNK_SIZE)) {
         // upsert em lote por `id` (a chave primária real) em vez de um
         // UPDATE por linha — com catálogos grandes, uma chamada de rede
         // por produto (centenas/milhares delas, em série) deixava a
         // importação lenta a ponto de parecer travada.
+        const { error } = await supabase.from("produtos").upsert(
+          grupo.map((l) => ({
+            id: nomeParaId.get(normalizarNome(l.nome))!,
+            laboratorio: l.laboratorio,
+            custo: l.custo,
+            estoque: l.estoque,
+            preco: l.venda,
+          })),
+          { onConflict: "id" }
+        );
+        if (error) {
+          erros += grupo.length;
+          primeiroErro ??= error.message;
+        } else {
+          atualizados += grupo.length;
+        }
+      }
+
+      for (const grupo of chunk(paraAtualizarSemPreco, CHUNK_SIZE)) {
         const { error } = await supabase.from("produtos").upsert(
           grupo.map((l) => ({
             id: nomeParaId.get(normalizarNome(l.nome))!,
