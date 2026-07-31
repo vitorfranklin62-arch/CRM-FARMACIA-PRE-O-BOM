@@ -50,11 +50,15 @@ create table if not exists pedidos (
   status text not null default 'novo' check (status in ('novo', 'separando', 'pronto', 'entregue')),
   total decimal(10, 2),
   pagamento_status text not null default 'pendente' check (pagamento_status in ('pendente', 'confirmado')),
+  forma_pagamento text,
   endereco_entrega text,
   telefone_confirmacao text,
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now()
 );
+
+-- Se a tabela pedidos já existia antes desta coluna ser adicionada, rode:
+-- alter table pedidos add column if not exists forma_pagamento text;
 
 create table if not exists itens_pedido (
   id uuid primary key default gen_random_uuid(),

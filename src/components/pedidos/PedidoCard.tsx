@@ -1,10 +1,10 @@
 "use client";
 
-import { MapPin, Phone, Loader2 } from "lucide-react";
+import { MapPin, Phone, Loader2, Printer, CreditCard, Clock } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { formatCurrency, formatRelativeTime, maskPhone } from "@/lib/utils";
+import { formatCurrency, formatDateTime, formatRelativeTime } from "@/lib/utils";
 import type { PedidoCompleto } from "@/types/relations";
 import type { PedidoStatus } from "@/types/database";
 
@@ -61,19 +61,40 @@ export function PedidoCard({
         {(pedido.telefone_confirmacao || pedido.clientes?.telefone) && (
           <p className="flex items-center gap-1.5">
             <Phone size={13} className="shrink-0" />
-            {maskPhone(pedido.telefone_confirmacao ?? pedido.clientes?.telefone)}
+            {pedido.telefone_confirmacao ?? pedido.clientes?.telefone}
           </p>
         )}
+        {pedido.forma_pagamento && (
+          <p className="flex items-center gap-1.5">
+            <CreditCard size={13} className="shrink-0" />
+            {pedido.forma_pagamento}
+          </p>
+        )}
+        <p className="flex items-center gap-1.5">
+          <Clock size={13} className="shrink-0" />
+          {formatDateTime(pedido.criado_em)}
+        </p>
       </div>
 
       <div className="flex items-center justify-between border-t border-gray-100 pt-3 dark:border-white/10">
         <span className="text-sm font-semibold text-gray-900 dark:text-white">{formatCurrency(Number(pedido.total ?? 0))}</span>
-        {next && (
-          <Button size="sm" disabled={updating} onClick={() => onUpdateStatus(pedido.id, next.status)}>
-            {updating && <Loader2 size={13} className="animate-spin" />}
-            {next.label}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <a
+            href={`/pedidos/${pedido.id}/imprimir`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-brand-600 dark:hover:bg-white/10"
+            title="Imprimir pedido"
+          >
+            <Printer size={16} />
+          </a>
+          {next && (
+            <Button size="sm" disabled={updating} onClick={() => onUpdateStatus(pedido.id, next.status)}>
+              {updating && <Loader2 size={13} className="animate-spin" />}
+              {next.label}
+            </Button>
+          )}
+        </div>
       </div>
     </Card>
   );

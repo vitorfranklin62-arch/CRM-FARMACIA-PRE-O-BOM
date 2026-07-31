@@ -47,6 +47,7 @@ export type Pedido = {
   status: PedidoStatus;
   total: number | null;
   pagamento_status: PagamentoStatus;
+  forma_pagamento: string | null;
   endereco_entrega: string | null;
   telefone_confirmacao: string | null;
   criado_em: string;

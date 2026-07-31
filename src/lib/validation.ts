@@ -25,6 +25,7 @@ export const pedidoWebhookSchema = z.object({
   endereco_entrega: z.string().trim().max(500).optional(),
   telefone_confirmacao: z.string().trim().max(30).optional(),
   pagamento_status: z.enum(["pendente", "confirmado"]).optional(),
+  forma_pagamento: z.string().trim().max(100).optional(),
 });
 
 export const clienteWebhookSchema = z.object({

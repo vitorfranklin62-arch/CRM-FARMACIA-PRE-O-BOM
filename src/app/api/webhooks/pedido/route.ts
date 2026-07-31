@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Payload inválido.", detalhes: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { cliente, itens, endereco_entrega, telefone_confirmacao, pagamento_status } = parsed.data;
+  const { cliente, itens, endereco_entrega, telefone_confirmacao, pagamento_status, forma_pagamento } = parsed.data;
   const supabase = createServiceClient();
   const now = new Date().toISOString();
 
@@ -105,6 +105,7 @@ export async function POST(request: Request) {
       status: "novo",
       total,
       pagamento_status: pagamento_status ?? "pendente",
+      forma_pagamento: forma_pagamento ?? null,
       endereco_entrega: endereco_entrega ?? null,
       telefone_confirmacao: telefone_confirmacao ?? null,
     })
