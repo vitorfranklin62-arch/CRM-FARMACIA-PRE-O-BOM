@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authorizeWebhook } from "@/lib/webhook-auth";
 import { pedidoWebhookSchema } from "@/lib/validation";
+import { normalizarTelefone } from "@/lib/telefone";
 
 /**
  * POST /api/webhooks/pedido
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
     parsed.data;
   const supabase = createServiceClient();
   const now = new Date().toISOString();
+  const telefoneNormalizado = normalizarTelefone(cliente.telefone);
 
   // 1. Resolver cliente (por id, ou por telefone, ou criar novo)
   let clienteId = cliente.id ?? null;
@@ -36,7 +38,7 @@ export async function POST(request: Request) {
     const { data: existente } = await supabase
       .from("clientes")
       .select("id")
-      .eq("telefone", cliente.telefone)
+      .eq("telefone", telefoneNormalizado)
       .maybeSingle();
     clienteId = existente?.id ?? null;
   }
@@ -51,7 +53,7 @@ export async function POST(request: Request) {
       .from("clientes")
       .insert({
         nome: cliente.nome,
-        telefone: cliente.telefone,
+        telefone: telefoneNormalizado,
         origem_chat: cliente.origem_chat ?? null,
         ultima_interacao: now,
       })

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authorizeWebhook } from "@/lib/webhook-auth";
 import { clienteWebhookSchema } from "@/lib/validation";
+import { normalizarTelefone } from "@/lib/telefone";
 
 /**
  * POST /api/webhooks/cliente
@@ -26,8 +27,13 @@ export async function POST(request: Request) {
   const supabase = createServiceClient();
   const now = new Date().toISOString();
   const { nome, telefone, origem_chat } = parsed.data;
+  const telefoneNormalizado = normalizarTelefone(telefone);
 
-  const { data: existente } = await supabase.from("clientes").select("id").eq("telefone", telefone).maybeSingle();
+  const { data: existente } = await supabase
+    .from("clientes")
+    .select("id")
+    .eq("telefone", telefoneNormalizado)
+    .maybeSingle();
 
   if (existente) {
     const { error } = await supabase
@@ -41,7 +47,7 @@ export async function POST(request: Request) {
 
   const { data: novo, error } = await supabase
     .from("clientes")
-    .insert({ nome, telefone, origem_chat: origem_chat ?? null, ultima_interacao: now })
+    .insert({ nome, telefone: telefoneNormalizado, origem_chat: origem_chat ?? null, ultima_interacao: now })
     .select("id")
     .single();
 
