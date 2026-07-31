@@ -47,6 +47,18 @@ export function formatRelativeTime(value: string | null | undefined): string {
   return formatDate(value);
 }
 
+/** true se a data cair no dia de hoje (fuso do navegador/servidor). */
+export function ehHoje(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const data = new Date(value);
+  const hoje = new Date();
+  return (
+    data.getFullYear() === hoje.getFullYear() &&
+    data.getMonth() === hoje.getMonth() &&
+    data.getDate() === hoje.getDate()
+  );
+}
+
 /** Mascara telefone deixando só os 4 últimos dígitos visíveis. Ex: (11) 9****-1234 */
 export function maskPhone(phone: string | null | undefined): string {
   if (!phone) return "-";

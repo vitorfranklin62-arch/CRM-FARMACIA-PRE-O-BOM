@@ -4,15 +4,19 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { logAudit } from "@/lib/audit";
+import { ehHoje } from "@/lib/utils";
 import { PedidoCard } from "./PedidoCard";
 import type { PedidoCompleto } from "@/types/relations";
 import type { PedidoStatus } from "@/types/database";
 
-const COLUMNS: { status: PedidoStatus; label: string }[] = [
+const COLUMNS: { status: PedidoStatus; label: string; somenteHoje?: boolean }[] = [
   { status: "novo", label: "Pronto pra separar" },
   { status: "separando", label: "Separando" },
   { status: "pronto", label: "Pronto" },
-  { status: "entregue", label: "Entregue" },
+  // Só mostra as entregues de hoje — sem isso, a coluna ia empilhando o
+  // histórico inteiro e ficava difícil de bater o olho no que interessa
+  // no dia. O pedido continua no banco pro dashboard, só some da coluna.
+  { status: "entregue", label: "Entregue hoje", somenteHoje: true },
 ];
 
 export function PedidosBoard({ initialPedidos }: { initialPedidos: PedidoCompleto[] }) {
@@ -54,7 +58,9 @@ export function PedidosBoard({ initialPedidos }: { initialPedidos: PedidoComplet
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
       {COLUMNS.map((col) => {
-        const items = pedidos.filter((p) => p.status === col.status);
+        const items = pedidos.filter(
+          (p) => p.status === col.status && (!col.somenteHoje || ehHoje(p.atualizado_em))
+        );
         return (
           <div key={col.status} className="flex flex-col gap-3">
             <div className="flex items-center justify-between px-1">
