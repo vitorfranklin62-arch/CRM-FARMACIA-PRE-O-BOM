@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, ChevronDown } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -16,11 +16,44 @@ import { ImportarEstoqueButton } from "./ImportarEstoqueButton";
 import { LimparDuplicadosButton } from "./LimparDuplicadosButton";
 import type { Produto } from "@/types/database";
 
-export function ProdutosTable({ produtos, isDona }: { produtos: Produto[]; isDona: boolean }) {
+export function ProdutosTable({
+  produtosIniciais,
+  totalProdutos,
+  paginaTamanho,
+  isDona,
+}: {
+  produtosIniciais: Produto[];
+  totalProdutos: number;
+  paginaTamanho: number;
+  isDona: boolean;
+}) {
+  const [produtos, setProdutos] = useState(produtosIniciais);
+  const [carregandoMais, setCarregandoMais] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Produto | null>(null);
   const [busca, setBusca] = useState("");
   const router = useRouter();
+
+  const faltamCarregar = totalProdutos - produtos.length;
+
+  async function carregarMais() {
+    setCarregandoMais(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("produtos")
+        .select("*")
+        .order("nome")
+        .range(produtos.length, produtos.length + paginaTamanho - 1);
+      if (error) {
+        alert(`Não foi possível carregar mais produtos: ${error.message}`);
+        return;
+      }
+      setProdutos((atual) => [...atual, ...((data as Produto[]) ?? [])]);
+    } finally {
+      setCarregandoMais(false);
+    }
+  }
 
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -113,7 +146,11 @@ export function ProdutosTable({ produtos, isDona }: { produtos: Produto[]; isDon
     <Card>
       <CardHeader
         title="Catálogo de produtos"
-        description={`${produtos.length} produto(s) cadastrado(s)`}
+        description={
+          faltamCarregar > 0
+            ? `Mostrando ${produtos.length} de ${totalProdutos} produto(s)`
+            : `${totalProdutos} produto(s) cadastrado(s)`
+        }
         action={
           isDona && (
             <div className="flex gap-2">
@@ -137,12 +174,28 @@ export function ProdutosTable({ produtos, isDona }: { produtos: Produto[]; isDon
         />
       </div>
 
+      {busca.trim() && faltamCarregar > 0 && (
+        <p className="mb-3 text-xs text-gray-400 dark:text-gray-500">
+          A busca olha só os {produtos.length} produtos já carregados — clique em &quot;Carregar mais&quot; abaixo
+          pra incluir o resto do catálogo na busca.
+        </p>
+      )}
+
       <Table
         columns={columns}
         data={filtrados}
         keyField={(p) => p.id}
         emptyMessage={produtos.length === 0 ? "Nenhum produto cadastrado ainda." : "Nenhum produto encontrado."}
       />
+
+      {!busca.trim() && faltamCarregar > 0 && (
+        <div className="mt-4 flex justify-center">
+          <Button size="sm" variant="secondary" disabled={carregandoMais} onClick={carregarMais}>
+            <ChevronDown size={15} />
+            {carregandoMais ? "Carregando..." : `Carregar mais (${faltamCarregar} restante(s))`}
+          </Button>
+        </div>
+      )}
 
       {isDona && <ProdutoForm open={formOpen} onClose={() => setFormOpen(false)} produto={editing} />}
     </Card>
