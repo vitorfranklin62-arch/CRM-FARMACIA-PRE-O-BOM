@@ -26,6 +26,7 @@ export const pedidoWebhookSchema = z.object({
   telefone_confirmacao: z.string().trim().max(30).optional(),
   pagamento_status: z.enum(["pendente", "confirmado"]).optional(),
   forma_pagamento: z.string().trim().max(100).optional(),
+  taxa_entrega: z.number().nonnegative().optional(),
 });
 
 export const clienteWebhookSchema = z.object({
@@ -79,6 +80,12 @@ export const produtoCreateSchema = z.object({
   preco: z.number().nonnegative(),
   estoque: z.number().int().nonnegative(),
   sku: z.string().trim().max(100).nullable().optional(),
+});
+
+export const bairroEntregaCreateSchema = z.object({
+  bairro: z.string().trim().min(1).max(150),
+  valor: z.number().nonnegative(),
+  ativo: z.boolean(),
 });
 
 export const clienteUpdateSchema = z.object({

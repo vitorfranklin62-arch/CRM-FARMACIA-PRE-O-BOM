@@ -80,6 +80,14 @@ export default async function ImprimirPedidoPage({ params }: { params: Promise<{
               <td className="py-1.5 text-right">{formatCurrency(item.quantidade * Number(item.preco_unitario))}</td>
             </tr>
           ))}
+          {pedido.taxa_entrega != null && (
+            <tr className="border-b border-gray-200">
+              <td className="py-1.5" colSpan={3}>
+                Taxa de entrega
+              </td>
+              <td className="py-1.5 text-right">{formatCurrency(pedido.taxa_entrega)}</td>
+            </tr>
+          )}
         </tbody>
       </table>
 

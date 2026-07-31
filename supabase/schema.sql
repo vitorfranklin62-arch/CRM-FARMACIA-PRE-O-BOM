@@ -51,14 +51,16 @@ create table if not exists pedidos (
   total decimal(10, 2),
   pagamento_status text not null default 'pendente' check (pagamento_status in ('pendente', 'confirmado')),
   forma_pagamento text,
+  taxa_entrega decimal(10, 2),
   endereco_entrega text,
   telefone_confirmacao text,
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now()
 );
 
--- Se a tabela pedidos já existia antes desta coluna ser adicionada, rode:
+-- Se a tabela pedidos já existia antes dessas colunas serem adicionadas, rode:
 -- alter table pedidos add column if not exists forma_pagamento text;
+-- alter table pedidos add column if not exists taxa_entrega decimal(10, 2);
 
 create table if not exists itens_pedido (
   id uuid primary key default gen_random_uuid(),
@@ -108,6 +110,17 @@ create table if not exists campanhas (
   criado_em timestamptz not null default now(),
   criado_por uuid not null references usuarios(id)
 );
+
+create table if not exists bairros_entrega (
+  id uuid primary key default gen_random_uuid(),
+  bairro text not null,
+  valor decimal(10, 2) not null,
+  ativo boolean not null default true,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+
+create unique index if not exists idx_bairros_entrega_nome on bairros_entrega (lower(bairro));
 
 create table if not exists vendas_log (
   id uuid primary key default gen_random_uuid(),
@@ -230,6 +243,26 @@ returns setof produtos as $$
 $$ language sql stable;
 
 -- ============================================================================
+-- Cálculo de taxa de entrega por bairro (usada pela IA via RPC) — mesma
+-- lógica de normalização do buscar_produtos, pra "Jardim das Flores",
+-- "jardim das flores" e "JARDIM DAS FLORES" baterem igual. Devolve o
+-- bairro cadastrado mais curto que combina (evita que "Centro" capture
+-- "Centro Novo" por engano) — nenhuma linha significa que a farmácia não
+-- entrega nesse bairro.
+-- ============================================================================
+
+create or replace function calcular_taxa_entrega(bairro_busca text)
+returns table(bairro text, valor decimal) as $$
+  select b.bairro, b.valor
+  from bairros_entrega b
+  where b.ativo
+    and regexp_replace(lower(b.bairro), '[^a-z0-9]', '', 'g')
+        ilike '%' || regexp_replace(lower(bairro_busca), '[^a-z0-9]', '', 'g') || '%'
+  order by length(b.bairro) asc
+  limit 1;
+$$ language sql stable;
+
+-- ============================================================================
 -- RLS
 -- ============================================================================
 
@@ -243,6 +276,7 @@ alter table mensagens enable row level security;
 alter table templates_mensagem enable row level security;
 alter table campanhas enable row level security;
 alter table vendas_log enable row level security;
+alter table bairros_entrega enable row level security;
 alter table configuracoes enable row level security;
 alter table login_tentativas enable row level security;
 alter table audit_log enable row level security;
@@ -288,6 +322,18 @@ drop policy if exists produtos_update on produtos;
 create policy produtos_update on produtos for update using (is_dona());
 drop policy if exists produtos_delete on produtos;
 create policy produtos_delete on produtos for delete using (is_dona());
+
+-- bairros_entrega: leitura para todos ativos, escrita só dona
+drop policy if exists bairros_entrega_select on bairros_entrega;
+create policy bairros_entrega_select on bairros_entrega for select
+  using (is_usuario_ativo());
+
+drop policy if exists bairros_entrega_write on bairros_entrega;
+create policy bairros_entrega_write on bairros_entrega for insert with check (is_dona());
+drop policy if exists bairros_entrega_update on bairros_entrega;
+create policy bairros_entrega_update on bairros_entrega for update using (is_dona());
+drop policy if exists bairros_entrega_delete on bairros_entrega;
+create policy bairros_entrega_delete on bairros_entrega for delete using (is_dona());
 
 -- pedidos: qualquer usuário ativo vê e atualiza status (fila de separação)
 drop policy if exists pedidos_select on pedidos;

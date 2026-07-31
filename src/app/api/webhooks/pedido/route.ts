@@ -24,7 +24,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Payload inválido.", detalhes: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { cliente, itens, endereco_entrega, telefone_confirmacao, pagamento_status, forma_pagamento } = parsed.data;
+  const { cliente, itens, endereco_entrega, telefone_confirmacao, pagamento_status, forma_pagamento, taxa_entrega } =
+    parsed.data;
   const supabase = createServiceClient();
   const now = new Date().toISOString();
 
@@ -95,7 +96,11 @@ export async function POST(request: Request) {
     itensResolvidos.push({ produto_id: produtoId, quantidade: item.quantidade, preco_unitario: item.preco_unitario });
   }
 
-  const total = parsed.data.total ?? itensResolvidos.reduce((acc, i) => acc + i.quantidade * i.preco_unitario, 0);
+  // Sem `total` explícito, soma os itens + a taxa de entrega (se veio) —
+  // assim o valor cobrado do cliente já reflete a entrega calculada.
+  const total =
+    parsed.data.total ??
+    itensResolvidos.reduce((acc, i) => acc + i.quantidade * i.preco_unitario, 0) + (taxa_entrega ?? 0);
 
   // 3. Criar pedido
   const { data: pedido, error: pedidoError } = await supabase
@@ -106,6 +111,7 @@ export async function POST(request: Request) {
       total,
       pagamento_status: pagamento_status ?? "pendente",
       forma_pagamento: forma_pagamento ?? null,
+      taxa_entrega: taxa_entrega ?? null,
       endereco_entrega: endereco_entrega ?? null,
       telefone_confirmacao: telefone_confirmacao ?? null,
     })

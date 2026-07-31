@@ -48,8 +48,18 @@ export type Pedido = {
   total: number | null;
   pagamento_status: PagamentoStatus;
   forma_pagamento: string | null;
+  taxa_entrega: number | null;
   endereco_entrega: string | null;
   telefone_confirmacao: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+export type BairroEntrega = {
+  id: string;
+  bairro: string;
+  valor: number;
+  ativo: boolean;
   criado_em: string;
   atualizado_em: string;
 }
@@ -146,7 +156,10 @@ export type AuditAcao =
   | "produto_excluido"
   | "campanha_disparada"
   | "estoque_importado"
-  | "produtos_duplicados_removidos";
+  | "produtos_duplicados_removidos"
+  | "bairro_entrega_criado"
+  | "bairro_entrega_atualizado"
+  | "bairro_entrega_excluido";
 
 export type AuditLog = {
   id: string;
@@ -262,6 +275,7 @@ export interface Database {
         ]
       >;
       vendas_log: TableDef<VendaLog>;
+      bairros_entrega: TableDef<BairroEntrega>;
       configuracoes: TableDef<Configuracao>;
       login_tentativas: TableDef<LoginTentativa>;
       audit_log: TableDef<

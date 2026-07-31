@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin, Phone, Loader2, Printer, CreditCard, Clock } from "lucide-react";
+import { MapPin, Phone, Loader2, Printer, CreditCard, Clock, Truck } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -49,6 +49,14 @@ export function PedidoCard({
             </span>
           </li>
         ))}
+        {pedido.taxa_entrega != null && (
+          <li className="flex justify-between gap-2 border-t border-gray-200 pt-1 dark:border-white/10">
+            <span className="flex items-center gap-1">
+              <Truck size={12} className="shrink-0" /> Taxa de entrega
+            </span>
+            <span className="shrink-0 text-gray-400 dark:text-gray-500">{formatCurrency(pedido.taxa_entrega)}</span>
+          </li>
+        )}
       </ul>
 
       <div className="space-y-1 text-xs text-gray-500 dark:text-gray-400">

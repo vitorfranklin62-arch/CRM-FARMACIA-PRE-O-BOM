@@ -25,6 +25,9 @@ const ACAO_LABEL: Record<AuditAcao, string> = {
   campanha_disparada: "Disparou campanha",
   estoque_importado: "Importou arquivo de estoque",
   produtos_duplicados_removidos: "Removeu produtos duplicados",
+  bairro_entrega_criado: "Cadastrou bairro de entrega",
+  bairro_entrega_atualizado: "Editou bairro de entrega",
+  bairro_entrega_excluido: "Removeu bairro de entrega",
 };
 
 const ENTIDADE_LABEL: Record<string, string> = {
@@ -35,6 +38,7 @@ const ENTIDADE_LABEL: Record<string, string> = {
   configuracoes: "Configurações",
   usuarios: "Usuária",
   produtos: "Produto",
+  bairros_entrega: "Bairro de entrega",
 };
 
 export function AtividadeSection({ logs }: { logs: AuditLogComUsuario[] }) {

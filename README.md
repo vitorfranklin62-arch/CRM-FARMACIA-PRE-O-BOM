@@ -84,6 +84,20 @@ Todas as rotas abaixo exigem o header `Authorization: Bearer <N8N_WEBHOOK_SECRET
 
 Quando uma funcionária/dona responde pelo Chat ao vivo, o painel chama `POST /api/chat/enviar` (autenticado por sessão, não pelo token do N8N). Essa rota salva a mensagem no Supabase e, em seguida, notifica o N8N via a URL configurada em **Configurações → Integrações → Webhook do N8N para enviar mensagens do chat** (chave `integracao_n8n_chat_webhook_url`), enviando `Authorization: Bearer <N8N_WEBHOOK_SECRET>` para o N8N validar a origem. Cabe ao workflow do N8N entregar essa mensagem via UAIZAP/WhatsApp.
 
+### Cálculo de taxa de entrega (IA)
+
+Em **Configurações → Bairros de entrega**, a dona cadastra os bairros atendidos e o valor de entrega de cada um. A IA usa isso pra calcular a entrega quando o cliente pede pra receber em casa, através de uma function/tool no N8N que chama a função `calcular_taxa_entrega` do Supabase via RPC (mesmo padrão do `buscar_produtos`, já usado pra consultar o catálogo):
+
+```
+POST {SUPABASE_URL}/rest/v1/rpc/calcular_taxa_entrega
+Headers: apikey / Authorization igual às outras chamadas RPC já configuradas no N8N
+Body: { "bairro_busca": "<bairro que o cliente informou>" }
+```
+
+Devolve `[{ "bairro": "...", "valor": 8.00 }]` se achar um bairro correspondente (a comparação ignora acento/maiúsculas/espaços), ou uma lista vazia `[]` se a farmácia não entrega nesse bairro — nesse caso a IA deve avisar o cliente e oferecer retirada na loja.
+
+Ao criar o pedido (`POST /api/webhooks/pedido`), o payload aceita opcionalmente `taxa_entrega` (número) e `forma_pagamento` (texto livre, ex.: "Pix", "Cartão", "Dinheiro") — se `total` não vier explícito, ele é calculado como soma dos itens + `taxa_entrega`.
+
 ## Importação de estoque
 
 Em **Produtos → Importar estoque**, a dona pode subir o relatório de inventário exportado pelo sistema da farmácia pra atualizar custo e quantidade em estoque de uma vez, sem precisar cadastrar produto por produto. Dois formatos de arquivo são aceitos, detectados automaticamente pela extensão.
