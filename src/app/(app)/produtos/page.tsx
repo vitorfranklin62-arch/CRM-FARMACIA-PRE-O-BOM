@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { selecionarTodos } from "@/lib/supabase/fetch-all";
 import { ProdutosTable } from "@/components/produtos/ProdutosTable";
 import type { Produto } from "@/types/database";
 
@@ -9,7 +10,9 @@ export default async function ProdutosPage() {
   const usuario = await requireUser();
   const supabase = await createClient();
 
-  const { data } = await supabase.from("produtos").select("*").order("nome");
+  const { data } = await selecionarTodos<Produto>((from, to) =>
+    supabase.from("produtos").select("*").order("nome").range(from, to)
+  );
 
   return (
     <div className="space-y-6">
@@ -20,7 +23,7 @@ export default async function ProdutosPage() {
         </p>
       </div>
 
-      <ProdutosTable produtos={(data as Produto[]) ?? []} isDona={usuario.role === "dona"} />
+      <ProdutosTable produtos={data} isDona={usuario.role === "dona"} />
     </div>
   );
 }

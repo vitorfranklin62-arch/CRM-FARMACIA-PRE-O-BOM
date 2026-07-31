@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
 import { parseEstoqueFile, normalizarNome } from "@/lib/estoque-import";
 import { parseEstoquePdf } from "@/lib/estoque-pdf-import";
+import { selecionarTodos } from "@/lib/supabase/fetch-all";
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 const CHUNK_SIZE = 500;
@@ -106,11 +107,19 @@ export async function POST(request: Request) {
     log(`recebeu arquivo "${file.name}" (${(file.size / 1024).toFixed(0)}KB)`);
 
     const supabase = await createClient();
-    const { data: existentes, error: fetchError } = await supabase.from("produtos").select("id, sku, nome");
+    // Sem paginar, o Supabase só devolve as primeiras 1000 linhas (limite
+    // padrão do PostgREST, silencioso — sem erro) — com catálogo grande,
+    // isso fazia a importação "esquecer" produtos além da linha 1000 e
+    // tratá-los como novos, duplicando o catálogo a cada importação.
+    const { data: existentes, error: fetchError } = await selecionarTodos<{
+      id: string;
+      sku: string | null;
+      nome: string;
+    }>((from, to) => supabase.from("produtos").select("id, sku, nome").range(from, to));
     if (fetchError) {
       return NextResponse.json({ error: `Não foi possível ler o catálogo atual: ${fetchError.message}` }, { status: 500 });
     }
-    log(`buscou catálogo atual (${existentes?.length ?? 0} produtos)`);
+    log(`buscou catálogo atual (${existentes.length} produtos)`);
 
     let atualizados = 0;
     let criados = 0;
@@ -137,7 +146,7 @@ export async function POST(request: Request) {
       ignoradas = duvidosas;
       paginasParaRevisar = paginasDuvidosas;
 
-      const nomeParaId = new Map((existentes ?? []).map((p) => [normalizarNome(p.nome), p.id]));
+      const nomeParaId = new Map(existentes.map((p) => [normalizarNome(p.nome), p.id]));
 
       // O PDF pode ter mais de uma linha com o mesmo nome (produto que
       // aparece 2x no relatório, ou 2 produtos diferentes cujo nome ficou
@@ -229,7 +238,7 @@ export async function POST(request: Request) {
       total = linhas.length;
       ignoradas = ignoradasSemNome;
 
-      const skuParaId = new Map((existentes ?? []).filter((p) => p.sku).map((p) => [p.sku as string, p.id]));
+      const skuParaId = new Map(existentes.filter((p) => p.sku).map((p) => [p.sku as string, p.id]));
 
       const paraAtualizar = linhas.filter((l) => l.sku && skuParaId.has(l.sku));
       const paraCriar = linhas.filter((l) => !l.sku || !skuParaId.has(l.sku));

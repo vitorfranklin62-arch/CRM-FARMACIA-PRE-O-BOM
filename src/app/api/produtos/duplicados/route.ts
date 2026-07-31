@@ -3,6 +3,7 @@ import { requireDona } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
 import { normalizarNome } from "@/lib/estoque-import";
+import { selecionarTodos } from "@/lib/supabase/fetch-all";
 
 interface ProdutoLinha {
   id: string;
@@ -44,18 +45,18 @@ export async function GET() {
     await requireDona();
     const supabase = await createClient();
 
-    const { data, error } = await supabase
-      .from("produtos")
-      .select("id, nome, custo, preco, estoque, atualizado_em");
+    const { data, error } = await selecionarTodos<ProdutoLinha>((from, to) =>
+      supabase.from("produtos").select("id, nome, custo, preco, estoque, atualizado_em").range(from, to)
+    );
     if (error) {
       return NextResponse.json({ error: `Não foi possível ler o catálogo: ${error.message}` }, { status: 500 });
     }
 
-    const duplicados = agruparDuplicados(data ?? []);
+    const duplicados = agruparDuplicados(data);
     const linhasParaRemover = duplicados.reduce((acc, g) => acc + g.length - 1, 0);
 
     return NextResponse.json({
-      totalProdutos: data?.length ?? 0,
+      totalProdutos: data.length,
       gruposDuplicados: duplicados.length,
       linhasParaRemover,
       amostra: duplicados.slice(0, 15).map((g) => ({
@@ -85,14 +86,14 @@ export async function POST() {
     const usuario = await requireDona();
     const supabase = await createClient();
 
-    const { data, error } = await supabase
-      .from("produtos")
-      .select("id, nome, custo, preco, estoque, atualizado_em");
+    const { data, error } = await selecionarTodos<ProdutoLinha>((from, to) =>
+      supabase.from("produtos").select("id, nome, custo, preco, estoque, atualizado_em").range(from, to)
+    );
     if (error) {
       return NextResponse.json({ error: `Não foi possível ler o catálogo: ${error.message}` }, { status: 500 });
     }
 
-    const duplicados = agruparDuplicados(data ?? []);
+    const duplicados = agruparDuplicados(data);
     const idsParaRemover = duplicados.flatMap((g) => g.slice(1).map((p) => p.id));
 
     let removidos = 0;
