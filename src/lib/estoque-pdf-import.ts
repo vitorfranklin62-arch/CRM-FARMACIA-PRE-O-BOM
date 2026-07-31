@@ -50,11 +50,21 @@ function resolverCaminhosPdfjs() {
 const NAME_COL_END = 180;
 const APRES_COL_END = 330;
 const LAB_COL_END = 460;
-const CLA_COL_END = 515;
-const QTDE_COL_END = 608;
-const CUSTO_COL_END = 700;
-const TOTAL_CUSTO_COL_END = 818;
-const VENDA_COL_END = 888;
+
+// Cla/Qtde/Custo/Total Custo/Venda/Total Venda são números alinhados à
+// DIREITA numa fonte monoespaçada — a posição inicial (x0) de cada valor
+// varia com a quantidade de dígitos (ex.: "6,64" começa bem mais à
+// direita que "1.775,08"), então classificar pela borda esquerda é
+// frágil e gera erro pra valores mais largos. A borda direita (x1),
+// porém, é praticamente fixa por coluna (conferido nas ~2490 linhas de
+// um arquivo real: x1 sempre ~483/552/652/760/861/969, sem exceção) —
+// os limites abaixo são o ponto médio entre cada par de colunas vizinhas.
+const CLA_X1_MAX = 517.5; // Cla (x1≈483) — só usado pra não vazar pro Qtde
+const QTDE_X1_MAX = 602; // Qtde (x1≈552) termina antes daqui
+const CUSTO_X1_MAX = 706; // Custo (x1≈652)
+const TOTAL_CUSTO_X1_MAX = 810.5; // Total Custo (x1≈760)
+const VENDA_X1_MAX = 915; // Venda (x1≈861)
+// Total Venda (x1≈969): tudo que sobra acima de VENDA_X1_MAX
 
 const TOLERANCIA = 0.02;
 
@@ -80,13 +90,25 @@ export interface ParseEstoquePdfResult {
 }
 
 interface TextItem {
-  x: number;
+  x0: number;
+  x1: number;
   text: string;
 }
 
-function bucket(items: { x: number; text: string }[], lo: number, hi: number): string {
+/** Classifica pela borda esquerda (x0) — usado pra colunas de texto alinhadas à esquerda. */
+function bucketPorX0(items: TextItem[], lo: number, hi: number): string {
   return items
-    .filter((i) => i.x >= lo && i.x < hi)
+    .filter((i) => i.x0 >= lo && i.x0 < hi)
+    .map((i) => i.text)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Classifica pela borda direita (x1) — usado pras colunas numéricas alinhadas à direita. */
+function bucketPorX1(items: TextItem[], lo: number, hi: number): string {
+  return items
+    .filter((i) => i.x1 > lo && i.x1 <= hi)
     .map((i) => i.text)
     .join(" ")
     .replace(/\s+/g, " ")
@@ -120,12 +142,12 @@ export async function parseEstoquePdf(buffer: ArrayBuffer): Promise<ParseEstoque
       if (nomeParts.length === 0 && outros.length === 0) return;
 
       const nome = nomeParts.join(" ").replace(/\s+/g, " ").trim();
-      const laboratorio = bucket(outros, APRES_COL_END, LAB_COL_END) || null;
-      const qtdeStr = bucket(outros, CLA_COL_END, QTDE_COL_END);
-      const custoStr = bucket(outros, QTDE_COL_END, CUSTO_COL_END);
-      const totalCustoStr = bucket(outros, CUSTO_COL_END, TOTAL_CUSTO_COL_END);
-      const vendaStr = bucket(outros, TOTAL_CUSTO_COL_END, VENDA_COL_END);
-      const totalVendaStr = bucket(outros, VENDA_COL_END, Infinity);
+      const laboratorio = bucketPorX0(outros, APRES_COL_END, LAB_COL_END) || null;
+      const qtdeStr = bucketPorX1(outros, CLA_X1_MAX, QTDE_X1_MAX);
+      const custoStr = bucketPorX1(outros, QTDE_X1_MAX, CUSTO_X1_MAX);
+      const totalCustoStr = bucketPorX1(outros, CUSTO_X1_MAX, TOTAL_CUSTO_X1_MAX);
+      const vendaStr = bucketPorX1(outros, TOTAL_CUSTO_X1_MAX, VENDA_X1_MAX);
+      const totalVendaStr = bucketPorX1(outros, VENDA_X1_MAX, Infinity);
 
       nomeParts = [];
       outros = [];
@@ -152,7 +174,8 @@ export async function parseEstoquePdf(buffer: ArrayBuffer): Promise<ParseEstoque
 
     for (const item of content.items) {
       if (!("str" in item)) continue;
-      const x = item.transform[4];
+      const x0 = item.transform[4];
+      const x1 = x0 + item.width;
       const text = item.str;
 
       if (text.trim()) {
@@ -160,7 +183,7 @@ export async function parseEstoquePdf(buffer: ArrayBuffer): Promise<ParseEstoque
         if (amostraPartes.length < 40) amostraPartes.push(text.trim());
       }
 
-      if (x < NAME_COL_END) {
+      if (x0 < NAME_COL_END) {
         if (phase === "dados" && outros.length > 0) {
           flush();
         }
@@ -168,7 +191,7 @@ export async function parseEstoquePdf(buffer: ArrayBuffer): Promise<ParseEstoque
         if (text.trim()) nomeParts.push(text);
       } else {
         phase = "dados";
-        if (text.trim()) outros.push({ x, text: text.trim() });
+        if (text.trim()) outros.push({ x0, x1, text: text.trim() });
       }
     }
     flush();
