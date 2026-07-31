@@ -122,6 +122,10 @@ Cada linha reconstruída é conferida por aritmética antes de ser aceita (`quan
 
 `POST /api/produtos/importar-estoque` — autenticada por sessão, só a dona pode chamar. Recebe o arquivo via `multipart/form-data` (campo `file`), processa em lotes de 500 linhas e devolve um resumo (`total`, `criados`, `atualizados`, `erros`, `ignoradas`, e `paginasParaRevisar` no caso do PDF). Cada importação fica registrada em Configurações → Atividade.
 
+### Limpar produtos duplicados
+
+Como o `.pdf` casa produtos pelo nome (sem código/SKU), qualquer importação feita antes de uma correção no parser pode ter deixado produtos duplicados no catálogo (o mesmo produto cadastrado 2x, com preço/estoque diferentes entre as cópias). Em **Produtos → Limpar duplicados**, a dona vê uma prévia de quantos grupos duplicados existem antes de confirmar a remoção — mantém sempre a linha mais recentemente atualizada de cada nome e remove as outras. Produtos já usados em algum pedido nunca são removidos (o banco tem uma trava de chave estrangeira pra isso — `pedido_itens.produto_id references produtos(id)`). Rota: `GET /api/produtos/duplicados` (prévia, só leitura) e `POST /api/produtos/duplicados` (executa), ambas só a dona.
+
 ## Estrutura
 
 ```

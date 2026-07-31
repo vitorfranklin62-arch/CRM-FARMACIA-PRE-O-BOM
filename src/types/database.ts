@@ -144,7 +144,8 @@ export type AuditAcao =
   | "produto_atualizado"
   | "produto_excluido"
   | "campanha_disparada"
-  | "estoque_importado";
+  | "estoque_importado"
+  | "produtos_duplicados_removidos";
 
 export type AuditLog = {
   id: string;

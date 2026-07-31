@@ -24,6 +24,7 @@ const ACAO_LABEL: Record<AuditAcao, string> = {
   produto_excluido: "Excluiu produto",
   campanha_disparada: "Disparou campanha",
   estoque_importado: "Importou arquivo de estoque",
+  produtos_duplicados_removidos: "Removeu produtos duplicados",
 };
 
 const ENTIDADE_LABEL: Record<string, string> = {
