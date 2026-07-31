@@ -64,7 +64,7 @@ export function ImportarEstoqueButton() {
         partes.push(`⚠️ ${r.erros} com erro ao salvar`);
         if (r.primeiroErro) partes.push(`Detalhe do erro: ${r.primeiroErro}`);
       }
-      if (r.ignoradas > 0) partes.push(`${r.ignoradas} linha(s) ignorada(s) (sem nome ou dados não conferem)`);
+      if (r.ignoradas > 0) partes.push(`${r.ignoradas} linha(s) ignorada(s) (sem nome, dados não conferem, ou duplicada no arquivo)`);
       if (r.paginasParaRevisar?.length) {
         partes.push(`⚠️ Confira manualmente a página ${r.paginasParaRevisar.join(", ")} do PDF (nome/valores não bateram).`);
       }

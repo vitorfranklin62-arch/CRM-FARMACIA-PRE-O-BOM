@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireDona } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
@@ -12,6 +13,47 @@ function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
   return chunks;
+}
+
+/**
+ * Grava em lotes de CHUNK_SIZE (rápido — poucas idas ao banco). Se o lote
+ * inteiro falhar (um insert/upsert em massa é uma transação só — 1 linha
+ * ruim derruba as ~500 boas do lote junto), tenta de novo linha por linha
+ * só pra isolar exatamente qual(is) falharam, sem perder as boas.
+ */
+async function gravarComIsolamento<T>(
+  supabase: SupabaseClient,
+  linhas: T[],
+  montarLinha: (item: T) => Record<string, unknown>,
+  opcoesUpsert?: { onConflict: string }
+): Promise<{ ok: number; erros: number; primeiroErro: string | null }> {
+  let ok = 0;
+  let erros = 0;
+  let primeiroErro: string | null = null;
+
+  const gravar = (payload: Record<string, unknown>[]) =>
+    opcoesUpsert
+      ? supabase.from("produtos").upsert(payload, opcoesUpsert)
+      : supabase.from("produtos").insert(payload);
+
+  for (const grupo of chunk(linhas, CHUNK_SIZE)) {
+    const { error } = await gravar(grupo.map(montarLinha));
+    if (!error) {
+      ok += grupo.length;
+      continue;
+    }
+    for (const item of grupo) {
+      const { error: erroUnico } = await gravar([montarLinha(item)]);
+      if (erroUnico) {
+        erros += 1;
+        primeiroErro ??= erroUnico.message;
+      } else {
+        ok += 1;
+      }
+    }
+  }
+
+  return { ok, erros, primeiroErro };
 }
 
 /**
@@ -81,8 +123,27 @@ export async function POST(request: Request) {
 
       const nomeParaId = new Map((existentes ?? []).map((p) => [normalizarNome(p.nome), p.id]));
 
-      const paraAtualizar = linhas.filter((l) => nomeParaId.has(normalizarNome(l.nome)));
-      const paraCriar = linhas.filter((l) => !nomeParaId.has(normalizarNome(l.nome)));
+      // O PDF pode ter mais de uma linha com o mesmo nome (produto que
+      // aparece 2x no relatório, ou 2 produtos diferentes cujo nome ficou
+      // igual por causa de alguma linha mal reconstruída) — sem isso, cada
+      // repetição virava um produto novo separado (duplicando o catálogo)
+      // ou tentava atualizar o mesmo produto 2x no mesmo lote (o que o
+      // Postgres rejeita: "ON CONFLICT DO UPDATE... affect row a second
+      // time"). Mantém só a primeira ocorrência de cada nome.
+      const nomesVistos = new Set<string>();
+      let duplicadasNoArquivo = 0;
+      const linhasUnicas = linhas.filter((l) => {
+        const chave = normalizarNome(l.nome);
+        if (nomesVistos.has(chave)) {
+          duplicadasNoArquivo += 1;
+          return false;
+        }
+        nomesVistos.add(chave);
+        return true;
+      });
+
+      const paraAtualizar = linhasUnicas.filter((l) => nomeParaId.has(normalizarNome(l.nome)));
+      const paraCriar = linhasUnicas.filter((l) => !nomeParaId.has(normalizarNome(l.nome)));
 
       // Diferente do .fp3 (que só tem custo), esse PDF traz o preço de
       // venda de verdade — por isso, ao contrário do .fp3, essa importação
@@ -93,64 +154,42 @@ export async function POST(request: Request) {
       const paraAtualizarComPreco = paraAtualizar.filter((l) => l.venda > 0);
       const paraAtualizarSemPreco = paraAtualizar.filter((l) => l.venda <= 0);
 
-      for (const grupo of chunk(paraAtualizarComPreco, CHUNK_SIZE)) {
-        // upsert em lote por `id` (a chave primária real) em vez de um
-        // UPDATE por linha — com catálogos grandes, uma chamada de rede
-        // por produto (centenas/milhares delas, em série) deixava a
-        // importação lenta a ponto de parecer travada.
-        const { error } = await supabase.from("produtos").upsert(
-          grupo.map((l) => ({
-            id: nomeParaId.get(normalizarNome(l.nome))!,
-            laboratorio: l.laboratorio,
-            custo: l.custo,
-            estoque: l.estoque,
-            preco: l.venda,
-          })),
-          { onConflict: "id" }
-        );
-        if (error) {
-          erros += grupo.length;
-          primeiroErro ??= error.message;
-        } else {
-          atualizados += grupo.length;
-        }
-      }
+      const resultadoComPreco = await gravarComIsolamento(
+        supabase,
+        paraAtualizarComPreco,
+        (l) => ({
+          id: nomeParaId.get(normalizarNome(l.nome))!,
+          laboratorio: l.laboratorio,
+          custo: l.custo,
+          estoque: l.estoque,
+          preco: l.venda,
+        }),
+        { onConflict: "id" }
+      );
+      const resultadoSemPreco = await gravarComIsolamento(
+        supabase,
+        paraAtualizarSemPreco,
+        (l) => ({
+          id: nomeParaId.get(normalizarNome(l.nome))!,
+          laboratorio: l.laboratorio,
+          custo: l.custo,
+          estoque: l.estoque,
+        }),
+        { onConflict: "id" }
+      );
+      const resultadoCriar = await gravarComIsolamento(supabase, paraCriar, (l) => ({
+        nome: l.nome,
+        laboratorio: l.laboratorio,
+        custo: l.custo,
+        estoque: l.estoque,
+        preco: l.venda > 0 ? l.venda : l.custo,
+      }));
 
-      for (const grupo of chunk(paraAtualizarSemPreco, CHUNK_SIZE)) {
-        const { error } = await supabase.from("produtos").upsert(
-          grupo.map((l) => ({
-            id: nomeParaId.get(normalizarNome(l.nome))!,
-            laboratorio: l.laboratorio,
-            custo: l.custo,
-            estoque: l.estoque,
-          })),
-          { onConflict: "id" }
-        );
-        if (error) {
-          erros += grupo.length;
-          primeiroErro ??= error.message;
-        } else {
-          atualizados += grupo.length;
-        }
-      }
-
-      for (const grupo of chunk(paraCriar, CHUNK_SIZE)) {
-        const { error } = await supabase.from("produtos").insert(
-          grupo.map((l) => ({
-            nome: l.nome,
-            laboratorio: l.laboratorio,
-            custo: l.custo,
-            estoque: l.estoque,
-            preco: l.venda > 0 ? l.venda : l.custo,
-          }))
-        );
-        if (error) {
-          erros += grupo.length;
-          primeiroErro ??= error.message;
-        } else {
-          criados += grupo.length;
-        }
-      }
+      atualizados = resultadoComPreco.ok + resultadoSemPreco.ok;
+      criados = resultadoCriar.ok;
+      erros = resultadoComPreco.erros + resultadoSemPreco.erros + resultadoCriar.erros;
+      primeiroErro = resultadoComPreco.primeiroErro ?? resultadoSemPreco.primeiroErro ?? resultadoCriar.primeiroErro;
+      ignoradas += duplicadasNoArquivo;
     } else {
       const content = await file.text();
       const { linhas, ignoradas: ignoradasSemNome } = parseEstoqueFile(content);
@@ -170,43 +209,25 @@ export async function POST(request: Request) {
       const paraAtualizar = linhas.filter((l) => l.sku && skuParaId.has(l.sku));
       const paraCriar = linhas.filter((l) => !l.sku || !skuParaId.has(l.sku));
 
-      for (const grupo of chunk(paraAtualizar, CHUNK_SIZE)) {
-        const { error } = await supabase.from("produtos").upsert(
-          grupo.map((l) => ({
-            sku: l.sku,
-            nome: l.nome,
-            laboratorio: l.laboratorio,
-            custo: l.custo,
-            estoque: l.estoque,
-          })),
-          { onConflict: "sku" }
-        );
-        if (error) {
-          erros += grupo.length;
-          primeiroErro ??= error.message;
-        } else {
-          atualizados += grupo.length;
-        }
-      }
+      const resultadoAtualizar = await gravarComIsolamento(
+        supabase,
+        paraAtualizar,
+        (l) => ({ sku: l.sku, nome: l.nome, laboratorio: l.laboratorio, custo: l.custo, estoque: l.estoque }),
+        { onConflict: "sku" }
+      );
+      const resultadoCriar = await gravarComIsolamento(supabase, paraCriar, (l) => ({
+        sku: l.sku,
+        nome: l.nome,
+        laboratorio: l.laboratorio,
+        custo: l.custo,
+        estoque: l.estoque,
+        preco: l.custo,
+      }));
 
-      for (const grupo of chunk(paraCriar, CHUNK_SIZE)) {
-        const { error } = await supabase.from("produtos").insert(
-          grupo.map((l) => ({
-            sku: l.sku,
-            nome: l.nome,
-            laboratorio: l.laboratorio,
-            custo: l.custo,
-            estoque: l.estoque,
-            preco: l.custo,
-          }))
-        );
-        if (error) {
-          erros += grupo.length;
-          primeiroErro ??= error.message;
-        } else {
-          criados += grupo.length;
-        }
-      }
+      atualizados = resultadoAtualizar.ok;
+      criados = resultadoCriar.ok;
+      erros = resultadoAtualizar.erros + resultadoCriar.erros;
+      primeiroErro = resultadoAtualizar.primeiroErro ?? resultadoCriar.primeiroErro;
     }
 
     await logAudit(supabase, "estoque_importado", "produtos", null, {
