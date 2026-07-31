@@ -115,7 +115,7 @@ function bucketPorX1(items: TextItem[], lo: number, hi: number): string {
     .trim();
 }
 
-export async function parseEstoquePdf(buffer: ArrayBuffer): Promise<ParseEstoquePdfResult> {
+export async function parseEstoquePdf(buffer: ArrayBuffer, signal?: AbortSignal): Promise<ParseEstoquePdfResult> {
   garantirPolyfillDOMMatrix();
   const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
@@ -131,6 +131,12 @@ export async function parseEstoquePdf(buffer: ArrayBuffer): Promise<ParseEstoque
   const amostraPartes: string[] = [];
 
   for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
+    // Se o navegador desistiu (timeout do lado do cliente, aba fechada), não
+    // adianta continuar processando as páginas restantes — sem isso, o
+    // parsing (e a gravação que vem depois) seguia rodando no servidor
+    // mesmo com ninguém mais esperando a resposta.
+    if (signal?.aborted) throw new DOMException("Importação cancelada pelo cliente", "AbortError");
+
     const page = await doc.getPage(pageNo);
     const content = await page.getTextContent();
 

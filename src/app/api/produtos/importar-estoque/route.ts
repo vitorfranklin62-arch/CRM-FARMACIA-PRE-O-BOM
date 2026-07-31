@@ -25,7 +25,8 @@ async function gravarComIsolamento<T>(
   supabase: SupabaseClient,
   linhas: T[],
   montarLinha: (item: T) => Record<string, unknown>,
-  opcoesUpsert?: { onConflict: string }
+  opcoesUpsert?: { onConflict: string },
+  signal?: AbortSignal
 ): Promise<{ ok: number; erros: number; primeiroErro: string | null }> {
   let ok = 0;
   let erros = 0;
@@ -37,6 +38,12 @@ async function gravarComIsolamento<T>(
       : supabase.from("produtos").insert(payload);
 
   for (const grupo of chunk(linhas, CHUNK_SIZE)) {
+    // Mesma ideia do parser: se o cliente já desistiu, parar de gravar em
+    // vez de continuar em segundo plano sem ninguém esperando — sem isso,
+    // uma importação "cancelada" no navegador podia terminar de qualquer
+    // jeito no servidor, e uma nova tentativa em cima dela duplicava tudo.
+    if (signal?.aborted) throw new DOMException("Importação cancelada pelo cliente", "AbortError");
+
     const { error } = await gravar(grupo.map(montarLinha));
     if (!error) {
       ok += grupo.length;
@@ -70,6 +77,12 @@ async function gravarComIsolamento<T>(
  *    não é tocado).
  */
 export async function POST(request: Request) {
+  const inicio = Date.now();
+  // Logs simples (visíveis nos logs do EasyPanel) — sem eles, uma
+  // importação lenta é uma caixa preta: não dá pra saber se o gargalo é
+  // ler o PDF, buscar o catálogo atual ou gravar no banco.
+  const log = (etapa: string) => console.log(`[importar-estoque] ${etapa} (+${Date.now() - inicio}ms)`);
+
   try {
     await requireDona();
 
@@ -90,12 +103,14 @@ export async function POST(request: Request) {
     }
 
     const ehPdf = file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf";
+    log(`recebeu arquivo "${file.name}" (${(file.size / 1024).toFixed(0)}KB)`);
 
     const supabase = await createClient();
     const { data: existentes, error: fetchError } = await supabase.from("produtos").select("id, sku, nome");
     if (fetchError) {
       return NextResponse.json({ error: `Não foi possível ler o catálogo atual: ${fetchError.message}` }, { status: 500 });
     }
+    log(`buscou catálogo atual (${existentes?.length ?? 0} produtos)`);
 
     let atualizados = 0;
     let criados = 0;
@@ -107,7 +122,8 @@ export async function POST(request: Request) {
 
     if (ehPdf) {
       const buffer = await file.arrayBuffer();
-      const { linhas, duvidosas, paginasDuvidosas, diagnostico } = await parseEstoquePdf(buffer);
+      const { linhas, duvidosas, paginasDuvidosas, diagnostico } = await parseEstoquePdf(buffer, request.signal);
+      log(`terminou de ler o PDF (${linhas.length} linhas válidas, ${duvidosas} duvidosas)`);
 
       if (linhas.length === 0) {
         const detalhe = `[diagnóstico: ${diagnostico.paginas} página(s), ${diagnostico.itensDeTexto} item(ns) de texto, ${duvidosas} linha(s) reconhecida(s) mas reprovada(s) na conferência. Amostra: ${diagnostico.amostraTexto || "(vazio)"}]`;
@@ -164,7 +180,8 @@ export async function POST(request: Request) {
           estoque: l.estoque,
           preco: l.venda,
         }),
-        { onConflict: "id" }
+        { onConflict: "id" },
+        request.signal
       );
       const resultadoSemPreco = await gravarComIsolamento(
         supabase,
@@ -175,21 +192,29 @@ export async function POST(request: Request) {
           custo: l.custo,
           estoque: l.estoque,
         }),
-        { onConflict: "id" }
+        { onConflict: "id" },
+        request.signal
       );
-      const resultadoCriar = await gravarComIsolamento(supabase, paraCriar, (l) => ({
-        nome: l.nome,
-        laboratorio: l.laboratorio,
-        custo: l.custo,
-        estoque: l.estoque,
-        preco: l.venda > 0 ? l.venda : l.custo,
-      }));
+      const resultadoCriar = await gravarComIsolamento(
+        supabase,
+        paraCriar,
+        (l) => ({
+          nome: l.nome,
+          laboratorio: l.laboratorio,
+          custo: l.custo,
+          estoque: l.estoque,
+          preco: l.venda > 0 ? l.venda : l.custo,
+        }),
+        undefined,
+        request.signal
+      );
 
       atualizados = resultadoComPreco.ok + resultadoSemPreco.ok;
       criados = resultadoCriar.ok;
       erros = resultadoComPreco.erros + resultadoSemPreco.erros + resultadoCriar.erros;
       primeiroErro = resultadoComPreco.primeiroErro ?? resultadoSemPreco.primeiroErro ?? resultadoCriar.primeiroErro;
       ignoradas += duplicadasNoArquivo;
+      log(`terminou de gravar (${atualizados} atualizados, ${criados} criados, ${erros} erros)`);
     } else {
       const content = await file.text();
       const { linhas, ignoradas: ignoradasSemNome } = parseEstoqueFile(content);
@@ -213,16 +238,23 @@ export async function POST(request: Request) {
         supabase,
         paraAtualizar,
         (l) => ({ sku: l.sku, nome: l.nome, laboratorio: l.laboratorio, custo: l.custo, estoque: l.estoque }),
-        { onConflict: "sku" }
+        { onConflict: "sku" },
+        request.signal
       );
-      const resultadoCriar = await gravarComIsolamento(supabase, paraCriar, (l) => ({
-        sku: l.sku,
-        nome: l.nome,
-        laboratorio: l.laboratorio,
-        custo: l.custo,
-        estoque: l.estoque,
-        preco: l.custo,
-      }));
+      const resultadoCriar = await gravarComIsolamento(
+        supabase,
+        paraCriar,
+        (l) => ({
+          sku: l.sku,
+          nome: l.nome,
+          laboratorio: l.laboratorio,
+          custo: l.custo,
+          estoque: l.estoque,
+          preco: l.custo,
+        }),
+        undefined,
+        request.signal
+      );
 
       atualizados = resultadoAtualizar.ok;
       criados = resultadoCriar.ok;
@@ -240,6 +272,7 @@ export async function POST(request: Request) {
       ignoradas,
     });
 
+    log("concluído, respondendo");
     return NextResponse.json({
       total,
       atualizados,
@@ -250,6 +283,11 @@ export async function POST(request: Request) {
       paginasParaRevisar: paginasParaRevisar.length > 0 ? paginasParaRevisar : undefined,
     });
   } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      log("interrompido: cliente cancelou/desconectou");
+      return NextResponse.json({ error: "Importação cancelada." }, { status: 499 });
+    }
+    console.error("[importar-estoque] erro inesperado:", err);
     return NextResponse.json(
       { error: `Erro inesperado ao importar: ${err instanceof Error ? err.message : String(err)}` },
       { status: 500 }
