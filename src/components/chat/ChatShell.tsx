@@ -1,6 +1,7 @@
 import { MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ConversationList } from "./ConversationList";
+import { MesclarConversasButton } from "./MesclarConversasButton";
 import type { ConversaCompleta } from "@/types/relations";
 
 export function ChatShell({
@@ -20,8 +21,9 @@ export function ChatShell({
           selectedId ? "hidden" : "block"
         )}
       >
-        <div className="border-b border-gray-100 px-4 py-3.5 dark:border-white/10">
+        <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-3.5 dark:border-white/10">
           <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Conversas</h2>
+          <MesclarConversasButton />
         </div>
         <ConversationList conversas={conversas} selectedId={selectedId} />
       </div>

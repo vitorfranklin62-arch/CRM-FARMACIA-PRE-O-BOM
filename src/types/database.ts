@@ -159,7 +159,8 @@ export type AuditAcao =
   | "produtos_duplicados_removidos"
   | "bairro_entrega_criado"
   | "bairro_entrega_atualizado"
-  | "bairro_entrega_excluido";
+  | "bairro_entrega_excluido"
+  | "conversas_duplicadas_mescladas";
 
 export type AuditLog = {
   id: string;

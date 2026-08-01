@@ -28,6 +28,7 @@ const ACAO_LABEL: Record<AuditAcao, string> = {
   bairro_entrega_criado: "Cadastrou bairro de entrega",
   bairro_entrega_atualizado: "Editou bairro de entrega",
   bairro_entrega_excluido: "Removeu bairro de entrega",
+  conversas_duplicadas_mescladas: "Mesclou conversas duplicadas",
 };
 
 const ENTIDADE_LABEL: Record<string, string> = {
@@ -39,6 +40,7 @@ const ENTIDADE_LABEL: Record<string, string> = {
   usuarios: "Usuária",
   produtos: "Produto",
   bairros_entrega: "Bairro de entrega",
+  conversas: "Conversa",
 };
 
 export function AtividadeSection({ logs }: { logs: AuditLogComUsuario[] }) {

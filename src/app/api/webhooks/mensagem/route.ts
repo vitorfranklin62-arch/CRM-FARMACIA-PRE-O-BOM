@@ -66,17 +66,18 @@ export async function POST(request: Request) {
     clienteId = novoCliente.id;
   }
 
-  // 2. Resolver conversa aberta (ou criar uma nova)
-  const { data: conversaAberta } = await supabase
+  // 2. Resolver a conversa do cliente — sempre reaproveita a mais recente,
+  // mesmo que esteja "fechada" (só reabre), pra não empilhar uma conversa
+  // nova a cada novo atendimento do mesmo número.
+  const { data: conversaRecente } = await supabase
     .from("conversas")
     .select("id")
     .eq("cliente_id", clienteId)
-    .neq("status", "fechada")
     .order("criado_em", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  let conversaId = conversaAberta?.id ?? null;
+  let conversaId = conversaRecente?.id ?? null;
 
   if (!conversaId) {
     const { data: novaConversa, error: conversaError } = await supabase
@@ -89,8 +90,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Não foi possível criar a conversa." }, { status: 500 });
     }
     conversaId = novaConversa.id;
-  } else if (conversa_status) {
-    await supabase.from("conversas").update({ status: conversa_status }).eq("id", conversaId);
+  } else {
+    await supabase.from("conversas").update({ status: conversa_status ?? "aberta" }).eq("id", conversaId);
   }
 
   // 3. Registrar a mensagem
