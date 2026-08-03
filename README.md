@@ -166,13 +166,35 @@ esses valores hardcoded.
 ### SQL a rodar no Supabase do CRM
 
 O bloco "SITE PÚBLICO" no final de `supabase/schema.sql` (adiciona colunas em
-`produtos`, cria `site_eventos` e as políticas de RLS de leitura anônima) —
-rode uma vez no SQL editor do Supabase, depois do schema principal. É
-idempotente, pode rodar de novo sem quebrar nada.
+`produtos`, cria `site_eventos`, o bucket de Storage `produtos-imagens` e as
+políticas de RLS de leitura anônima/upload de foto) — rode uma vez no SQL
+editor do Supabase, depois do schema principal. É idempotente, pode rodar de
+novo sem quebrar nada.
 
-Pra um produto aparecer na vitrine, a dona marca no CRM (**Produtos**):
-`ativo = true`, `destaque_site = true`, `exige_receita = false`, `estoque > 0`
-e, se for promoção, `preco_promocional` + `promo_ate`.
+### Como atualizar o site (sem programar)
+
+Todo o conteúdo do site — promoções, fotos, produto entrando ou saindo da
+vitrine — é editado pela dona **dentro do próprio CRM**, na tela
+**Produtos**, sem precisar mexer em código nem pedir nada pra mim depois
+que estiver no ar:
+
+1. Abra o produto (ou crie um novo) e marque **"Mostrar na vitrine do
+   site"**.
+2. Escolha a **categoria** (obrigatória) e, se quiser, o **princípio
+   ativo**.
+3. Clique em **"Enviar foto"** pra subir a imagem do produto — ela vai pro
+   Storage do Supabase (bucket `produtos-imagens`) e o link já fica salvo
+   sozinho. Sem foto, o card mostra um ícone genérico.
+4. Pra colocar em promoção, preencha **preço promocional** e **promoção
+   até** (a etiqueta com desconto some sozinha depois dessa data).
+5. Salvar já **atualiza a home do site na hora** (chama
+   `revalidarSitePublico()`, que limpa o cache de 5 min imediatamente) —
+   não precisa esperar nem publicar nada separado.
+
+Produtos com **"Exige receita médica"** marcado nunca aparecem na vitrine
+(trava tanto na tela quanto na política de leitura do banco), por exigência
+sanitária. O badge **"Na vitrine"** ao lado do nome, na lista de produtos,
+mostra rapidamente o que já está publicado no site.
 
 ### Cache e fallback
 
@@ -188,7 +210,8 @@ produtos de exemplo) — o site nunca aparece quebrado ou vazio pro cliente.
   variáveis `NEXT_PUBLIC_WHATSAPP_NUMERO`, `NEXT_PUBLIC_IFOOD_URL`,
   `NEXT_PUBLIC_SITE_URL`). Marcados com `// TODO: preencher` no arquivo.
 - **Fotos dos produtos** — sem foto, o card mostra um ícone de comprimido no
-  lugar; suba as imagens no Storage do Supabase e preencha `imagem_url`.
+  lugar; a dona sobe a foto direto pela tela **Produtos** do CRM (veja
+  "Como atualizar o site" acima), não precisa mexer no banco.
 - **Latitude/longitude reais** da loja em `loja.endereco.geo` (JSON-LD) —
   hoje é uma aproximação do centro de Salvador.
 - **Logo/ícones oficiais** — a versão atual (`/assets/site/*`) é uma

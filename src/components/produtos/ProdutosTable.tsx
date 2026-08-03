@@ -89,7 +89,14 @@ export function ProdutosTable({
       header: "Produto",
       accessor: (p) => (
         <div>
-          <p className="font-medium text-gray-900 dark:text-white">{p.nome}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="font-medium text-gray-900 dark:text-white">{p.nome}</p>
+            {p.destaque_site && (
+              <Badge variant="purple" className="text-[10px]">
+                Na vitrine
+              </Badge>
+            )}
+          </div>
           {p.laboratorio && <p className="text-xs text-gray-400 dark:text-gray-500">{p.laboratorio}</p>}
         </div>
       ),

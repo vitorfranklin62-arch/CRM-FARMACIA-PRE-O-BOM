@@ -74,6 +74,16 @@ export function trendPercent(current: number, previous: number): number {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
+/** "Dipirona Gotas 10ml" -> "dipirona-gotas-10ml", pro slug do site público. */
+export function slugify(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function initials(name: string): string {
   return name
     .trim()

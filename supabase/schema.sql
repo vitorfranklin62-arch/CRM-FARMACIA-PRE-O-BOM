@@ -493,3 +493,30 @@ create policy produtos_select_site_publico on produtos for select to anon
 drop policy if exists site_eventos_insert_anon on site_eventos;
 create policy site_eventos_insert_anon on site_eventos for insert to anon
   with check (true);
+
+-- ============================================================================
+-- Storage — fotos dos produtos, enviadas pela dona em Produtos → editar
+-- produto → "Enviar foto" (aparece só quando o produto está na vitrine do
+-- site). Bucket público (qualquer um lê a foto pela URL), mas só usuário
+-- ativo do CRM sobe/apaga arquivo.
+-- ============================================================================
+
+insert into storage.buckets (id, name, public)
+values ('produtos-imagens', 'produtos-imagens', true)
+on conflict (id) do nothing;
+
+drop policy if exists produtos_imagens_select_public on storage.objects;
+create policy produtos_imagens_select_public on storage.objects for select
+  using (bucket_id = 'produtos-imagens');
+
+drop policy if exists produtos_imagens_insert_usuario_ativo on storage.objects;
+create policy produtos_imagens_insert_usuario_ativo on storage.objects for insert
+  with check (bucket_id = 'produtos-imagens' and is_usuario_ativo());
+
+drop policy if exists produtos_imagens_update_usuario_ativo on storage.objects;
+create policy produtos_imagens_update_usuario_ativo on storage.objects for update
+  using (bucket_id = 'produtos-imagens' and is_usuario_ativo());
+
+drop policy if exists produtos_imagens_delete_usuario_ativo on storage.objects;
+create policy produtos_imagens_delete_usuario_ativo on storage.objects for delete
+  using (bucket_id = 'produtos-imagens' and is_usuario_ativo());

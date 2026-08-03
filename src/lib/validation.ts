@@ -87,6 +87,15 @@ export const produtoCreateSchema = z.object({
   preco: z.number().nonnegative(),
   estoque: z.number().int().nonnegative(),
   sku: z.string().trim().max(100).nullable().optional(),
+  // Vitrine do site público (Farmácia Preço Bom) — ver src/config/loja.ts
+  principio_ativo: z.string().trim().max(200).nullable().optional(),
+  categoria: z.enum(["medicamento_isento", "higiene", "dermocosmetico", "infantil", "outros"]).nullable().optional(),
+  exige_receita: z.boolean().optional(),
+  preco_promocional: z.number().nonnegative().nullable().optional(),
+  promo_ate: z.string().nullable().optional(),
+  imagem_url: z.string().trim().max(2000).nullable().optional(),
+  destaque_site: z.boolean().optional(),
+  slug: z.string().trim().max(300).nullable().optional(),
 });
 
 export const bairroEntregaCreateSchema = z.object({
