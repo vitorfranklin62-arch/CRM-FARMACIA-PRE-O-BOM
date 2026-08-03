@@ -29,6 +29,7 @@ const ACAO_LABEL: Record<AuditAcao, string> = {
   bairro_entrega_atualizado: "Editou bairro de entrega",
   bairro_entrega_excluido: "Removeu bairro de entrega",
   conversas_duplicadas_mescladas: "Mesclou conversas duplicadas",
+  clientes_duplicados_mesclados: "Mesclou clientes duplicados",
 };
 
 const ENTIDADE_LABEL: Record<string, string> = {

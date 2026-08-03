@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
 import { logAudit } from "@/lib/audit";
 import { formatRelativeTime, maskPhone } from "@/lib/utils";
+import { MesclarClientesButton } from "./MesclarClientesButton";
 import type { Cliente } from "@/types/database";
 
 export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
@@ -93,14 +94,17 @@ export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
 
   return (
     <>
-      <div className="relative mb-4 max-w-sm">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-        <Input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por nome, telefone ou observação..."
-          className="pl-9"
-        />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="relative max-w-sm flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+          <Input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome, telefone ou observação..."
+            className="pl-9"
+          />
+        </div>
+        <MesclarClientesButton />
       </div>
 
       <Table
