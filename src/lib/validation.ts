@@ -39,6 +39,13 @@ export const campanhaStatusWebhookSchema = z.object({
   status: z.enum(["rascunho", "agendada", "enviada"]),
 });
 
+export const siteEventoSchema = z.object({
+  tipo: z.enum(["clique_whatsapp", "clique_ifood", "busca"]),
+  produto_id: z.string().uuid().nullish(),
+  secao: z.enum(["hero", "promocoes", "flutuante", "rodape", "como_comprar"]).nullish(),
+  termo: z.string().trim().max(200).nullish(),
+});
+
 export const campanhaCreateSchema = z.object({
   titulo: z.string().trim().min(1).max(200),
   mensagem: z.string().trim().min(1).max(2000),

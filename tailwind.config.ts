@@ -49,10 +49,27 @@ const config: Config = {
           800: "#84241D",
           900: "#641B16",
         },
+        // Tokens da identidade visual do site público (Farmácia Preço Bom).
+        // Namespaced sob "site" pra não colidir com as cores do CRM acima.
+        site: {
+          "azul-marinho": "#001976",
+          "azul-profundo": "#00114F",
+          "vermelho-marca": "#FE0000",
+          "vermelho-off": "#C40E0E",
+          "amarelo-etiqueta": "#FFD100",
+          nuvem: "#F2F4F9",
+          grafite: "#14181A",
+          branco: "#FFFFFF",
+          whatsapp: "#25D366",
+        },
       },
       boxShadow: {
         card: "0 1px 3px rgba(15, 23, 42, 0.10)",
         "card-md": "0 6px 20px rgba(15, 23, 42, 0.10)",
+      },
+      fontFamily: {
+        display: ["var(--font-archivo)", "system-ui", "sans-serif"],
+        site: ["var(--font-instrument-sans)", "system-ui", "sans-serif"],
       },
     },
   },

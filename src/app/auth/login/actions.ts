@@ -30,7 +30,7 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
 
   const { email, password } = parsed.data;
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   await logLoginAttempt(email, !error, ip);
 
@@ -38,7 +38,13 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
     return { error: "E-mail ou senha incorretos." };
   }
 
-  redirect("/");
+  const { data: usuario } = await supabase
+    .from("usuarios")
+    .select("role")
+    .eq("id", data.user.id)
+    .single();
+
+  redirect(usuario?.role === "dona" ? "/dashboard" : "/pedidos");
 }
 
 async function logLoginAttempt(email: string, sucesso: boolean, ip: string) {

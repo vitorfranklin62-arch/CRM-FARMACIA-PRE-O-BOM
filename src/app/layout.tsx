@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
+import { Archivo, Instrument_Sans } from "next/font/google";
 import { headers } from "next/headers";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { ServiceWorkerRegister } from "@/components/providers/ServiceWorkerRegister";
@@ -14,6 +15,20 @@ const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
   variable: "--font-geist-mono",
   weight: "100 900",
+});
+
+// Tipografia do site público (landing). O CRM continua usando Geist acima.
+const archivo = Archivo({
+  subsets: ["latin"],
+  variable: "--font-archivo",
+  weight: ["500", "700", "800"],
+  display: "swap",
+});
+const instrumentSans = Instrument_Sans({
+  subsets: ["latin"],
+  variable: "--font-instrument-sans",
+  weight: ["400", "500"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -49,8 +64,11 @@ export default async function RootLayout({
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} bg-gray-50 text-gray-900 antialiased dark:bg-navy-950 dark:text-gray-100`}
+        className={`${geistSans.variable} ${geistMono.variable} ${archivo.variable} ${instrumentSans.variable} bg-gray-50 text-gray-900 antialiased dark:bg-navy-950 dark:text-gray-100`}
       >
+        <noscript>
+          <style>{`[data-reveal]{opacity:1!important;transform:none!important;}`}</style>
+        </noscript>
         <ThemeProvider nonce={nonce}>{children}</ThemeProvider>
         <ServiceWorkerRegister />
       </body>

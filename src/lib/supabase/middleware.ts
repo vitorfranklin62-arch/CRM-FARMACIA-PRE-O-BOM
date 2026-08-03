@@ -2,14 +2,18 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
 
-const PUBLIC_PATHS = ["/auth/login", "/auth/callback"];
+// "/" (exato) é a landing pública do site; as demais rotas do CRM continuam
+// protegidas normalmente. /assets/site serve os ícones/OG image gerados
+// dinamicamente pro site público, e por isso também precisam ficar acessíveis
+// sem sessão (igual ao manifest/sw.js, que já são exceção no matcher abaixo).
+const PUBLIC_PATHS = ["/auth/login", "/auth/callback", "/assets/site", "/robots.txt", "/sitemap.xml"];
 
 function buildCsp(nonce: string): string {
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    "img-src 'self' data: blob: https://*.supabase.co",
     "font-src 'self'",
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
     "worker-src 'self'",
@@ -17,6 +21,8 @@ function buildCsp(nonce: string): string {
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
+    // mapa embutido em "Onde estamos" (site público)
+    "frame-src https://www.google.com",
     "frame-ancestors 'none'",
     "upgrade-insecure-requests",
   ].join("; ");
@@ -66,7 +72,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
+  const isPublic = path === "/" || PUBLIC_PATHS.some((p) => path.startsWith(p));
   const isApi = path.startsWith("/api");
 
   if (!user && !isPublic && !isApi) {
@@ -77,8 +83,9 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && path.startsWith("/auth/login")) {
+    const { data: usuario } = await supabase.from("usuarios").select("role").eq("id", user.id).single();
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = usuario?.role === "dona" ? "/dashboard" : "/pedidos";
     return applySecurityHeaders(NextResponse.redirect(url), nonce);
   }
 

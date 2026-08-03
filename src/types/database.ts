@@ -39,6 +39,18 @@ export type Produto = {
   sku: string | null;
   criado_em: string;
   atualizado_em: string;
+  // Colunas usadas pelo site público (ver supabase/schema.sql) — a maioria
+  // dos produtos importados do estoque não preenche isso, só quem a dona
+  // marca manualmente pra aparecer na landing.
+  principio_ativo: string | null;
+  categoria: "medicamento_isento" | "higiene" | "dermocosmetico" | "infantil" | "outros" | null;
+  exige_receita: boolean | null;
+  preco_promocional: number | null;
+  promo_ate: string | null;
+  imagem_url: string | null;
+  destaque_site: boolean | null;
+  ativo: boolean | null;
+  slug: string | null;
 }
 
 export type Pedido = {
@@ -172,6 +184,17 @@ export type AuditLog = {
   criado_em: string;
 }
 
+export type SiteEventoTipo = "clique_whatsapp" | "clique_ifood" | "busca";
+
+export type SiteEvento = {
+  id: string;
+  tipo: SiteEventoTipo;
+  produto_id: string | null;
+  secao: string | null;
+  termo: string | null;
+  criado_em: string;
+}
+
 type Relationship = {
   foreignKeyName: string;
   columns: string[];
@@ -287,6 +310,18 @@ export interface Database {
             columns: ["usuario_id"];
             isOneToOne: false;
             referencedRelation: "usuarios";
+            referencedColumns: ["id"];
+          },
+        ]
+      >;
+      site_eventos: TableDef<
+        SiteEvento,
+        [
+          {
+            foreignKeyName: "site_eventos_produto_id_fkey";
+            columns: ["produto_id"];
+            isOneToOne: false;
+            referencedRelation: "produtos";
             referencedColumns: ["id"];
           },
         ]

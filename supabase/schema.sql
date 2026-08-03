@@ -448,3 +448,48 @@ insert into configuracoes (chave, valor, tipo) values
   ('integracao_n8n_chat_webhook_url', '', 'string'),
   ('integracao_n8n_campanha_webhook_url', '', 'string')
 on conflict (chave) do nothing;
+
+-- ============================================================================
+-- SITE PÚBLICO (Farmácia Preço Bom) — landing de vitrine, somente leitura
+-- Roda em cima do schema acima: usa a mesma tabela `produtos` do CRM (só
+-- adiciona colunas que ainda não existem) e cria `site_eventos`, nova.
+-- Idempotente — pode rodar de novo sem quebrar o que já existe.
+-- ============================================================================
+
+alter table produtos add column if not exists principio_ativo text;
+alter table produtos add column if not exists categoria text
+  check (categoria in ('medicamento_isento', 'higiene', 'dermocosmetico', 'infantil', 'outros'));
+alter table produtos add column if not exists exige_receita boolean not null default false;
+alter table produtos add column if not exists preco_promocional numeric(10, 2);
+alter table produtos add column if not exists promo_ate date;
+alter table produtos add column if not exists imagem_url text;
+alter table produtos add column if not exists destaque_site boolean not null default false;
+alter table produtos add column if not exists ativo boolean not null default true;
+alter table produtos add column if not exists slug text;
+
+-- unique parcial (não via "add constraint ... if not exists", que o Postgres não suporta)
+create unique index if not exists produtos_slug_key on produtos (slug) where slug is not null;
+
+create table if not exists site_eventos (
+  id uuid primary key default gen_random_uuid(),
+  tipo text not null check (tipo in ('clique_whatsapp', 'clique_ifood', 'busca')),
+  produto_id uuid references produtos(id) on delete set null,
+  secao text,
+  termo text,
+  criado_em timestamptz not null default now()
+);
+
+create index if not exists site_eventos_criado_em_idx on site_eventos (criado_em desc);
+
+alter table site_eventos enable row level security;
+
+-- produtos: além da política existente (produtos_select, só usuário ativo do
+-- CRM), o site público lê como anon — só o que pode aparecer na vitrine.
+drop policy if exists produtos_select_site_publico on produtos;
+create policy produtos_select_site_publico on produtos for select to anon
+  using (ativo = true and destaque_site = true and estoque > 0);
+
+-- site_eventos: anon só insere (telemetria de clique/busca do site), nunca lê.
+drop policy if exists site_eventos_insert_anon on site_eventos;
+create policy site_eventos_insert_anon on site_eventos for insert to anon
+  with check (true);

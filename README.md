@@ -140,11 +140,82 @@ Cada linha reconstruída é conferida por aritmética antes de ser aceita (`quan
 
 Como o `.pdf` casa produtos pelo nome (sem código/SKU), qualquer importação feita antes de uma correção no parser pode ter deixado produtos duplicados no catálogo (o mesmo produto cadastrado 2x, com preço/estoque diferentes entre as cópias). Em **Produtos → Limpar duplicados**, a dona vê uma prévia de quantos grupos duplicados existem antes de confirmar a remoção — mantém sempre a linha mais recentemente atualizada de cada nome e remove as outras. Produtos já usados em algum pedido nunca são removidos (o banco tem uma trava de chave estrangeira pra isso — `pedido_itens.produto_id references produtos(id)`). Rota: `GET /api/produtos/duplicados` (prévia, só leitura) e `POST /api/produtos/duplicados` (executa), ambas só a dona.
 
+## Site público (landing)
+
+A página em `/` (`src/app/page.tsx`) é o site público institucional da farmácia
+— cartão de visitas digital pro link da bio do Instagram e do Perfil da
+Empresa no Google. Não tem checkout: toda conversão termina no WhatsApp. Vive
+no mesmo app Next.js do CRM (mesmo deploy, mesmo projeto Supabase), mas em
+rotas completamente separadas e sem autenticação:
+
+- `/` — landing pública (header, hero, promoções, busca, serviços, como
+  comprar, onde estamos, rodapé, botão flutuante de WhatsApp no mobile)
+- `/assets/site/{icon,apple-icon,og-image}` — favicon, ícone iOS e imagem de
+  compartilhamento, gerados dinamicamente (`next/og`) a partir de uma
+  recriação em SVG do logo — troque pelos arquivos oficiais (`favicon-512.png`,
+  `apple-icon-180.png`, `og-image.png`) quando disponíveis, apontando
+  `icons`/`openGraph.images` em `src/app/page.tsx` pra eles
+- `/api/site/evento` — telemetria anônima (clique WhatsApp/iFood, busca)
+- `/api/revalidate` — o CRM chama isso (`Authorization: Bearer <REVALIDATE_SECRET>`)
+  quando uma promoção muda, pra atualizar a home antes dos 5 minutos de cache
+
+Todo dado do negócio (endereço, horário, WhatsApp, Instagram, iFood, CNPJ,
+farmacêutico responsável) vem de `src/config/loja.ts` — nenhum componente tem
+esses valores hardcoded.
+
+### SQL a rodar no Supabase do CRM
+
+O bloco "SITE PÚBLICO" no final de `supabase/schema.sql` (adiciona colunas em
+`produtos`, cria `site_eventos` e as políticas de RLS de leitura anônima) —
+rode uma vez no SQL editor do Supabase, depois do schema principal. É
+idempotente, pode rodar de novo sem quebrar nada.
+
+Pra um produto aparecer na vitrine, a dona marca no CRM (**Produtos**):
+`ativo = true`, `destaque_site = true`, `exige_receita = false`, `estoque > 0`
+e, se for promoção, `preco_promocional` + `promo_ate`.
+
+### Cache e fallback
+
+A busca de destaques (`src/lib/produtos-destaque.ts`) é cacheada por 5 minutos
+(`unstable_cache`, tag `produtos-destaque`). Se o Supabase falhar ou devolver
+vazio, a home cai automaticamente pra `src/data/promocoes-fallback.json` (8
+produtos de exemplo) — o site nunca aparece quebrado ou vazio pro cliente.
+
+### Pendências antes de publicar
+
+- **WhatsApp, Instagram, iFood, domínio, CNPJ e farmacêutico responsável** —
+  hoje com placeholder em `src/config/loja.ts` (e `.env`/EasyPanel pras
+  variáveis `NEXT_PUBLIC_WHATSAPP_NUMERO`, `NEXT_PUBLIC_IFOOD_URL`,
+  `NEXT_PUBLIC_SITE_URL`). Marcados com `// TODO: preencher` no arquivo.
+- **Fotos dos produtos** — sem foto, o card mostra um ícone de comprimido no
+  lugar; suba as imagens no Storage do Supabase e preencha `imagem_url`.
+- **Latitude/longitude reais** da loja em `loja.endereco.geo` (JSON-LD) —
+  hoje é uma aproximação do centro de Salvador.
+- **Logo/ícones oficiais** — a versão atual (`/assets/site/*`) é uma
+  recriação simplificada em SVG das cores e formas da marca, não os arquivos
+  originais.
+
+### Deploy no EasyPanel
+
+1. Crie um app do tipo **Dockerfile** apontando pra este repositório/branch —
+   o `Dockerfile` na raiz já faz o build multi-stage (`output: "standalone"`).
+2. Configure as variáveis de ambiente do app (mesmas do `.env.example`),
+   incluindo as `NEXT_PUBLIC_*` do site — elas precisam estar disponíveis
+   **no momento do build** (ficam embutidas no bundle do browser), então
+   passe-as também como *build args* se o EasyPanel pedir.
+3. Porta do container: `3000` (já exposta no `Dockerfile`).
+4. Aponte o domínio (`precobom.com.br`) pro app no EasyPanel e emita o
+   certificado TLS por lá (Let's Encrypt automático).
+5. Depois do primeiro deploy, teste `/`, `/robots.txt` e `/sitemap.xml` sem
+   estar logado — todos devem carregar normalmente (são rotas públicas).
+
 ## Estrutura
 
 ```
 src/
   app/
+    page.tsx                # landing pública do site (rota "/", sem login)
+    assets/site/             # favicon/apple-icon/og-image gerados dinamicamente
     auth/login/            # login (Supabase Auth)
     (app)/                 # área autenticada (sidebar + header)
       dashboard/            # métricas (só dona)
@@ -154,12 +225,15 @@ src/
       campanhas/            # campanhas de mensagens (só dona)
       templates/            # templates de resposta
       configuracoes/        # dados da farmácia, usuários, segurança (só dona)
-    api/                    # webhooks e endpoints consumidos pelo N8N
-  components/               # componentes de UI e por domínio
-  lib/                      # supabase clients, auth, validação, rate limit
+    api/                    # webhooks, telemetria e revalidação do site
+  components/
+    site/                   # seções e componentes do site público
+  config/loja.ts            # dados reais do negócio (site), fonte única
+  data/promocoes-fallback.json  # catálogo de fallback do site
+  lib/                      # supabase clients, auth, validação, rate limit, whatsapp
   types/                    # tipos do banco (Database) e relações
 supabase/
-  schema.sql                # schema + RLS + realtime
+  schema.sql                # schema do CRM + bloco "SITE PÚBLICO" no final
   seed.sql                  # dados de exemplo
 ```
 
