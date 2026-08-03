@@ -46,7 +46,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não foi possível registrar a mensagem." }, { status: 500 });
   }
 
-  await supabase.from("conversas").update({ atualizado_em: new Date().toISOString() }).eq("id", conversa_id);
+  // Uma funcionária respondendo manualmente pelo CRM é sinal de que um humano
+  // já está cuidando da conversa — marca "aguardando_humano" pra IA não
+  // continuar respondendo por cima (mesmo efeito de quando alguém intervém
+  // direto pelo WhatsApp do celular).
+  await supabase
+    .from("conversas")
+    .update({ atualizado_em: new Date().toISOString(), status: "aguardando_humano" })
+    .eq("id", conversa_id);
 
   // Notifica o N8N pra entregar a mensagem via UAIZAP/WhatsApp (best-effort — a mensagem já foi salva)
   const service = createServiceClient();
