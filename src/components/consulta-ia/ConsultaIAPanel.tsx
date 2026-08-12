@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { formatDateTime } from "@/lib/utils";
+import { AtlasAvatar } from "./AtlasAvatar";
 import type { ConsultaFarmaceuticaComUsuario } from "@/types/relations";
 
 type HistoricoItem = {
@@ -138,7 +139,13 @@ export function ConsultaIAPanel({
               <Pill size={16} className="mt-0.5 shrink-0 text-brand-500" />
               {item.pergunta}
             </p>
-            <p className="whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-300">{item.resposta}</p>
+            <div className="flex items-start gap-2.5 rounded-xl bg-gray-50 p-3 dark:bg-white/5">
+              <AtlasAvatar size={28} className="shrink-0" />
+              <div>
+                <p className="mb-1 text-xs font-semibold text-brand-600 dark:text-brand-400">Vitória · ATLAS AI</p>
+                <p className="whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-300">{item.resposta}</p>
+              </div>
+            </div>
           </Card>
         ))}
       </div>
