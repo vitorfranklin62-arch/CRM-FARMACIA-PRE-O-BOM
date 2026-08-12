@@ -455,9 +455,13 @@ create policy templates_delete on templates_mensagem for delete using (is_dona()
 
 -- campanhas: só dona
 drop policy if exists campanhas_all on campanhas;
+drop policy if exists campanhas_select on campanhas;
 create policy campanhas_select on campanhas for select using (is_dona());
+drop policy if exists campanhas_insert on campanhas;
 create policy campanhas_insert on campanhas for insert with check (is_dona());
+drop policy if exists campanhas_update on campanhas;
 create policy campanhas_update on campanhas for update using (is_dona());
+drop policy if exists campanhas_delete on campanhas;
 create policy campanhas_delete on campanhas for delete using (is_dona());
 
 -- vendas_log: só dona (dashboard)
@@ -468,8 +472,11 @@ create policy vendas_log_insert on vendas_log for insert with check (is_dona());
 
 -- configuracoes: só dona
 drop policy if exists configuracoes_all_select on configuracoes;
+drop policy if exists configuracoes_select on configuracoes;
 create policy configuracoes_select on configuracoes for select using (is_dona());
+drop policy if exists configuracoes_insert on configuracoes;
 create policy configuracoes_insert on configuracoes for insert with check (is_dona());
+drop policy if exists configuracoes_update on configuracoes;
 create policy configuracoes_update on configuracoes for update using (is_dona());
 
 -- login_tentativas: só dona lê; ninguém escreve via client (só service role, usado pelo backend)
