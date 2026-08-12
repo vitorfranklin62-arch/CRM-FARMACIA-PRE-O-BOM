@@ -91,6 +91,13 @@ export const bairroEntregaCreateSchema = z.object({
   ativo: z.boolean(),
 });
 
+export const clienteCreateSchema = z.object({
+  nome: z.string().trim().min(1).max(200),
+  telefone: z.string().trim().min(8).max(30),
+  origem_chat: z.enum(["whatsapp", "instagram"]).nullable().optional(),
+  observacoes: z.string().trim().max(2000).nullable().optional(),
+});
+
 export const clienteUpdateSchema = z.object({
   observacoes: z.string().trim().max(2000).nullable().optional(),
 });

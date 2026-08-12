@@ -140,6 +140,7 @@ export type LoginTentativa = {
 
 export type AuditAcao =
   | "pedido_status_atualizado"
+  | "cliente_criado"
   | "cliente_observacao_atualizada"
   | "template_criado"
   | "template_atualizado"

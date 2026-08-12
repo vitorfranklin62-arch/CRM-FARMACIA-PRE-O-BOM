@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, MessageSquare, NotebookPen, Search } from "lucide-react";
+import { Camera, MessageSquare, NotebookPen, Plus, Search } from "lucide-react";
 import { Table, type Column } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
@@ -13,12 +13,14 @@ import { createClient } from "@/lib/supabase/client";
 import { logAudit } from "@/lib/audit";
 import { formatRelativeTime, maskPhone } from "@/lib/utils";
 import type { Cliente } from "@/types/database";
+import { ClienteForm } from "./ClienteForm";
 
 export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
   const [editing, setEditing] = useState<Cliente | null>(null);
   const [observacoes, setObservacoes] = useState("");
   const [saving, setSaving] = useState(false);
   const [busca, setBusca] = useState("");
+  const [addingCliente, setAddingCliente] = useState(false);
   const router = useRouter();
 
   const filtrados = useMemo(() => {
@@ -97,14 +99,19 @@ export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
 
   return (
     <>
-      <div className="relative mb-4 max-w-sm">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
-        <Input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por nome, telefone ou observação..."
-          className="pl-9"
-        />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+          <Input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome, telefone ou observação..."
+            className="pl-9"
+          />
+        </div>
+        <Button size="sm" onClick={() => setAddingCliente(true)}>
+          <Plus size={15} /> Adicionar cliente
+        </Button>
       </div>
 
       <Table
@@ -130,6 +137,8 @@ export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
           </Button>
         </div>
       </Modal>
+
+      <ClienteForm open={addingCliente} onClose={() => setAddingCliente(false)} />
     </>
   );
 }
