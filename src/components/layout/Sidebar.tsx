@@ -5,12 +5,14 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Package,
+  PackageSearch,
   MessageCircle,
   Users,
   Megaphone,
   FileText,
   Settings,
   Boxes,
+  Pill,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,11 +29,13 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, donaOnly: true },
   { href: "/pedidos", label: "Pedidos", icon: Package },
+  { href: "/encomendas", label: "Encomendas", icon: PackageSearch },
   { href: "/chat", label: "Chat ao vivo", icon: MessageCircle },
   { href: "/produtos", label: "Produtos", icon: Boxes },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/campanhas", label: "Campanhas", icon: Megaphone, donaOnly: true },
   { href: "/templates", label: "Templates", icon: FileText },
+  { href: "/consulta-ia", label: "ATLAS AI", icon: Pill },
   { href: "/configuracoes", label: "Configurações", icon: Settings, donaOnly: true },
 ];
 

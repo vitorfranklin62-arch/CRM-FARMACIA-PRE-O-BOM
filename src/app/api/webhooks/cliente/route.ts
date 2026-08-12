@@ -26,34 +26,32 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
   const now = new Date().toISOString();
-  const { nome, telefone, origem_chat } = parsed.data;
+  const { nome, telefone, origem_chat, foto_url } = parsed.data;
   const telefoneNormalizado = normalizarTelefone(telefone);
 
-  const { data: existente } = await supabase
+  // Upsert atômico por telefone (trava `clientes_telefone_key` no banco) —
+  // evita a corrida onde duas chamadas quase simultâneas pro mesmo telefone
+  // (ex.: duas mensagens seguidas do cliente) cada uma achava "não existe"
+  // e criava um cliente duplicado. foto_url só entra quando vier preenchida,
+  // pra uma chamada sem foto não apagar a que já tinha.
+  const { data: cliente, error } = await supabase
     .from("clientes")
-    .select("id")
-    .eq("telefone", telefoneNormalizado)
-    .maybeSingle();
-
-  if (existente) {
-    const { error } = await supabase
-      .from("clientes")
-      .update({ nome, origem_chat: origem_chat ?? null, ultima_interacao: now })
-      .eq("id", existente.id);
-
-    if (error) return NextResponse.json({ error: "Não foi possível atualizar o cliente." }, { status: 500 });
-    return NextResponse.json({ id: existente.id, criado: false }, { status: 200 });
-  }
-
-  const { data: novo, error } = await supabase
-    .from("clientes")
-    .insert({ nome, telefone: telefoneNormalizado, origem_chat: origem_chat ?? null, ultima_interacao: now })
+    .upsert(
+      {
+        telefone: telefoneNormalizado,
+        nome,
+        origem_chat: origem_chat ?? null,
+        ultima_interacao: now,
+        ...(foto_url ? { foto_url } : {}),
+      },
+      { onConflict: "telefone" }
+    )
     .select("id")
     .single();
 
-  if (error || !novo) {
-    return NextResponse.json({ error: "Não foi possível criar o cliente." }, { status: 500 });
+  if (error || !cliente) {
+    return NextResponse.json({ error: "Não foi possível registrar o cliente." }, { status: 500 });
   }
 
-  return NextResponse.json({ id: novo.id, criado: true }, { status: 201 });
+  return NextResponse.json({ id: cliente.id }, { status: 200 });
 }

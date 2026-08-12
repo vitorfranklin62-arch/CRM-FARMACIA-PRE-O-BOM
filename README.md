@@ -69,6 +69,7 @@ Veja `.env.example`. Resumo:
 - `SUPABASE_SERVICE_ROLE_KEY` — só usado no servidor (webhooks e administração de usuários), nunca exposto ao browser
 - `N8N_WEBHOOK_SECRET` — token que o N8N deve enviar em `Authorization: Bearer <token>` nos webhooks
 - `N8N_BASE_URL`, `UAIZAP_API_KEY`, `UAIZAP_BASE_URL` — configuração das integrações
+- `ANTHROPIC_API_KEY` — usada só pela aba interna **ATLAS AI** (`/consulta-ia`), nunca pela IA que atende cliente
 
 ## Webhooks / API para o N8N
 
@@ -84,6 +85,16 @@ Todas as rotas abaixo exigem o header `Authorization: Bearer <N8N_WEBHOOK_SECRET
 
 Quando uma funcionária/dona responde pelo Chat ao vivo, o painel chama `POST /api/chat/enviar` (autenticado por sessão, não pelo token do N8N). Essa rota salva a mensagem no Supabase e, em seguida, notifica o N8N via a URL configurada em **Configurações → Integrações → Webhook do N8N para enviar mensagens do chat** (chave `integracao_n8n_chat_webhook_url`), enviando `Authorization: Bearer <N8N_WEBHOOK_SECRET>` para o N8N validar a origem. Cabe ao workflow do N8N entregar essa mensagem via UAIZAP/WhatsApp.
 
+### Foto de perfil do cliente
+
+Os webhooks `/api/webhooks/cliente`, `/api/webhooks/mensagem` e `/api/webhooks/pedido` aceitam um campo opcional `foto_url` dentro do objeto `cliente` — uma URL de imagem (ex.: a foto de perfil do WhatsApp/Instagram) que aparece como avatar nas telas de Clientes e Chat, com fallback automático pras iniciais do nome quando não há foto (ou a URL falha ao carregar).
+
+A geração dessa URL fica por conta do workflow do N8N: antes de chamar o webhook, adicione uma chamada à API do UAIZAP que retorna a foto de perfil do contato (o endpoint exato varia por provedor — consulte a documentação do UAIZAP) e inclua o resultado como `cliente.foto_url` no payload. Se o UAIZAP não retornar foto (perfil privado, número sem foto, etc.), simplesmente omita o campo — o cliente continua funcionando normalmente, só sem foto.
+
+Uma chamada que **não** inclui `foto_url` nunca apaga uma foto já salva (só grava quando o campo vem preenchido) — então não tem problema alguns eventos terem a foto e outros não.
+
+**Atenção:** URLs de foto de perfil do WhatsApp costumam expirar depois de um tempo. Como o campo é reenviado a cada novo evento (mensagem, pedido, etc.), a foto se atualiza sozinha com o uso normal — não precisa de um job separado pra manter em dia.
+
 ### Cálculo de taxa de entrega (IA)
 
 Em **Configurações → Bairros de entrega**, a dona cadastra os bairros atendidos e o valor de entrega de cada um. A IA usa isso pra calcular a entrega quando o cliente pede pra receber em casa, através de uma function/tool no N8N que chama a função `calcular_taxa_entrega` do Supabase via RPC (mesmo padrão do `buscar_produtos`, já usado pra consultar o catálogo):
@@ -97,6 +108,31 @@ Body: { "bairro_busca": "<bairro que o cliente informou>" }
 Devolve `[{ "bairro": "...", "valor": 8.00 }]` se achar um bairro correspondente (a comparação ignora acento/maiúsculas/espaços), ou uma lista vazia `[]` se a farmácia não entrega nesse bairro — nesse caso a IA deve avisar o cliente e oferecer retirada na loja.
 
 Ao criar o pedido (`POST /api/webhooks/pedido`), o payload aceita opcionalmente `taxa_entrega` (número) e `forma_pagamento` (texto livre, ex.: "Pix", "Cartão", "Dinheiro") — se `total` não vier explícito, ele é calculado como soma dos itens + `taxa_entrega`.
+
+## Encomendas
+
+Fila separada de **Pedidos**, pra produto que a farmácia não tem em estoque e está encomendando especialmente pro cliente (fornecedor/distribuidor). Em **Encomendas**, qualquer usuária logada cadastra: nome do cliente, número, nome do produto, quantidade e observações — o cliente é resolvido pelo telefone (reaproveita se já existir, sem sobrescrever o nome já salvo; cria um novo se for a primeira vez).
+
+Quadro com 3 colunas:
+
+- **Aguardando chegar** (`pendente`) — acabou de ser cadastrada.
+- **Chegou** (`chegou`) — ao mover pra essa coluna, o backend avisa o cliente automaticamente por WhatsApp (mensagem tipo `Sua encomenda de "X" já chegou na farmácia...`), salva essa mensagem na conversa dele (aparece no Chat ao vivo, igual a qualquer mensagem enviada pela equipe) e notifica o N8N pra entregar de fato via UAIZAP. **Não é um webhook novo** — reaproveita a mesma URL/token já configurados em Configurações → Integrações pro Chat ao vivo (`integracao_n8n_chat_webhook_url` + `N8N_WEBHOOK_SECRET`), então não precisa configurar nada além do que o Chat ao vivo já usa.
+- **Retirada hoje** (`entregue`) — cliente já buscou; some do quadro no dia seguinte (mesma lógica do "Entregue hoje" em Pedidos), mas o registro continua no banco.
+
+Uma encomenda em "Aguardando chegar" ou "Chegou" também pode ser cancelada (`cancelada`) — some do quadro, mas fica no histórico (Configurações → Atividade).
+
+O aviso automático só dispara uma vez por encomenda (na transição pra "chegou" — mudar o status de novo não reenvia); se o N8N não estiver configurado, o status muda normalmente e só a notificação por WhatsApp é pulada. Rota: `POST /api/encomendas/:id/status`, autenticada por sessão.
+
+## ATLAS AI (aba interna de referência farmacêutica)
+
+Em **ATLAS AI**, qualquer usuária logada (dona ou funcionária) pode perguntar coisas como "qual o genérico do Buscopan?" ou "Losartana tem contraindicação pra gestante?" e recebe uma resposta gerada pela Claude API (`POST /api/consulta-farmaceutica` → `src/lib/claude.ts`, modelo `claude-opus-5`).
+
+Pontos importantes sobre essa ferramenta:
+
+- **É uma ferramenta interna, separada da IA que atende cliente no WhatsApp/Instagram** (a "Vitória", que roda no N8N) — as duas não se comunicam entre si. Ninguém de fora da equipe logada no painel tem acesso a essa aba.
+- **A resposta vem do conhecimento geral do modelo, não de uma bula oficial ou base de dados da Anvisa em tempo real** — por isso tanto a tela quanto o próprio prompt da IA (`SYSTEM_PROMPT_FARMACEUTICO` em `src/lib/claude.ts`) deixam claro que é uma referência rápida, não uma fonte oficial, e que a bula do fabricante + julgamento do farmacêutico responsável são sempre a decisão final antes de orientar ou vender pra um cliente.
+- Cada pergunta e resposta fica salva em `consultas_farmaceuticas` (histórico visível na própria aba, compartilhado entre a equipe) — não é pensado pra perguntas com dados pessoais de clientes.
+- Requer `ANTHROPIC_API_KEY` configurada no servidor; sem ela, a aba retorna erro explicando que a IA não está configurada.
 
 ## Importação de estoque
 
@@ -149,10 +185,12 @@ src/
     (app)/                 # área autenticada (sidebar + header)
       dashboard/            # métricas (só dona)
       pedidos/              # fila de separação
+      encomendas/           # produto fora de estoque encomendado pro cliente (avisa por WhatsApp ao chegar)
       chat/                 # chat ao vivo com a IA/cliente
       clientes/             # cadastro e observações
       campanhas/            # campanhas de mensagens (só dona)
       templates/            # templates de resposta
+      consulta-ia/          # referência farmacêutica interna (contraindicação/genérico)
       configuracoes/        # dados da farmácia, usuários, segurança (só dona)
     api/                    # webhooks e endpoints consumidos pelo N8N
   components/               # componentes de UI e por domínio

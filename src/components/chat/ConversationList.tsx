@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { MessageSquare, Camera } from "lucide-react";
-import { cn, formatRelativeTime, initials } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
+import { Avatar } from "@/components/ui/Avatar";
 import type { ConversaCompleta } from "@/types/relations";
 
 const STATUS_VARIANT = {
@@ -39,9 +40,7 @@ export function ConversationList({
             selectedId === conversa.id && "bg-brand-50 hover:bg-brand-50 dark:bg-brand-500/15 dark:hover:bg-brand-500/15"
           )}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600 dark:bg-white/10 dark:text-gray-300">
-            {initials(conversa.clientes?.nome ?? "?")}
-          </div>
+          <Avatar nome={conversa.clientes?.nome ?? "?"} fotoUrl={conversa.clientes?.foto_url} size={36} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
               <p className="truncate text-sm font-medium text-gray-900 dark:text-white">

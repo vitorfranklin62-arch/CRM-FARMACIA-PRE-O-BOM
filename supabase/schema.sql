@@ -22,12 +22,22 @@ create table if not exists usuarios (
 create table if not exists clientes (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
-  telefone text not null,
+  telefone text not null unique,
   origem_chat text check (origem_chat in ('whatsapp', 'instagram')),
   observacoes text,
+  foto_url text,
   ultima_interacao timestamptz,
   criado_em timestamptz not null default now()
 );
+
+-- Se a tabela clientes já existia antes desta coluna ser adicionada, rode:
+-- alter table clientes add column if not exists foto_url text;
+
+-- Se a tabela clientes já existia antes do `unique` acima (instalação já em
+-- uso): NÃO rode só o alter table direto — se já houver telefones
+-- duplicados, ele vai falhar. Rode em vez disso o script
+-- supabase/fix_clientes_duplicados.sql, que mescla as duplicatas existentes
+-- (sem perder conversa/pedido) e só então adiciona essa trava.
 
 create table if not exists produtos (
   id uuid primary key default gen_random_uuid(),
@@ -69,6 +79,24 @@ create table if not exists itens_pedido (
   quantidade integer not null check (quantidade > 0),
   preco_unitario decimal(10, 2) not null,
   criado_em timestamptz not null default now()
+);
+
+-- encomendas: produto que a farmácia não tem em estoque e está encomendando
+-- pro cliente (fornecedor/distribuidor) — fluxo separado de `pedidos`
+-- (venda de itens que já estão no catálogo). Ao mudar pra "chegou", o
+-- backend avisa o cliente automaticamente por WhatsApp (ver
+-- /api/encomendas/[id]/status).
+create table if not exists encomendas (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id uuid not null references clientes(id) on delete restrict,
+  produto_nome text not null,
+  quantidade integer not null default 1 check (quantidade > 0),
+  observacoes text,
+  status text not null default 'pendente' check (status in ('pendente', 'chegou', 'entregue', 'cancelada')),
+  avisado_em timestamptz,
+  criado_por uuid references usuarios(id),
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
 );
 
 create table if not exists conversas (
@@ -159,6 +187,18 @@ create table if not exists audit_log (
   criado_em timestamptz not null default now()
 );
 
+-- consultas_farmaceuticas: histórico do agente de IA de referência farmacêutica
+-- (aba interna "ATLAS AI") — pergunta da equipe e resposta gerada pela IA
+-- com base no conhecimento próprio dela. Não é uma base de dados oficial de
+-- bula; ver disclaimer fixo exibido na tela e embutido no prompt da IA.
+create table if not exists consultas_farmaceuticas (
+  id uuid primary key default gen_random_uuid(),
+  usuario_id uuid references usuarios(id),
+  pergunta text not null,
+  resposta text,
+  criado_em timestamptz not null default now()
+);
+
 -- ============================================================================
 -- ÍNDICES
 -- ============================================================================
@@ -166,6 +206,8 @@ create table if not exists audit_log (
 create index if not exists idx_pedidos_status on pedidos(status);
 create index if not exists idx_pedidos_cliente_id on pedidos(cliente_id);
 create index if not exists idx_itens_pedido_pedido_id on itens_pedido(pedido_id);
+create index if not exists idx_encomendas_cliente_id on encomendas(cliente_id);
+create index if not exists idx_encomendas_status on encomendas(status);
 create index if not exists idx_conversas_cliente_id on conversas(cliente_id);
 create index if not exists idx_conversas_status on conversas(status);
 create index if not exists idx_mensagens_conversa_id on mensagens(conversa_id);
@@ -174,6 +216,7 @@ create index if not exists idx_vendas_log_data_venda on vendas_log(data_venda);
 create index if not exists idx_login_tentativas_email on login_tentativas(email);
 create index if not exists idx_audit_log_criado_em on audit_log(criado_em desc);
 create index if not exists idx_audit_log_usuario_id on audit_log(usuario_id);
+create index if not exists idx_consultas_farmaceuticas_criado_em on consultas_farmaceuticas(criado_em desc);
 
 -- ============================================================================
 -- updated_at triggers
@@ -197,6 +240,10 @@ create trigger trg_produtos_atualizado_em before update on produtos
 
 drop trigger if exists trg_pedidos_atualizado_em on pedidos;
 create trigger trg_pedidos_atualizado_em before update on pedidos
+  for each row execute function set_atualizado_em();
+
+drop trigger if exists trg_encomendas_atualizado_em on encomendas;
+create trigger trg_encomendas_atualizado_em before update on encomendas
   for each row execute function set_atualizado_em();
 
 drop trigger if exists trg_conversas_atualizado_em on conversas;
@@ -271,6 +318,7 @@ alter table clientes enable row level security;
 alter table produtos enable row level security;
 alter table pedidos enable row level security;
 alter table itens_pedido enable row level security;
+alter table encomendas enable row level security;
 alter table conversas enable row level security;
 alter table mensagens enable row level security;
 alter table templates_mensagem enable row level security;
@@ -280,6 +328,7 @@ alter table bairros_entrega enable row level security;
 alter table configuracoes enable row level security;
 alter table login_tentativas enable row level security;
 alter table audit_log enable row level security;
+alter table consultas_farmaceuticas enable row level security;
 
 -- usuarios: cada um vê o próprio registro; dona vê e gerencia todos
 drop policy if exists usuarios_select on usuarios;
@@ -348,6 +397,19 @@ drop policy if exists pedidos_update on pedidos;
 create policy pedidos_update on pedidos for update
   using (is_usuario_ativo());
 
+-- encomendas: qualquer usuário ativo vê e gerencia (mesma fila da equipe)
+drop policy if exists encomendas_select on encomendas;
+create policy encomendas_select on encomendas for select
+  using (is_usuario_ativo());
+
+drop policy if exists encomendas_insert on encomendas;
+create policy encomendas_insert on encomendas for insert
+  with check (is_usuario_ativo());
+
+drop policy if exists encomendas_update on encomendas;
+create policy encomendas_update on encomendas for update
+  using (is_usuario_ativo());
+
 -- itens_pedido: leitura para todos ativos
 drop policy if exists itens_pedido_select on itens_pedido;
 create policy itens_pedido_select on itens_pedido for select
@@ -393,9 +455,13 @@ create policy templates_delete on templates_mensagem for delete using (is_dona()
 
 -- campanhas: só dona
 drop policy if exists campanhas_all on campanhas;
+drop policy if exists campanhas_select on campanhas;
 create policy campanhas_select on campanhas for select using (is_dona());
+drop policy if exists campanhas_insert on campanhas;
 create policy campanhas_insert on campanhas for insert with check (is_dona());
+drop policy if exists campanhas_update on campanhas;
 create policy campanhas_update on campanhas for update using (is_dona());
+drop policy if exists campanhas_delete on campanhas;
 create policy campanhas_delete on campanhas for delete using (is_dona());
 
 -- vendas_log: só dona (dashboard)
@@ -406,8 +472,11 @@ create policy vendas_log_insert on vendas_log for insert with check (is_dona());
 
 -- configuracoes: só dona
 drop policy if exists configuracoes_all_select on configuracoes;
+drop policy if exists configuracoes_select on configuracoes;
 create policy configuracoes_select on configuracoes for select using (is_dona());
+drop policy if exists configuracoes_insert on configuracoes;
 create policy configuracoes_insert on configuracoes for insert with check (is_dona());
+drop policy if exists configuracoes_update on configuracoes;
 create policy configuracoes_update on configuracoes for update using (is_dona());
 
 -- login_tentativas: só dona lê; ninguém escreve via client (só service role, usado pelo backend)
@@ -421,13 +490,37 @@ drop policy if exists audit_log_insert on audit_log;
 create policy audit_log_insert on audit_log for insert
   with check (is_usuario_ativo() and (usuario_id = auth.uid() or usuario_id is null));
 
+-- consultas_farmaceuticas: ferramenta interna — qualquer usuário ativo consulta
+-- e vê o histórico (serve de base de consulta compartilhada pela equipe)
+drop policy if exists consultas_farmaceuticas_select on consultas_farmaceuticas;
+create policy consultas_farmaceuticas_select on consultas_farmaceuticas for select
+  using (is_usuario_ativo());
+drop policy if exists consultas_farmaceuticas_insert on consultas_farmaceuticas;
+create policy consultas_farmaceuticas_insert on consultas_farmaceuticas for insert
+  with check (is_usuario_ativo() and (usuario_id = auth.uid() or usuario_id is null));
+
 -- ============================================================================
 -- Realtime (pedidos, mensagens e conversas precisam de updates em tempo real)
 -- ============================================================================
 
-alter publication supabase_realtime add table pedidos;
-alter publication supabase_realtime add table mensagens;
-alter publication supabase_realtime add table conversas;
+-- ALTER PUBLICATION ... ADD TABLE não tem "if not exists" no Postgres, então
+-- rodar isso de novo numa tabela já adicionada quebra com "already member of
+-- publication" — por isso checa antes de cada um.
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'pedidos') then
+    alter publication supabase_realtime add table pedidos;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'mensagens') then
+    alter publication supabase_realtime add table mensagens;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'conversas') then
+    alter publication supabase_realtime add table conversas;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'encomendas') then
+    alter publication supabase_realtime add table encomendas;
+  end if;
+end $$;
 
 -- Por padrão, um UPDATE via realtime só manda a chave primária em "old" — pra
 -- comparar o status anterior com o novo (e notificar só quando a conversa

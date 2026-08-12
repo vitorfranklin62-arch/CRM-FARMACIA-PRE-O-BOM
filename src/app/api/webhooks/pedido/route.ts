@@ -31,32 +31,37 @@ export async function POST(request: Request) {
   const now = new Date().toISOString();
   const telefoneNormalizado = normalizarTelefone(cliente.telefone);
 
-  // 1. Resolver cliente (por id, ou por telefone, ou criar novo)
-  let clienteId = cliente.id ?? null;
+  // 1. Resolver cliente (por id explícito, ou upsert atômico por telefone)
+  let clienteId: string;
 
-  if (!clienteId) {
-    const { data: existente } = await supabase
-      .from("clientes")
-      .select("id")
-      .eq("telefone", telefoneNormalizado)
-      .maybeSingle();
-    clienteId = existente?.id ?? null;
-  }
-
-  if (clienteId) {
+  if (cliente.id) {
+    // Chamador já sabe o id — atualiza direto, sem tocar em telefone.
     await supabase
       .from("clientes")
-      .update({ nome: cliente.nome, origem_chat: cliente.origem_chat ?? null, ultima_interacao: now })
-      .eq("id", clienteId);
-  } else {
-    const { data: novoCliente, error: clienteError } = await supabase
-      .from("clientes")
-      .insert({
+      .update({
         nome: cliente.nome,
-        telefone: telefoneNormalizado,
         origem_chat: cliente.origem_chat ?? null,
         ultima_interacao: now,
+        ...(cliente.foto_url ? { foto_url: cliente.foto_url } : {}),
       })
+      .eq("id", cliente.id);
+    clienteId = cliente.id;
+  } else {
+    // Upsert atômico por telefone (trava `clientes_telefone_key` no banco)
+    // — evita a corrida onde duas chamadas quase simultâneas do mesmo
+    // número cada uma achava "cliente não existe" e criava um duplicado.
+    const { data: novoCliente, error: clienteError } = await supabase
+      .from("clientes")
+      .upsert(
+        {
+          telefone: telefoneNormalizado,
+          nome: cliente.nome,
+          origem_chat: cliente.origem_chat ?? null,
+          ultima_interacao: now,
+          ...(cliente.foto_url ? { foto_url: cliente.foto_url } : {}),
+        },
+        { onConflict: "telefone" }
+      )
       .select("id")
       .single();
 

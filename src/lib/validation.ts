@@ -19,6 +19,7 @@ export const pedidoWebhookSchema = z.object({
     nome: z.string().trim().min(1).max(200),
     telefone: z.string().trim().min(8).max(30),
     origem_chat: z.enum(["whatsapp", "instagram"]).optional(),
+    foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
   }),
   itens: z.array(pedidoItemWebhookSchema).min(1),
   total: z.number().nonnegative().optional(),
@@ -33,6 +34,7 @@ export const clienteWebhookSchema = z.object({
   nome: z.string().trim().min(1).max(200),
   telefone: z.string().trim().min(8).max(30),
   origem_chat: z.enum(["whatsapp", "instagram"]).optional(),
+  foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
 });
 
 export const campanhaStatusWebhookSchema = z.object({
@@ -68,6 +70,7 @@ export const mensagemWebhookSchema = z.object({
     nome: z.string().trim().min(1).max(200),
     telefone: z.string().trim().min(8).max(30),
     origem_chat: z.enum(["whatsapp", "instagram"]).optional(),
+    foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
   }),
   remetente: z.enum(["ia", "cliente", "funcionaria"]),
   conteudo: z.string().trim().min(1).max(4000),
@@ -88,8 +91,27 @@ export const bairroEntregaCreateSchema = z.object({
   ativo: z.boolean(),
 });
 
+export const clienteCreateSchema = z.object({
+  nome: z.string().trim().min(1).max(200),
+  telefone: z.string().trim().min(8).max(30),
+  origem_chat: z.enum(["whatsapp", "instagram"]).nullable().optional(),
+  observacoes: z.string().trim().max(2000).nullable().optional(),
+});
+
 export const clienteUpdateSchema = z.object({
   observacoes: z.string().trim().max(2000).nullable().optional(),
+});
+
+export const encomendaCreateSchema = z.object({
+  nome: z.string().trim().min(1).max(200),
+  telefone: z.string().trim().min(8).max(30),
+  produto_nome: z.string().trim().min(1).max(300),
+  quantidade: z.number().int().positive().max(9999),
+  observacoes: z.string().trim().max(2000).nullable().optional(),
+});
+
+export const encomendaStatusSchema = z.object({
+  status: z.enum(["pendente", "chegou", "entregue", "cancelada"]),
 });
 
 export const usuarioCreateSchema = z.object({
@@ -111,6 +133,10 @@ export const senhaUpdateSchema = z.object({
 });
 
 export const configuracaoUpdateSchema = z.record(z.string(), z.string());
+
+export const consultaFarmaceuticaSchema = z.object({
+  pergunta: z.string().trim().min(3, "Escreva a pergunta completa.").max(500),
+});
 
 export function digitsOnly(value: string): string {
   return value.replace(/\D/g, "");

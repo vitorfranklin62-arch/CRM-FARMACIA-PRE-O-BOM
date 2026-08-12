@@ -1,6 +1,7 @@
 export type UsuarioRole = "dona" | "funcionaria";
 export type OrigemChat = "whatsapp" | "instagram";
 export type PedidoStatus = "novo" | "separando" | "pronto" | "entregue";
+export type EncomendaStatus = "pendente" | "chegou" | "entregue" | "cancelada";
 export type PagamentoStatus = "pendente" | "confirmado";
 export type ConversaStatus = "aberta" | "aguardando_humano" | "fechada";
 export type Remetente = "ia" | "cliente" | "funcionaria";
@@ -25,6 +26,7 @@ export type Cliente = {
   telefone: string;
   origem_chat: OrigemChat | null;
   observacoes: string | null;
+  foto_url: string | null;
   ultima_interacao: string | null;
   criado_em: string;
 }
@@ -51,6 +53,19 @@ export type Pedido = {
   taxa_entrega: number | null;
   endereco_entrega: string | null;
   telefone_confirmacao: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+export type Encomenda = {
+  id: string;
+  cliente_id: string;
+  produto_nome: string;
+  quantidade: number;
+  observacoes: string | null;
+  status: EncomendaStatus;
+  avisado_em: string | null;
+  criado_por: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -139,6 +154,9 @@ export type LoginTentativa = {
 
 export type AuditAcao =
   | "pedido_status_atualizado"
+  | "encomenda_criada"
+  | "encomenda_status_atualizado"
+  | "cliente_criado"
   | "cliente_observacao_atualizada"
   | "template_criado"
   | "template_atualizado"
@@ -170,6 +188,14 @@ export type AuditLog = {
   entidade: string;
   entidade_id: string | null;
   detalhes: Record<string, unknown> | null;
+  criado_em: string;
+}
+
+export type ConsultaFarmaceutica = {
+  id: string;
+  usuario_id: string | null;
+  pergunta: string;
+  resposta: string | null;
   criado_em: string;
 }
 
@@ -221,6 +247,25 @@ export interface Database {
             columns: ["produto_id"];
             isOneToOne: false;
             referencedRelation: "produtos";
+            referencedColumns: ["id"];
+          },
+        ]
+      >;
+      encomendas: TableDef<
+        Encomenda,
+        [
+          {
+            foreignKeyName: "encomendas_cliente_id_fkey";
+            columns: ["cliente_id"];
+            isOneToOne: false;
+            referencedRelation: "clientes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "encomendas_criado_por_fkey";
+            columns: ["criado_por"];
+            isOneToOne: false;
+            referencedRelation: "usuarios";
             referencedColumns: ["id"];
           },
         ]
@@ -285,6 +330,18 @@ export interface Database {
         [
           {
             foreignKeyName: "audit_log_usuario_id_fkey";
+            columns: ["usuario_id"];
+            isOneToOne: false;
+            referencedRelation: "usuarios";
+            referencedColumns: ["id"];
+          },
+        ]
+      >;
+      consultas_farmaceuticas: TableDef<
+        ConsultaFarmaceutica,
+        [
+          {
+            foreignKeyName: "consultas_farmaceuticas_usuario_id_fkey";
             columns: ["usuario_id"];
             isOneToOne: false;
             referencedRelation: "usuarios";

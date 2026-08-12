@@ -26,13 +26,18 @@ export function LoginForm() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#F5F6FA] px-4 dark:bg-[#0A0F1E]">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-2">
+        <div className="mb-8 flex flex-col items-center gap-3">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-navy-900 shadow-lg shadow-navy-900/20">
             <LogoMark size={38} />
           </div>
-          <h1 className="text-xl font-bold uppercase tracking-wide text-navy-900 dark:text-white">
-            Farmácia Preço Bom
-          </h1>
+          <div className="text-center leading-tight">
+            <p className="text-[13px] font-semibold uppercase tracking-[0.25em] text-navy-500 dark:text-white/60">
+              Farmácia
+            </p>
+            <h1 className="text-2xl font-extrabold uppercase tracking-wide text-navy-900 dark:text-white">
+              Preço Bom
+            </h1>
+          </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">Painel de atendimento</p>
         </div>
 
