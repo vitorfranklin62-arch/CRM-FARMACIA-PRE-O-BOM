@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
   const now = new Date().toISOString();
-  const { nome, telefone, origem_chat } = parsed.data;
+  const { nome, telefone, origem_chat, foto_url } = parsed.data;
   const telefoneNormalizado = normalizarTelefone(telefone);
 
   const { data: existente } = await supabase
@@ -36,9 +36,11 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (existente) {
+    // foto_url só entra no update quando vier preenchida — assim uma chamada
+    // sem foto (N8N não conseguiu buscar dessa vez) não apaga a que já tinha.
     const { error } = await supabase
       .from("clientes")
-      .update({ nome, origem_chat: origem_chat ?? null, ultima_interacao: now })
+      .update({ nome, origem_chat: origem_chat ?? null, ultima_interacao: now, ...(foto_url ? { foto_url } : {}) })
       .eq("id", existente.id);
 
     if (error) return NextResponse.json({ error: "Não foi possível atualizar o cliente." }, { status: 500 });
@@ -47,7 +49,13 @@ export async function POST(request: Request) {
 
   const { data: novo, error } = await supabase
     .from("clientes")
-    .insert({ nome, telefone: telefoneNormalizado, origem_chat: origem_chat ?? null, ultima_interacao: now })
+    .insert({
+      nome,
+      telefone: telefoneNormalizado,
+      origem_chat: origem_chat ?? null,
+      foto_url: foto_url ?? null,
+      ultima_interacao: now,
+    })
     .select("id")
     .single();
 

@@ -46,7 +46,12 @@ export async function POST(request: Request) {
   if (clienteId) {
     await supabase
       .from("clientes")
-      .update({ nome: cliente.nome, origem_chat: cliente.origem_chat ?? null, ultima_interacao: now })
+      .update({
+        nome: cliente.nome,
+        origem_chat: cliente.origem_chat ?? null,
+        ultima_interacao: now,
+        ...(cliente.foto_url ? { foto_url: cliente.foto_url } : {}),
+      })
       .eq("id", clienteId);
   } else {
     const { data: novoCliente, error: clienteError } = await supabase
@@ -55,6 +60,7 @@ export async function POST(request: Request) {
         nome: cliente.nome,
         telefone: telefoneNormalizado,
         origem_chat: cliente.origem_chat ?? null,
+        foto_url: cliente.foto_url ?? null,
         ultima_interacao: now,
       })
       .select("id")

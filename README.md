@@ -84,6 +84,16 @@ Todas as rotas abaixo exigem o header `Authorization: Bearer <N8N_WEBHOOK_SECRET
 
 Quando uma funcionária/dona responde pelo Chat ao vivo, o painel chama `POST /api/chat/enviar` (autenticado por sessão, não pelo token do N8N). Essa rota salva a mensagem no Supabase e, em seguida, notifica o N8N via a URL configurada em **Configurações → Integrações → Webhook do N8N para enviar mensagens do chat** (chave `integracao_n8n_chat_webhook_url`), enviando `Authorization: Bearer <N8N_WEBHOOK_SECRET>` para o N8N validar a origem. Cabe ao workflow do N8N entregar essa mensagem via UAIZAP/WhatsApp.
 
+### Foto de perfil do cliente
+
+Os webhooks `/api/webhooks/cliente`, `/api/webhooks/mensagem` e `/api/webhooks/pedido` aceitam um campo opcional `foto_url` dentro do objeto `cliente` — uma URL de imagem (ex.: a foto de perfil do WhatsApp/Instagram) que aparece como avatar nas telas de Clientes e Chat, com fallback automático pras iniciais do nome quando não há foto (ou a URL falha ao carregar).
+
+A geração dessa URL fica por conta do workflow do N8N: antes de chamar o webhook, adicione uma chamada à API do UAIZAP que retorna a foto de perfil do contato (o endpoint exato varia por provedor — consulte a documentação do UAIZAP) e inclua o resultado como `cliente.foto_url` no payload. Se o UAIZAP não retornar foto (perfil privado, número sem foto, etc.), simplesmente omita o campo — o cliente continua funcionando normalmente, só sem foto.
+
+Uma chamada que **não** inclui `foto_url` nunca apaga uma foto já salva (só grava quando o campo vem preenchido) — então não tem problema alguns eventos terem a foto e outros não.
+
+**Atenção:** URLs de foto de perfil do WhatsApp costumam expirar depois de um tempo. Como o campo é reenviado a cada novo evento (mensagem, pedido, etc.), a foto se atualiza sozinha com o uso normal — não precisa de um job separado pra manter em dia.
+
 ### Cálculo de taxa de entrega (IA)
 
 Em **Configurações → Bairros de entrega**, a dona cadastra os bairros atendidos e o valor de entrega de cada um. A IA usa isso pra calcular a entrega quando o cliente pede pra receber em casa, através de uma function/tool no N8N que chama a função `calcular_taxa_entrega` do Supabase via RPC (mesmo padrão do `buscar_produtos`, já usado pra consultar o catálogo):

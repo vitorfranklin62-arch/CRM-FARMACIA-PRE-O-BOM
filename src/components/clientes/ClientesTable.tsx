@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Camera, MessageSquare, NotebookPen, Search } from "lucide-react";
 import { Table, type Column } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
+import { Avatar } from "@/components/ui/Avatar";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
@@ -52,9 +53,12 @@ export function ClientesTable({ clientes }: { clientes: Cliente[] }) {
     {
       header: "Cliente",
       accessor: (c) => (
-        <div>
-          <p className="font-medium text-gray-900 dark:text-white">{c.nome}</p>
-          <p className="text-xs text-gray-400 dark:text-gray-500">{maskPhone(c.telefone)}</p>
+        <div className="flex items-center gap-2.5">
+          <Avatar nome={c.nome} fotoUrl={c.foto_url} size={32} />
+          <div>
+            <p className="font-medium text-gray-900 dark:text-white">{c.nome}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">{maskPhone(c.telefone)}</p>
+          </div>
         </div>
       ),
     },

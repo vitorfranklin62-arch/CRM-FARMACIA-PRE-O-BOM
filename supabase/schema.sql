@@ -25,9 +25,13 @@ create table if not exists clientes (
   telefone text not null,
   origem_chat text check (origem_chat in ('whatsapp', 'instagram')),
   observacoes text,
+  foto_url text,
   ultima_interacao timestamptz,
   criado_em timestamptz not null default now()
 );
+
+-- Se a tabela clientes já existia antes desta coluna ser adicionada, rode:
+-- alter table clientes add column if not exists foto_url text;
 
 create table if not exists produtos (
   id uuid primary key default gen_random_uuid(),

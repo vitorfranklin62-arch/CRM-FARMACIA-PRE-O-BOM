@@ -25,6 +25,7 @@ export type Cliente = {
   telefone: string;
   origem_chat: OrigemChat | null;
   observacoes: string | null;
+  foto_url: string | null;
   ultima_interacao: string | null;
   criado_em: string;
 }

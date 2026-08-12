@@ -19,6 +19,7 @@ export const pedidoWebhookSchema = z.object({
     nome: z.string().trim().min(1).max(200),
     telefone: z.string().trim().min(8).max(30),
     origem_chat: z.enum(["whatsapp", "instagram"]).optional(),
+    foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
   }),
   itens: z.array(pedidoItemWebhookSchema).min(1),
   total: z.number().nonnegative().optional(),
@@ -33,6 +34,7 @@ export const clienteWebhookSchema = z.object({
   nome: z.string().trim().min(1).max(200),
   telefone: z.string().trim().min(8).max(30),
   origem_chat: z.enum(["whatsapp", "instagram"]).optional(),
+  foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
 });
 
 export const campanhaStatusWebhookSchema = z.object({
@@ -68,6 +70,7 @@ export const mensagemWebhookSchema = z.object({
     nome: z.string().trim().min(1).max(200),
     telefone: z.string().trim().min(8).max(30),
     origem_chat: z.enum(["whatsapp", "instagram"]).optional(),
+    foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
   }),
   remetente: z.enum(["ia", "cliente", "funcionaria"]),
   conteudo: z.string().trim().min(1).max(4000),
