@@ -503,10 +503,24 @@ create policy consultas_farmaceuticas_insert on consultas_farmaceuticas for inse
 -- Realtime (pedidos, mensagens e conversas precisam de updates em tempo real)
 -- ============================================================================
 
-alter publication supabase_realtime add table pedidos;
-alter publication supabase_realtime add table mensagens;
-alter publication supabase_realtime add table conversas;
-alter publication supabase_realtime add table encomendas;
+-- ALTER PUBLICATION ... ADD TABLE não tem "if not exists" no Postgres, então
+-- rodar isso de novo numa tabela já adicionada quebra com "already member of
+-- publication" — por isso checa antes de cada um.
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'pedidos') then
+    alter publication supabase_realtime add table pedidos;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'mensagens') then
+    alter publication supabase_realtime add table mensagens;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'conversas') then
+    alter publication supabase_realtime add table conversas;
+  end if;
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'encomendas') then
+    alter publication supabase_realtime add table encomendas;
+  end if;
+end $$;
 
 -- Por padrão, um UPDATE via realtime só manda a chave primária em "old" — pra
 -- comparar o status anterior com o novo (e notificar só quando a conversa
