@@ -1,4 +1,14 @@
-import type { AuditLog, Cliente, Conversa, ItemPedido, Mensagem, Pedido, Produto, Usuario } from "@/types/database";
+import type {
+  AuditLog,
+  Cliente,
+  ConsultaFarmaceutica,
+  Conversa,
+  ItemPedido,
+  Mensagem,
+  Pedido,
+  Produto,
+  Usuario,
+} from "@/types/database";
 
 export interface ItemPedidoComProduto extends ItemPedido {
   produtos: Produto | null;
@@ -19,5 +29,9 @@ export interface MensagemComUsuario extends Mensagem {
 }
 
 export interface AuditLogComUsuario extends AuditLog {
+  usuarios: Usuario | null;
+}
+
+export interface ConsultaFarmaceuticaComUsuario extends ConsultaFarmaceutica {
   usuarios: Usuario | null;
 }

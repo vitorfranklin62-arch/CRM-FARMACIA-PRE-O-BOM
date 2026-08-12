@@ -122,6 +122,10 @@ export const senhaUpdateSchema = z.object({
 
 export const configuracaoUpdateSchema = z.record(z.string(), z.string());
 
+export const consultaFarmaceuticaSchema = z.object({
+  pergunta: z.string().trim().min(3, "Escreva a pergunta completa.").max(500),
+});
+
 export function digitsOnly(value: string): string {
   return value.replace(/\D/g, "");
 }

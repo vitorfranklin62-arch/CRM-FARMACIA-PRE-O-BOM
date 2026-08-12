@@ -174,6 +174,14 @@ export type AuditLog = {
   criado_em: string;
 }
 
+export type ConsultaFarmaceutica = {
+  id: string;
+  usuario_id: string | null;
+  pergunta: string;
+  resposta: string | null;
+  criado_em: string;
+}
+
 type Relationship = {
   foreignKeyName: string;
   columns: string[];
@@ -286,6 +294,18 @@ export interface Database {
         [
           {
             foreignKeyName: "audit_log_usuario_id_fkey";
+            columns: ["usuario_id"];
+            isOneToOne: false;
+            referencedRelation: "usuarios";
+            referencedColumns: ["id"];
+          },
+        ]
+      >;
+      consultas_farmaceuticas: TableDef<
+        ConsultaFarmaceutica,
+        [
+          {
+            foreignKeyName: "consultas_farmaceuticas_usuario_id_fkey";
             columns: ["usuario_id"];
             isOneToOne: false;
             referencedRelation: "usuarios";

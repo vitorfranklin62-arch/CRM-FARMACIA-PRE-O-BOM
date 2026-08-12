@@ -169,6 +169,18 @@ create table if not exists audit_log (
   criado_em timestamptz not null default now()
 );
 
+-- consultas_farmaceuticas: histórico do agente de IA de referência farmacêutica
+-- (aba interna "Consulta IA") — pergunta da equipe e resposta gerada pela IA
+-- com base no conhecimento próprio dela. Não é uma base de dados oficial de
+-- bula; ver disclaimer fixo exibido na tela e embutido no prompt da IA.
+create table if not exists consultas_farmaceuticas (
+  id uuid primary key default gen_random_uuid(),
+  usuario_id uuid references usuarios(id),
+  pergunta text not null,
+  resposta text,
+  criado_em timestamptz not null default now()
+);
+
 -- ============================================================================
 -- ÍNDICES
 -- ============================================================================
@@ -184,6 +196,7 @@ create index if not exists idx_vendas_log_data_venda on vendas_log(data_venda);
 create index if not exists idx_login_tentativas_email on login_tentativas(email);
 create index if not exists idx_audit_log_criado_em on audit_log(criado_em desc);
 create index if not exists idx_audit_log_usuario_id on audit_log(usuario_id);
+create index if not exists idx_consultas_farmaceuticas_criado_em on consultas_farmaceuticas(criado_em desc);
 
 -- ============================================================================
 -- updated_at triggers
@@ -290,6 +303,7 @@ alter table bairros_entrega enable row level security;
 alter table configuracoes enable row level security;
 alter table login_tentativas enable row level security;
 alter table audit_log enable row level security;
+alter table consultas_farmaceuticas enable row level security;
 
 -- usuarios: cada um vê o próprio registro; dona vê e gerencia todos
 drop policy if exists usuarios_select on usuarios;
@@ -429,6 +443,15 @@ drop policy if exists audit_log_select on audit_log;
 create policy audit_log_select on audit_log for select using (is_dona());
 drop policy if exists audit_log_insert on audit_log;
 create policy audit_log_insert on audit_log for insert
+  with check (is_usuario_ativo() and (usuario_id = auth.uid() or usuario_id is null));
+
+-- consultas_farmaceuticas: ferramenta interna — qualquer usuário ativo consulta
+-- e vê o histórico (serve de base de consulta compartilhada pela equipe)
+drop policy if exists consultas_farmaceuticas_select on consultas_farmaceuticas;
+create policy consultas_farmaceuticas_select on consultas_farmaceuticas for select
+  using (is_usuario_ativo());
+drop policy if exists consultas_farmaceuticas_insert on consultas_farmaceuticas;
+create policy consultas_farmaceuticas_insert on consultas_farmaceuticas for insert
   with check (is_usuario_ativo() and (usuario_id = auth.uid() or usuario_id is null));
 
 -- ============================================================================
