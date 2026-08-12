@@ -18,7 +18,7 @@ export default async function ConsultaIAPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Consulta IA</h1>
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">ATLAS AI</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Referência rápida de contraindicações e nomes genéricos — uso interno da equipe.
         </p>

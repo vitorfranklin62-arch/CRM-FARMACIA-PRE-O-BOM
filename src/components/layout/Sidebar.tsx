@@ -33,7 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/campanhas", label: "Campanhas", icon: Megaphone, donaOnly: true },
   { href: "/templates", label: "Templates", icon: FileText },
-  { href: "/consulta-ia", label: "Consulta IA", icon: Pill },
+  { href: "/consulta-ia", label: "ATLAS AI", icon: Pill },
   { href: "/configuracoes", label: "Configurações", icon: Settings, donaOnly: true },
 ];
 

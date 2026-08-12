@@ -7,7 +7,7 @@ import { perguntarClaude, ConsultaFarmaceuticaError } from "@/lib/claude";
 
 /**
  * POST /api/consulta-farmaceutica
- * Aba interna "Consulta IA" — pergunta de contraindicação/genérico feita pela
+ * Aba interna "ATLAS AI" — pergunta de contraindicação/genérico feita pela
  * equipe. Nunca é chamado pela IA que atende cliente (Vitória); é uma
  * ferramenta separada, só para uso da equipe logada.
  */

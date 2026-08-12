@@ -170,7 +170,7 @@ create table if not exists audit_log (
 );
 
 -- consultas_farmaceuticas: histórico do agente de IA de referência farmacêutica
--- (aba interna "Consulta IA") — pergunta da equipe e resposta gerada pela IA
+-- (aba interna "ATLAS AI") — pergunta da equipe e resposta gerada pela IA
 -- com base no conhecimento próprio dela. Não é uma base de dados oficial de
 -- bula; ver disclaimer fixo exibido na tela e embutido no prompt da IA.
 create table if not exists consultas_farmaceuticas (

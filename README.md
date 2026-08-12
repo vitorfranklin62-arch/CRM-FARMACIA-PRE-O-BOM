@@ -69,7 +69,7 @@ Veja `.env.example`. Resumo:
 - `SUPABASE_SERVICE_ROLE_KEY` — só usado no servidor (webhooks e administração de usuários), nunca exposto ao browser
 - `N8N_WEBHOOK_SECRET` — token que o N8N deve enviar em `Authorization: Bearer <token>` nos webhooks
 - `N8N_BASE_URL`, `UAIZAP_API_KEY`, `UAIZAP_BASE_URL` — configuração das integrações
-- `ANTHROPIC_API_KEY` — usada só pela aba interna **Consulta IA** (`/consulta-ia`), nunca pela IA que atende cliente
+- `ANTHROPIC_API_KEY` — usada só pela aba interna **ATLAS AI** (`/consulta-ia`), nunca pela IA que atende cliente
 
 ## Webhooks / API para o N8N
 
@@ -109,9 +109,9 @@ Devolve `[{ "bairro": "...", "valor": 8.00 }]` se achar um bairro correspondente
 
 Ao criar o pedido (`POST /api/webhooks/pedido`), o payload aceita opcionalmente `taxa_entrega` (número) e `forma_pagamento` (texto livre, ex.: "Pix", "Cartão", "Dinheiro") — se `total` não vier explícito, ele é calculado como soma dos itens + `taxa_entrega`.
 
-## Consulta IA (aba interna de referência farmacêutica)
+## ATLAS AI (aba interna de referência farmacêutica)
 
-Em **Consulta IA**, qualquer usuária logada (dona ou funcionária) pode perguntar coisas como "qual o genérico do Buscopan?" ou "Losartana tem contraindicação pra gestante?" e recebe uma resposta gerada pela Claude API (`POST /api/consulta-farmaceutica` → `src/lib/claude.ts`, modelo `claude-opus-5`).
+Em **ATLAS AI**, qualquer usuária logada (dona ou funcionária) pode perguntar coisas como "qual o genérico do Buscopan?" ou "Losartana tem contraindicação pra gestante?" e recebe uma resposta gerada pela Claude API (`POST /api/consulta-farmaceutica` → `src/lib/claude.ts`, modelo `claude-opus-5`).
 
 Pontos importantes sobre essa ferramenta:
 
