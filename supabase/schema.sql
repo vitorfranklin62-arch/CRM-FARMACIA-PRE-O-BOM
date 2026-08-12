@@ -22,7 +22,7 @@ create table if not exists usuarios (
 create table if not exists clientes (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
-  telefone text not null,
+  telefone text not null unique,
   origem_chat text check (origem_chat in ('whatsapp', 'instagram')),
   observacoes text,
   foto_url text,
@@ -32,6 +32,12 @@ create table if not exists clientes (
 
 -- Se a tabela clientes já existia antes desta coluna ser adicionada, rode:
 -- alter table clientes add column if not exists foto_url text;
+
+-- Se a tabela clientes já existia antes do `unique` acima (instalação já em
+-- uso): NÃO rode só o alter table direto — se já houver telefones
+-- duplicados, ele vai falhar. Rode em vez disso o script
+-- supabase/fix_clientes_duplicados.sql, que mescla as duplicatas existentes
+-- (sem perder conversa/pedido) e só então adiciona essa trava.
 
 create table if not exists produtos (
   id uuid primary key default gen_random_uuid(),
