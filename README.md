@@ -136,7 +136,7 @@ Pontos importantes sobre essa ferramenta:
 
 ## Importação de estoque
 
-Em **Produtos → Importar estoque**, a dona pode subir o relatório de inventário exportado pelo sistema da farmácia pra atualizar custo e quantidade em estoque de uma vez, sem precisar cadastrar produto por produto. Dois formatos de arquivo são aceitos, detectados automaticamente pela extensão.
+Em **Produtos → Importar estoque**, a dona pode subir o relatório de inventário exportado pelo sistema da farmácia pra atualizar custo e quantidade em estoque de uma vez, sem precisar cadastrar produto por produto. Três formatos de arquivo são aceitos, detectados automaticamente pela extensão.
 
 ### Formato 1: `.fp3` / `.xml` ("Livro Registro de Inventário")
 
@@ -162,11 +162,20 @@ Esse formato **não tem código/SKU de produto**, então a importação casa por
 
 Cada linha reconstruída é conferida por aritmética antes de ser aceita (`quantidade × custo ≈ Total Custo` e `quantidade × venda ≈ Total Venda`, com tolerância de 2 centavos) — numa amostra real, ~3,5% das linhas não bateram (nomes colados em cascata quando 2+ produtos seguidos têm nome de 2 linhas) e foram automaticamente deixadas de fora da importação; as páginas do PDF com essas linhas voltam na resposta (`paginasParaRevisar`) pra dona conferir manualmente.
 
+### Formato 3: `.xlsx` (planilha simplificada com substância/referência/nomes parecidos)
+
+Planilha própria da farmácia, com 5 colunas fixas na primeira aba: `NOME`, `LABORATÓRIO`, `VENDA (PREÇO)`, `QUANTIDADE`, `OBSERVAÇÕES`. O parser (`src/lib/estoque-xlsx-import.ts`, usando a lib `xlsx`) lê a planilha inteira de uma vez — não tem reconstrução de linha por posição como no `.pdf`, cada linha da tabela já é uma linha de produto.
+
+A coluna `OBSERVAÇÕES` é o diferencial desse formato: traz texto como `"Substância: paracetamol | Referência: Tylenol | Nomes parecidos: paracetamol, paracatamol, tylenol, acetaminofeno"` pra cada produto. Esse texto é gravado em `produtos.observacoes` e a função `buscar_produtos` (RPC usada pela IA "Vitória" pra checar se um produto existe) passou a pesquisar também nesse campo, além do nome — assim, uma cliente perguntando por "Tylenol" encontra o produto mesmo ele estando cadastrado só como "Paracetamol 750mg", reduzindo os casos em que a IA responde errado que não tem o produto.
+
+Assim como o `.pdf`, esse formato **não tem código/SKU** — casa por **nome normalizado**. Diferente do `.pdf`, a coluna de preço vem sempre preenchida nesse relatório, então **laboratório, estoque, observações e preço de venda são sempre atualizados** nos produtos já cadastrados que baterem pelo nome (sem a checagem de "venda > 0" que o `.pdf` faz). Linhas sem `NOME` são ignoradas; linhas com o mesmo nome repetido dentro do próprio arquivo contam como duplicadas e só a primeira ocorrência é usada.
+
 ### O que a importação faz (e o que NÃO faz)
 
 - **Nunca apaga nada.** Produtos que estão no catálogo mas não vieram no arquivo continuam exatamente como estavam.
 - **`.fp3`: nunca sobrescreve o preço de venda de um produto que já existe** — só laboratório, custo e estoque são atualizados; sem preço de venda nesse formato, o preço é sempre ajustado manualmente pela dona.
 - **`.pdf`: atualiza o preço de produtos já existentes com o valor real da coluna "Venda"** do relatório (quando essa linha tiver uma venda válida) — esse formato traz preço de venda de verdade, então é tratado como fonte confiável pra reajuste de preço em massa.
+- **`.xlsx`: atualiza laboratório, estoque, observações e preço** dos produtos já existentes que baterem pelo nome — esse formato é a fonte mais completa das três, incluindo o texto de sinônimos usado na busca da IA.
 
 ### Rota
 

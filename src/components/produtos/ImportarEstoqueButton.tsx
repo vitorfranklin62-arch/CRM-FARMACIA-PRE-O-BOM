@@ -94,7 +94,7 @@ export function ImportarEstoqueButton() {
       <input
         ref={inputRef}
         type="file"
-        accept=".fp3,.xml,text/xml,.pdf,application/pdf"
+        accept=".fp3,.xml,text/xml,.pdf,application/pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         className="hidden"
         onChange={handleFile}
       />

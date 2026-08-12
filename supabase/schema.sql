@@ -47,12 +47,19 @@ create table if not exists produtos (
   custo decimal(10, 2),
   estoque integer not null default 0,
   sku text unique,
+  -- Substância, referência (nome de marca) e "nomes parecidos" do produto —
+  -- vem da importação de estoque em planilha (.xlsx) e é usada pela função
+  -- buscar_produtos() pra achar o produto mesmo quando o cliente pergunta
+  -- por um nome comercial diferente do cadastrado (ex.: pergunta "Tylenol",
+  -- produto está cadastrado como "Paracetamol 750mg").
+  observacoes text,
   criado_em timestamptz not null default now(),
   atualizado_em timestamptz not null default now()
 );
 
--- Se a tabela produtos já existia antes desta coluna ser adicionada, rode:
+-- Se a tabela produtos já existia antes dessas colunas serem adicionadas, rode:
 -- alter table produtos add column if not exists custo decimal(10, 2);
+-- alter table produtos add column if not exists observacoes text;
 
 create table if not exists pedidos (
   id uuid primary key default gen_random_uuid(),
@@ -277,6 +284,11 @@ $$ language sql stable security definer set search_path = public;
 -- Busca de produtos (usada pela IA via RPC) — ignora espaços e diferenças de
 -- caixa na comparação, pra "500mg", "500 mg" e "500MG" encontrarem o mesmo
 -- produto independente de como o texto veio (evita falso "sem estoque").
+--
+-- Também busca em `observacoes` (substância, referência e "nomes parecidos"
+-- vindos da importação em planilha) — assim "Tylenol" acha o produto mesmo
+-- cadastrado só como "Paracetamol 750mg". Resultados que batem pelo nome
+-- vêm primeiro; os que só bateram por observacoes vêm depois.
 -- ============================================================================
 
 create or replace function buscar_produtos(termo text)
@@ -285,7 +297,12 @@ returns setof produtos as $$
   from produtos
   where regexp_replace(lower(nome), '[^a-z0-9]', '', 'g')
         ilike '%' || regexp_replace(lower(termo), '[^a-z0-9]', '', 'g') || '%'
-  order by nome
+     or regexp_replace(lower(coalesce(observacoes, '')), '[^a-z0-9]', '', 'g')
+        ilike '%' || regexp_replace(lower(termo), '[^a-z0-9]', '', 'g') || '%'
+  order by
+    (regexp_replace(lower(nome), '[^a-z0-9]', '', 'g')
+      ilike '%' || regexp_replace(lower(termo), '[^a-z0-9]', '', 'g') || '%') desc,
+    nome
   limit 10;
 $$ language sql stable;
 

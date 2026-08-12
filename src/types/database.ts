@@ -39,6 +39,7 @@ export type Produto = {
   custo: number | null;
   estoque: number;
   sku: string | null;
+  observacoes: string | null;
   criado_em: string;
   atualizado_em: string;
 }

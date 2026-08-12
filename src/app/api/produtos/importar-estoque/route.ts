@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
 import { parseEstoqueFile, normalizarNome } from "@/lib/estoque-import";
 import { parseEstoquePdf } from "@/lib/estoque-pdf-import";
+import { parseEstoqueXlsx } from "@/lib/estoque-xlsx-import";
 import { selecionarTodos } from "@/lib/supabase/fetch-all";
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
@@ -67,7 +68,7 @@ async function gravarComIsolamento<T>(
 /**
  * POST /api/produtos/importar-estoque
  * Importa o relatório de inventário exportado pelo sistema da farmácia, em
- * um de dois formatos. Nenhum dos dois apaga produtos — só cria/atualiza.
+ * um de três formatos. Nenhum deles apaga produtos — só cria/atualiza.
  *  - .fp3/.xml: casa pelo código interno (sku). Só tem custo, não tem preço
  *    de venda, então NUNCA toca no preço de produto já existente — produtos
  *    novos entram com preco = custo (precisa de revisão manual).
@@ -76,6 +77,14 @@ async function gravarComIsolamento<T>(
  *    atualiza o preço de produtos já existentes (só quando a linha do PDF
  *    tem uma venda válida > 0 — sem isso, o preço que já estava cadastrado
  *    não é tocado).
+ *  - .xlsx: planilha simplificada (NOME, LABORATÓRIO, VENDA (PREÇO),
+ *    QUANTIDADE, OBSERVAÇÕES). Casa pelo nome, igual o .pdf, e também
+ *    sempre atualiza o preço (a coluna VENDA vem sempre preenchida nesse
+ *    formato). A grande diferença é a coluna OBSERVAÇÕES, gravada em
+ *    `produtos.observacoes` — substância, referência e "nomes parecidos"
+ *    que a função buscar_produtos() (usada pela IA) passa a buscar também,
+ *    reduzindo falso "não temos esse produto" quando o cliente pergunta
+ *    por um nome comercial diferente do cadastrado.
  */
 export async function POST(request: Request) {
   const inicio = Date.now();
@@ -104,6 +113,9 @@ export async function POST(request: Request) {
     }
 
     const ehPdf = file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf";
+    const ehXlsx =
+      file.name.toLowerCase().endsWith(".xlsx") ||
+      file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     log(`recebeu arquivo "${file.name}" (${(file.size / 1024).toFixed(0)}KB)`);
 
     const supabase = await createClient();
@@ -224,6 +236,77 @@ export async function POST(request: Request) {
       primeiroErro = resultadoComPreco.primeiroErro ?? resultadoSemPreco.primeiroErro ?? resultadoCriar.primeiroErro;
       ignoradas += duplicadasNoArquivo;
       log(`terminou de gravar (${atualizados} atualizados, ${criados} criados, ${erros} erros)`);
+    } else if (ehXlsx) {
+      const buffer = await file.arrayBuffer();
+      const { linhas, ignoradas: ignoradasSemNome } = parseEstoqueXlsx(buffer);
+      log(`terminou de ler a planilha (${linhas.length} linhas)`);
+
+      if (linhas.length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "Não encontrei nenhum produto nessa planilha. Confirma se as colunas são NOME, LABORATÓRIO, VENDA (PREÇO), QUANTIDADE e OBSERVAÇÕES?",
+          },
+          { status: 400 }
+        );
+      }
+
+      total = linhas.length;
+      ignoradas = ignoradasSemNome;
+
+      const nomeParaId = new Map(existentes.map((p) => [normalizarNome(p.nome), p.id]));
+
+      // Mesmo motivo do .pdf: uma planilha pode ter o mesmo nome repetido —
+      // mantém só a primeira ocorrência pra não duplicar nem quebrar o
+      // upsert em lote (Postgres rejeita 2 updates pro mesmo id no mesmo lote).
+      const nomesVistos = new Set<string>();
+      let duplicadasNoArquivo = 0;
+      const linhasUnicas = linhas.filter((l) => {
+        const chave = normalizarNome(l.nome);
+        if (nomesVistos.has(chave)) {
+          duplicadasNoArquivo += 1;
+          return false;
+        }
+        nomesVistos.add(chave);
+        return true;
+      });
+
+      const paraAtualizar = linhasUnicas.filter((l) => nomeParaId.has(normalizarNome(l.nome)));
+      const paraCriar = linhasUnicas.filter((l) => !nomeParaId.has(normalizarNome(l.nome)));
+
+      const resultadoAtualizar = await gravarComIsolamento(
+        supabase,
+        paraAtualizar,
+        (l) => ({
+          id: nomeParaId.get(normalizarNome(l.nome))!,
+          laboratorio: l.laboratorio,
+          estoque: l.estoque,
+          observacoes: l.observacoes,
+          ...(l.venda > 0 ? { preco: l.venda } : {}),
+        }),
+        { onConflict: "id" },
+        request.signal
+      );
+      const resultadoCriar = await gravarComIsolamento(
+        supabase,
+        paraCriar,
+        (l) => ({
+          nome: l.nome,
+          laboratorio: l.laboratorio,
+          estoque: l.estoque,
+          observacoes: l.observacoes,
+          preco: l.venda,
+        }),
+        undefined,
+        request.signal
+      );
+
+      atualizados = resultadoAtualizar.ok;
+      criados = resultadoCriar.ok;
+      erros = resultadoAtualizar.erros + resultadoCriar.erros;
+      primeiroErro = resultadoAtualizar.primeiroErro ?? resultadoCriar.primeiroErro;
+      ignoradas += duplicadasNoArquivo;
+      log(`terminou de gravar (${atualizados} atualizados, ${criados} criados, ${erros} erros)`);
     } else {
       const content = await file.text();
       const { linhas, ignoradas: ignoradasSemNome } = parseEstoqueFile(content);
@@ -273,7 +356,7 @@ export async function POST(request: Request) {
 
     await logAudit(supabase, "estoque_importado", "produtos", null, {
       arquivo: file.name,
-      formato: ehPdf ? "pdf" : "fp3",
+      formato: ehPdf ? "pdf" : ehXlsx ? "xlsx" : "fp3",
       total,
       atualizados,
       criados,
