@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { trendPercent } from "@/lib/utils";
 import type { DailyPoint } from "@/components/dashboard/DashboardCharts";
+import type { PedidoCompleto } from "@/types/relations";
 
 function dayRange(daysAgo: number) {
   const start = new Date();
@@ -31,6 +32,10 @@ export async function getDashboardData() {
     pedidos7dias,
     clientesHoje,
     clientesOntem,
+    pedidosAtivosRes,
+    encomendasPendentesRes,
+    produtosZeradosRes,
+    ultimosPedidosRes,
   ] = await Promise.all([
     supabase.from("vendas_log").select("valor_total").eq("data_venda", toDateStr(today.start)),
     supabase.from("vendas_log").select("valor_total").eq("data_venda", toDateStr(yesterday.start)),
@@ -40,6 +45,15 @@ export async function getDashboardData() {
     supabase.from("pedidos").select("id, criado_em").gte("criado_em", sevenDaysAgo.toISOString()),
     supabase.from("clientes").select("id").gte("criado_em", today.start.toISOString()).lt("criado_em", today.end.toISOString()),
     supabase.from("clientes").select("id").gte("criado_em", yesterday.start.toISOString()).lt("criado_em", yesterday.end.toISOString()),
+    // Situação operacional agora (não é "hoje", é o estado atual da fila)
+    supabase.from("pedidos").select("id", { count: "exact", head: true }).neq("status", "entregue"),
+    supabase.from("encomendas").select("id", { count: "exact", head: true }).in("status", ["pendente", "chegou"]),
+    supabase.from("produtos").select("id", { count: "exact", head: true }).eq("estoque", 0),
+    supabase
+      .from("pedidos")
+      .select("*, clientes(*), itens_pedido(*, produtos(*))")
+      .order("criado_em", { ascending: false })
+      .limit(5),
   ]);
 
   const sumValor = (rows: { valor_total: number }[] | null) =>
@@ -76,11 +90,18 @@ export async function getDashboardData() {
     if (point) point.pedidos += 1;
   }
 
+  const ticketMedio = vendasCountHoje > 0 ? faturamentoHoje / vendasCountHoje : 0;
+
   return {
     faturamento: { hoje: faturamentoHoje, trend: trendPercent(faturamentoHoje, faturamentoOntem) },
     vendas: { hoje: vendasCountHoje, trend: trendPercent(vendasCountHoje, vendasCountOntem) },
     pedidos: { hoje: pedidosCountHoje, trend: trendPercent(pedidosCountHoje, pedidosCountOntem) },
     clientesNovos: { hoje: clientesCountHoje, trend: trendPercent(clientesCountHoje, clientesCountOntem) },
     chartData: Array.from(chartMap.values()),
+    ticketMedio,
+    pedidosAtivos: pedidosAtivosRes.count ?? 0,
+    encomendasPendentes: encomendasPendentesRes.count ?? 0,
+    produtosZerados: produtosZeradosRes.count ?? 0,
+    ultimosPedidos: (ultimosPedidosRes.data as PedidoCompleto[]) ?? [],
   };
 }

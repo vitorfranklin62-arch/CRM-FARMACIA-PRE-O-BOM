@@ -1,8 +1,9 @@
-import { DollarSign, ShoppingBag, Package, UserPlus } from "lucide-react";
+import { DollarSign, ShoppingBag, Package, UserPlus, ListChecks, Receipt, PackageSearch, PackageX } from "lucide-react";
 import { requireDona } from "@/lib/auth";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { RevenueChart, OrdersChart } from "@/components/dashboard/DashboardCharts";
+import { UltimosPedidos } from "@/components/dashboard/UltimosPedidos";
 import { formatCurrency } from "@/lib/utils";
 import { getDashboardData } from "./data";
 
@@ -46,6 +47,38 @@ export default async function DashboardPage() {
         />
       </div>
 
+      <div>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+          Agora na farmácia
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label="Pedidos em aberto"
+            value={String(data.pedidosAtivos)}
+            caption="fila ativa agora"
+            icon={<ListChecks size={18} />}
+          />
+          <StatCard
+            label="Ticket médio hoje"
+            value={formatCurrency(data.ticketMedio)}
+            caption="por venda"
+            icon={<Receipt size={18} />}
+          />
+          <StatCard
+            label="Encomendas aguardando"
+            value={String(data.encomendasPendentes)}
+            caption="a caminho ou pra avisar"
+            icon={<PackageSearch size={18} />}
+          />
+          <StatCard
+            label="Produtos zerados"
+            value={String(data.produtosZerados)}
+            caption="sem estoque agora"
+            icon={<PackageX size={18} />}
+          />
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader title="Faturamento" description="Últimos 7 dias" />
@@ -56,6 +89,8 @@ export default async function DashboardPage() {
           <OrdersChart data={data.chartData} />
         </Card>
       </div>
+
+      <UltimosPedidos pedidos={data.ultimosPedidos} />
     </div>
   );
 }
