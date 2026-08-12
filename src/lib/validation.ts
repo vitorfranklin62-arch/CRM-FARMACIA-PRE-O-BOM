@@ -102,6 +102,18 @@ export const clienteUpdateSchema = z.object({
   observacoes: z.string().trim().max(2000).nullable().optional(),
 });
 
+export const encomendaCreateSchema = z.object({
+  nome: z.string().trim().min(1).max(200),
+  telefone: z.string().trim().min(8).max(30),
+  produto_nome: z.string().trim().min(1).max(300),
+  quantidade: z.number().int().positive().max(9999),
+  observacoes: z.string().trim().max(2000).nullable().optional(),
+});
+
+export const encomendaStatusSchema = z.object({
+  status: z.enum(["pendente", "chegou", "entregue", "cancelada"]),
+});
+
 export const usuarioCreateSchema = z.object({
   email: z.string().trim().email().max(255),
   nome: z.string().trim().min(1).max(200),

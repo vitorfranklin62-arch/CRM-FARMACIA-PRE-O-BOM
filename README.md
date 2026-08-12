@@ -109,6 +109,20 @@ Devolve `[{ "bairro": "...", "valor": 8.00 }]` se achar um bairro correspondente
 
 Ao criar o pedido (`POST /api/webhooks/pedido`), o payload aceita opcionalmente `taxa_entrega` (número) e `forma_pagamento` (texto livre, ex.: "Pix", "Cartão", "Dinheiro") — se `total` não vier explícito, ele é calculado como soma dos itens + `taxa_entrega`.
 
+## Encomendas
+
+Fila separada de **Pedidos**, pra produto que a farmácia não tem em estoque e está encomendando especialmente pro cliente (fornecedor/distribuidor). Em **Encomendas**, qualquer usuária logada cadastra: nome do cliente, número, nome do produto, quantidade e observações — o cliente é resolvido pelo telefone (reaproveita se já existir, sem sobrescrever o nome já salvo; cria um novo se for a primeira vez).
+
+Quadro com 3 colunas:
+
+- **Aguardando chegar** (`pendente`) — acabou de ser cadastrada.
+- **Chegou** (`chegou`) — ao mover pra essa coluna, o backend avisa o cliente automaticamente por WhatsApp (mensagem tipo `Sua encomenda de "X" já chegou na farmácia...`), salva essa mensagem na conversa dele (aparece no Chat ao vivo, igual a qualquer mensagem enviada pela equipe) e notifica o N8N pra entregar de fato via UAIZAP. **Não é um webhook novo** — reaproveita a mesma URL/token já configurados em Configurações → Integrações pro Chat ao vivo (`integracao_n8n_chat_webhook_url` + `N8N_WEBHOOK_SECRET`), então não precisa configurar nada além do que o Chat ao vivo já usa.
+- **Retirada hoje** (`entregue`) — cliente já buscou; some do quadro no dia seguinte (mesma lógica do "Entregue hoje" em Pedidos), mas o registro continua no banco.
+
+Uma encomenda em "Aguardando chegar" ou "Chegou" também pode ser cancelada (`cancelada`) — some do quadro, mas fica no histórico (Configurações → Atividade).
+
+O aviso automático só dispara uma vez por encomenda (na transição pra "chegou" — mudar o status de novo não reenvia); se o N8N não estiver configurado, o status muda normalmente e só a notificação por WhatsApp é pulada. Rota: `POST /api/encomendas/:id/status`, autenticada por sessão.
+
 ## ATLAS AI (aba interna de referência farmacêutica)
 
 Em **ATLAS AI**, qualquer usuária logada (dona ou funcionária) pode perguntar coisas como "qual o genérico do Buscopan?" ou "Losartana tem contraindicação pra gestante?" e recebe uma resposta gerada pela Claude API (`POST /api/consulta-farmaceutica` → `src/lib/claude.ts`, modelo `claude-opus-5`).
@@ -171,6 +185,7 @@ src/
     (app)/                 # área autenticada (sidebar + header)
       dashboard/            # métricas (só dona)
       pedidos/              # fila de separação
+      encomendas/           # produto fora de estoque encomendado pro cliente (avisa por WhatsApp ao chegar)
       chat/                 # chat ao vivo com a IA/cliente
       clientes/             # cadastro e observações
       campanhas/            # campanhas de mensagens (só dona)

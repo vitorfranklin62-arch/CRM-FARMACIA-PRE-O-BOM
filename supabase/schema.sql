@@ -81,6 +81,24 @@ create table if not exists itens_pedido (
   criado_em timestamptz not null default now()
 );
 
+-- encomendas: produto que a farmácia não tem em estoque e está encomendando
+-- pro cliente (fornecedor/distribuidor) — fluxo separado de `pedidos`
+-- (venda de itens que já estão no catálogo). Ao mudar pra "chegou", o
+-- backend avisa o cliente automaticamente por WhatsApp (ver
+-- /api/encomendas/[id]/status).
+create table if not exists encomendas (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id uuid not null references clientes(id) on delete restrict,
+  produto_nome text not null,
+  quantidade integer not null default 1 check (quantidade > 0),
+  observacoes text,
+  status text not null default 'pendente' check (status in ('pendente', 'chegou', 'entregue', 'cancelada')),
+  avisado_em timestamptz,
+  criado_por uuid references usuarios(id),
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+
 create table if not exists conversas (
   id uuid primary key default gen_random_uuid(),
   cliente_id uuid not null references clientes(id) on delete cascade,
@@ -188,6 +206,8 @@ create table if not exists consultas_farmaceuticas (
 create index if not exists idx_pedidos_status on pedidos(status);
 create index if not exists idx_pedidos_cliente_id on pedidos(cliente_id);
 create index if not exists idx_itens_pedido_pedido_id on itens_pedido(pedido_id);
+create index if not exists idx_encomendas_cliente_id on encomendas(cliente_id);
+create index if not exists idx_encomendas_status on encomendas(status);
 create index if not exists idx_conversas_cliente_id on conversas(cliente_id);
 create index if not exists idx_conversas_status on conversas(status);
 create index if not exists idx_mensagens_conversa_id on mensagens(conversa_id);
@@ -220,6 +240,10 @@ create trigger trg_produtos_atualizado_em before update on produtos
 
 drop trigger if exists trg_pedidos_atualizado_em on pedidos;
 create trigger trg_pedidos_atualizado_em before update on pedidos
+  for each row execute function set_atualizado_em();
+
+drop trigger if exists trg_encomendas_atualizado_em on encomendas;
+create trigger trg_encomendas_atualizado_em before update on encomendas
   for each row execute function set_atualizado_em();
 
 drop trigger if exists trg_conversas_atualizado_em on conversas;
@@ -294,6 +318,7 @@ alter table clientes enable row level security;
 alter table produtos enable row level security;
 alter table pedidos enable row level security;
 alter table itens_pedido enable row level security;
+alter table encomendas enable row level security;
 alter table conversas enable row level security;
 alter table mensagens enable row level security;
 alter table templates_mensagem enable row level security;
@@ -370,6 +395,19 @@ create policy pedidos_insert on pedidos for insert
 
 drop policy if exists pedidos_update on pedidos;
 create policy pedidos_update on pedidos for update
+  using (is_usuario_ativo());
+
+-- encomendas: qualquer usuário ativo vê e gerencia (mesma fila da equipe)
+drop policy if exists encomendas_select on encomendas;
+create policy encomendas_select on encomendas for select
+  using (is_usuario_ativo());
+
+drop policy if exists encomendas_insert on encomendas;
+create policy encomendas_insert on encomendas for insert
+  with check (is_usuario_ativo());
+
+drop policy if exists encomendas_update on encomendas;
+create policy encomendas_update on encomendas for update
   using (is_usuario_ativo());
 
 -- itens_pedido: leitura para todos ativos
@@ -461,6 +499,7 @@ create policy consultas_farmaceuticas_insert on consultas_farmaceuticas for inse
 alter publication supabase_realtime add table pedidos;
 alter publication supabase_realtime add table mensagens;
 alter publication supabase_realtime add table conversas;
+alter publication supabase_realtime add table encomendas;
 
 -- Por padrão, um UPDATE via realtime só manda a chave primária em "old" — pra
 -- comparar o status anterior com o novo (e notificar só quando a conversa

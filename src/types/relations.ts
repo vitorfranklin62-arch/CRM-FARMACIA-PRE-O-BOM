@@ -3,6 +3,7 @@ import type {
   Cliente,
   ConsultaFarmaceutica,
   Conversa,
+  Encomenda,
   ItemPedido,
   Mensagem,
   Pedido,
@@ -17,6 +18,10 @@ export interface ItemPedidoComProduto extends ItemPedido {
 export interface PedidoCompleto extends Pedido {
   clientes: Cliente | null;
   itens_pedido: ItemPedidoComProduto[];
+}
+
+export interface EncomendaComCliente extends Encomenda {
+  clientes: Cliente | null;
 }
 
 export interface ConversaCompleta extends Conversa {

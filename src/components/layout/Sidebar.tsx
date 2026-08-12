@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Package,
+  PackageSearch,
   MessageCircle,
   Users,
   Megaphone,
@@ -28,6 +29,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, donaOnly: true },
   { href: "/pedidos", label: "Pedidos", icon: Package },
+  { href: "/encomendas", label: "Encomendas", icon: PackageSearch },
   { href: "/chat", label: "Chat ao vivo", icon: MessageCircle },
   { href: "/produtos", label: "Produtos", icon: Boxes },
   { href: "/clientes", label: "Clientes", icon: Users },

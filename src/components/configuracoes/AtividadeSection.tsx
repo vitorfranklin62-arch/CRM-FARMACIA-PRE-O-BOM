@@ -7,6 +7,8 @@ import type { AuditLogComUsuario } from "@/types/relations";
 
 const ACAO_LABEL: Record<AuditAcao, string> = {
   pedido_status_atualizado: "Atualizou status de pedido",
+  encomenda_criada: "Registrou encomenda",
+  encomenda_status_atualizado: "Atualizou status de encomenda",
   cliente_criado: "Cadastrou cliente",
   cliente_observacao_atualizada: "Editou observação de cliente",
   template_criado: "Criou template",
@@ -34,6 +36,7 @@ const ACAO_LABEL: Record<AuditAcao, string> = {
 
 const ENTIDADE_LABEL: Record<string, string> = {
   pedidos: "Pedido",
+  encomendas: "Encomenda",
   clientes: "Cliente",
   templates_mensagem: "Template",
   campanhas: "Campanha",
