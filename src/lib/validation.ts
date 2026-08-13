@@ -6,34 +6,38 @@ export const loginSchema = z.object({
 });
 
 export const pedidoItemWebhookSchema = z.object({
-  produto_id: z.string().uuid().optional(),
-  sku: z.string().trim().max(100).optional(),
-  nome: z.string().trim().max(300).optional(),
+  produto_id: z.string().uuid().nullable().optional(),
+  sku: z.string().trim().max(100).nullable().optional(),
+  nome: z.string().trim().max(300).nullable().optional(),
   quantidade: z.number().int().positive(),
   preco_unitario: z.number().nonnegative(),
 });
 
+// Campos opcionais aceitam `null` além de ausentes — o agente de IA que
+// preenche esses webhooks (via tool-calling no N8N) costuma mandar `null`
+// explícito pra "sem valor" (ex.: pedido de retirada na loja sem
+// endereco_entrega) em vez de simplesmente omitir a chave.
 export const pedidoWebhookSchema = z.object({
   cliente: z.object({
-    id: z.string().uuid().optional(),
+    id: z.string().uuid().nullable().optional(),
     nome: z.string().trim().min(1).max(200),
     telefone: z.string().trim().min(8).max(30),
-    origem_chat: z.enum(["whatsapp", "instagram"]).optional(),
+    origem_chat: z.enum(["whatsapp", "instagram"]).nullable().optional(),
     foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
   }),
   itens: z.array(pedidoItemWebhookSchema).min(1),
-  total: z.number().nonnegative().optional(),
-  endereco_entrega: z.string().trim().max(500).optional(),
-  telefone_confirmacao: z.string().trim().max(30).optional(),
-  pagamento_status: z.enum(["pendente", "confirmado"]).optional(),
-  forma_pagamento: z.string().trim().max(100).optional(),
-  taxa_entrega: z.number().nonnegative().optional(),
+  total: z.number().nonnegative().nullable().optional(),
+  endereco_entrega: z.string().trim().max(500).nullable().optional(),
+  telefone_confirmacao: z.string().trim().max(30).nullable().optional(),
+  pagamento_status: z.enum(["pendente", "confirmado"]).nullable().optional(),
+  forma_pagamento: z.string().trim().max(100).nullable().optional(),
+  taxa_entrega: z.number().nonnegative().nullable().optional(),
 });
 
 export const clienteWebhookSchema = z.object({
   nome: z.string().trim().min(1).max(200),
   telefone: z.string().trim().min(8).max(30),
-  origem_chat: z.enum(["whatsapp", "instagram"]).optional(),
+  origem_chat: z.enum(["whatsapp", "instagram"]).nullable().optional(),
   foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
 });
 
@@ -66,15 +70,15 @@ export const mensagemCreateSchema = z.object({
 
 export const mensagemWebhookSchema = z.object({
   cliente: z.object({
-    id: z.string().uuid().optional(),
+    id: z.string().uuid().nullable().optional(),
     nome: z.string().trim().min(1).max(200),
     telefone: z.string().trim().min(8).max(30),
-    origem_chat: z.enum(["whatsapp", "instagram"]).optional(),
+    origem_chat: z.enum(["whatsapp", "instagram"]).nullable().optional(),
     foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
   }),
   remetente: z.enum(["ia", "cliente", "funcionaria"]),
   conteudo: z.string().trim().min(1).max(4000),
-  conversa_status: z.enum(["aberta", "aguardando_humano", "fechada"]).optional(),
+  conversa_status: z.enum(["aberta", "aguardando_humano", "fechada"]).nullable().optional(),
 });
 
 export const produtoCreateSchema = z.object({
