@@ -546,6 +546,14 @@ end $$;
 alter table conversas replica identity full;
 
 -- ============================================================================
+-- Storage (assets de marca — hoje só a foto customizada da Vitória AI)
+-- ============================================================================
+
+insert into storage.buckets (id, name, public)
+values ('branding', 'branding', true)
+on conflict (id) do nothing;
+
+-- ============================================================================
 -- Seed inicial de configurações (opcional)
 -- ============================================================================
 

@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Loader2, Send, X } from "lucide-react";
-import { AtlasAvatar } from "./AtlasAvatar";
+import { VitoriaAvatar } from "./VitoriaAvatar";
 
-const STORAGE_KEY = "precobom-atlas-historico";
+const STORAGE_KEY = "precobom-vitoria-ia-historico";
 const MAX_HISTORICO_SALVO = 20;
 
 type Mensagem = {
@@ -15,13 +15,13 @@ type Mensagem = {
 };
 
 /**
- * Bolha flutuante do ATLAS AI, visível em qualquer tela do painel (estilo
+ * Bolha flutuante da Vitória AI, visível em qualquer tela do painel (estilo
  * "chat de suporte"). Substitui a antiga aba dedicada `/consulta-ia` — a
  * ideia é a equipe conseguir perguntar sem sair da tela onde está
  * trabalhando. O histórico fica só no navegador (localStorage), não é
- * compartilhado entre dispositivos nem entre a equipe.
+ * compartilhado entre a equipe nem entre dispositivos.
  */
-export function AtlasFloatingWidget() {
+export function VitoriaFloatingWidget({ fotoUrl }: { fotoUrl?: string | null }) {
   const [aberto, setAberto] = useState(false);
   const [historico, setHistorico] = useState<Mensagem[]>([]);
   const [pergunta, setPergunta] = useState("");
@@ -88,16 +88,16 @@ export function AtlasFloatingWidget() {
       {aberto && (
         <div className="fixed bottom-36 right-4 z-50 flex h-[70vh] max-h-[32rem] w-[calc(100vw-2rem)] max-w-sm flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/10 dark:bg-navy-900 md:bottom-24 md:right-6">
           <div className="flex items-center gap-3 bg-navy-950 px-4 py-3">
-            <AtlasAvatar size={36} className="shrink-0" />
+            <VitoriaAvatar size={36} className="shrink-0" fotoUrl={fotoUrl} />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-white">ATLAS AI</p>
-              <p className="truncate text-xs text-gray-300">Vitória · referência rápida da equipe</p>
+              <p className="text-sm font-semibold text-white">Vitória AI</p>
+              <p className="truncate text-xs text-gray-300">Referência rápida da equipe</p>
             </div>
             <button
               type="button"
               onClick={() => setAberto(false)}
               className="rounded-full p-1.5 text-gray-300 transition hover:bg-white/10 hover:text-white"
-              aria-label="Fechar ATLAS AI"
+              aria-label="Fechar Vitória AI"
             >
               <X size={18} />
             </button>
@@ -122,7 +122,7 @@ export function AtlasFloatingWidget() {
                   </p>
                 </div>
                 <div className="flex items-start gap-2">
-                  <AtlasAvatar size={22} className="mt-0.5 shrink-0" />
+                  <VitoriaAvatar size={22} className="mt-0.5 shrink-0" fotoUrl={fotoUrl} />
                   <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-gray-100 px-3 py-2 text-sm text-gray-700 dark:bg-white/5 dark:text-gray-200">
                     {item.pendente ? (
                       <span className="inline-flex items-center gap-1.5 text-gray-400 dark:text-gray-500">
@@ -150,7 +150,7 @@ export function AtlasFloatingWidget() {
                     e.currentTarget.form?.requestSubmit();
                   }
                 }}
-                placeholder="Pergunte pro Atlas..."
+                placeholder="Pergunte pra Vitória..."
                 maxLength={500}
                 className="max-h-24 flex-1 resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-accent-400 focus:outline-none dark:border-white/10 dark:bg-navy-950 dark:text-white"
               />
@@ -171,9 +171,9 @@ export function AtlasFloatingWidget() {
         type="button"
         onClick={() => setAberto((v) => !v)}
         className="fixed bottom-20 right-4 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-navy-950 shadow-lg transition hover:scale-105 md:bottom-6 md:right-6"
-        aria-label={aberto ? "Fechar ATLAS AI" : "Abrir ATLAS AI"}
+        aria-label={aberto ? "Fechar Vitória AI" : "Abrir Vitória AI"}
       >
-        {aberto ? <X size={22} className="text-white" /> : <AtlasAvatar size={40} />}
+        {aberto ? <X size={22} className="text-white" /> : <VitoriaAvatar size={40} fotoUrl={fotoUrl} />}
       </button>
     </>
   );

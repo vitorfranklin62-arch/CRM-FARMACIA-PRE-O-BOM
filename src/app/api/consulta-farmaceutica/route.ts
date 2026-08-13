@@ -7,9 +7,10 @@ import { perguntarClaude, ConsultaFarmaceuticaError } from "@/lib/claude";
 
 /**
  * POST /api/consulta-farmaceutica
- * Aba interna "ATLAS AI" — pergunta de contraindicação/genérico feita pela
- * equipe. Nunca é chamado pela IA que atende cliente (Vitória); é uma
- * ferramenta separada, só para uso da equipe logada.
+ * Widget flutuante interno "Vitória AI" — pergunta de contraindicação/
+ * genérico feita pela equipe. Nunca é chamado pela IA que atende cliente no
+ * WhatsApp (que roda no N8N, sem relação com essa rota); é uma ferramenta
+ * separada, só para uso da equipe logada.
  */
 export async function POST(request: Request) {
   const usuario = await requireUser();
@@ -27,9 +28,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    const resposta = await perguntarClaude(parsed.data.pergunta);
-
     const supabase = await createClient();
+    // Prompt customizável pela dona (Configurações → Vitória AI); sem valor
+    // salvo, `perguntarClaude` cai no prompt padrão embutido no código.
+    const { data: configPrompt } = await supabase
+      .from("configuracoes")
+      .select("valor")
+      .eq("chave", "vitoria_ia_prompt")
+      .maybeSingle();
+
+    const resposta = await perguntarClaude(parsed.data.pergunta, configPrompt?.valor);
+
     const { data: registro } = await supabase
       .from("consultas_farmaceuticas")
       .insert({ usuario_id: usuario.id, pergunta: parsed.data.pergunta, resposta })

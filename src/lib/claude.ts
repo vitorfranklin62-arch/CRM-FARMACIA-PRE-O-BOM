@@ -1,12 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 /**
- * Prompt do agente de referência farmacêutica — ferramenta INTERNA (aba
- * "ATLAS AI"), nunca exposta a clientes. Baseada só no conhecimento
- * geral do modelo (sem base de dados oficial/bula em tempo real), por isso
- * o próprio prompt exige que toda resposta reforce esse limite.
+ * Prompt padrão do agente de referência farmacêutica — ferramenta INTERNA
+ * (widget "Vitória AI"), nunca exposta a clientes. Baseada só no
+ * conhecimento geral do modelo (sem base de dados oficial/bula em tempo
+ * real), por isso o próprio prompt exige que toda resposta reforce esse
+ * limite. A dona pode substituir esse texto em Configurações → Vitória AI
+ * (fica salvo em `configuracoes.vitoria_ia_prompt`); esse aqui é só o valor
+ * inicial e o que volta a valer se o campo for deixado em branco.
  */
-const SYSTEM_PROMPT_FARMACEUTICO = `Você é a ATLAS AI, assistente de referência farmacêutica de uso INTERNO da Farmácia Preço Bom, usada apenas pela equipe (farmacêuticos e atendentes) — nunca por clientes.
+export const PROMPT_PADRAO_VITORIA_IA = `Você é a Vitória AI, assistente de referência farmacêutica de uso INTERNO da Farmácia Preço Bom, usada apenas pela equipe (farmacêuticos e atendentes) — nunca por clientes.
 
 Seu papel é ajudar a equipe a consultar rapidamente, com base no seu conhecimento geral sobre medicamentos:
 - Nome genérico / princípio ativo de um medicamento de marca, e vice-versa.
@@ -40,13 +43,13 @@ function getClient(): Anthropic {
 /** Erro esperado (config ausente, recusa, resposta vazia) — distinto de falhas da API da Anthropic. */
 export class ConsultaFarmaceuticaError extends Error {}
 
-export async function perguntarClaude(pergunta: string): Promise<string> {
+export async function perguntarClaude(pergunta: string, promptCustom?: string | null): Promise<string> {
   const response = await getClient().messages.create({
     model: "claude-opus-5",
     max_tokens: 1500,
     thinking: { type: "adaptive" },
     output_config: { effort: "medium" },
-    system: SYSTEM_PROMPT_FARMACEUTICO,
+    system: promptCustom?.trim() || PROMPT_PADRAO_VITORIA_IA,
     messages: [{ role: "user", content: pergunta }],
   });
 

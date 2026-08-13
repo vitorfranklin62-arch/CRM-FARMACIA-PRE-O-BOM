@@ -1,19 +1,42 @@
 /**
- * Avatar ilustrado da "Vitória" (persona do ATLAS AI) — desenho simplificado
- * em SVG, na paleta navy/coral da marca, sem depender de nenhuma imagem
- * externa (mesmo espírito do LogoMark).
+ * Avatar da "Vitória AI" — usa a foto configurada pela dona (Configurações →
+ * Vitória AI) quando existir; sem foto configurada, cai no desenho
+ * ilustrado padrão em SVG (paleta navy/coral da marca, mesmo espírito do
+ * LogoMark), sem depender de nenhuma imagem externa.
  */
-export function AtlasAvatar({ size = 72, className }: { size?: number; className?: string }) {
+export function VitoriaAvatar({
+  size = 72,
+  className,
+  fotoUrl,
+}: {
+  size?: number;
+  className?: string;
+  fotoUrl?: string | null;
+}) {
+  if (fotoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- foto vem de URL externa/Storage, sem domínio fixo pra configurar no next/image
+      <img
+        src={fotoUrl}
+        alt="Vitória AI"
+        width={size}
+        height={size}
+        className={className}
+        style={{ width: size, height: size, borderRadius: "9999px", objectFit: "cover" }}
+      />
+    );
+  }
+
   return (
     <svg viewBox="0 0 96 96" width={size} height={size} className={className} aria-hidden="true">
       <defs>
-        <linearGradient id="atlasAvatarBg" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id="vitoriaAvatarBg" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#1B2260" />
           <stop offset="100%" stopColor="#0B1440" />
         </linearGradient>
       </defs>
 
-      <circle cx="48" cy="48" r="48" fill="url(#atlasAvatarBg)" />
+      <circle cx="48" cy="48" r="48" fill="url(#vitoriaAvatarBg)" />
 
       {/* Jaleco */}
       <path d="M20 96 C20 72 32 63 48 63 C64 63 76 72 76 96 Z" fill="#F7F9FC" />

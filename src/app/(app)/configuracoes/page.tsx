@@ -2,10 +2,12 @@ import { requireDona } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { FarmaciaForm } from "@/components/configuracoes/FarmaciaForm";
 import { IntegracoesForm } from "@/components/configuracoes/IntegracoesForm";
+import { VitoriaIAForm } from "@/components/configuracoes/VitoriaIAForm";
 import { SegurancaForm } from "@/components/configuracoes/SegurancaForm";
 import { UsuariosSection } from "@/components/configuracoes/UsuariosSection";
 import { EntregaSection } from "@/components/configuracoes/EntregaSection";
 import { AtividadeSection } from "@/components/configuracoes/AtividadeSection";
+import { PROMPT_PADRAO_VITORIA_IA } from "@/lib/claude";
 import type { BairroEntrega, Configuracao, Usuario } from "@/types/database";
 import type { AuditLogComUsuario } from "@/types/relations";
 
@@ -42,6 +44,10 @@ export default async function ConfiguracoesPage() {
           n8nUrl={config.get("integracao_n8n_url") ?? ""}
           n8nChatWebhookUrl={config.get("integracao_n8n_chat_webhook_url") ?? ""}
           n8nCampanhaWebhookUrl={config.get("integracao_n8n_campanha_webhook_url") ?? ""}
+        />
+        <VitoriaIAForm
+          prompt={config.get("vitoria_ia_prompt") || PROMPT_PADRAO_VITORIA_IA}
+          fotoUrl={config.get("vitoria_ia_foto_url") || null}
         />
       </div>
 
