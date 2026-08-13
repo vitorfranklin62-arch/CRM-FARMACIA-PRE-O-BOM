@@ -66,7 +66,10 @@ export async function POST(request: Request) {
       .single();
 
     if (clienteError || !novoCliente) {
-      return NextResponse.json({ error: "Não foi possível registrar o cliente." }, { status: 500 });
+      return NextResponse.json(
+        { error: "Não foi possível registrar o cliente.", detalhe: clienteError?.message ?? null },
+        { status: 500 }
+      );
     }
     clienteId = novoCliente.id;
   }
@@ -92,7 +95,10 @@ export async function POST(request: Request) {
       .single();
 
     if (conversaError || !novaConversa) {
-      return NextResponse.json({ error: "Não foi possível criar a conversa." }, { status: 500 });
+      return NextResponse.json(
+        { error: "Não foi possível criar a conversa.", detalhe: conversaError?.message ?? null },
+        { status: 500 }
+      );
     }
     conversaId = novaConversa.id;
   } else {
@@ -107,7 +113,10 @@ export async function POST(request: Request) {
     .single();
 
   if (mensagemError || !mensagem) {
-    return NextResponse.json({ error: "Não foi possível registrar a mensagem." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Não foi possível registrar a mensagem.", detalhe: mensagemError?.message ?? null },
+      { status: 500 }
+    );
   }
 
   // Garante que a conversa suba pro topo da lista (ordenada por atualização mais recente)

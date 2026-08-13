@@ -66,7 +66,10 @@ export async function POST(request: Request) {
       .single();
 
     if (clienteError || !novoCliente) {
-      return NextResponse.json({ error: "Não foi possível registrar o cliente." }, { status: 500 });
+      return NextResponse.json(
+        { error: "Não foi possível registrar o cliente.", detalhe: clienteError?.message ?? null },
+        { status: 500 }
+      );
     }
     clienteId = novoCliente.id;
   }
@@ -95,7 +98,10 @@ export async function POST(request: Request) {
         .single();
 
       if (error || !novoProduto) {
-        return NextResponse.json({ error: "Não foi possível registrar um dos produtos." }, { status: 500 });
+        return NextResponse.json(
+          { error: "Não foi possível registrar um dos produtos.", detalhe: error?.message ?? null },
+          { status: 500 }
+        );
       }
       produtoId = novoProduto.id;
     }
@@ -149,7 +155,10 @@ export async function POST(request: Request) {
     .single();
 
   if (pedidoError || !pedido) {
-    return NextResponse.json({ error: "Não foi possível criar o pedido." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Não foi possível criar o pedido.", detalhe: pedidoError?.message ?? null },
+      { status: 500 }
+    );
   }
 
   // 4. Criar itens do pedido
@@ -163,7 +172,10 @@ export async function POST(request: Request) {
   );
 
   if (itensError) {
-    return NextResponse.json({ error: "Pedido criado, mas houve erro ao salvar os itens." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Pedido criado, mas houve erro ao salvar os itens.", detalhe: itensError.message },
+      { status: 500 }
+    );
   }
 
   // 5. Registrar venda para o dashboard

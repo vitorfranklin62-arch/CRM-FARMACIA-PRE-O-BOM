@@ -50,7 +50,10 @@ export async function POST(request: Request) {
     .single();
 
   if (error || !cliente) {
-    return NextResponse.json({ error: "Não foi possível registrar o cliente." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Não foi possível registrar o cliente.", detalhe: error?.message ?? null },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ id: cliente.id }, { status: 200 });
