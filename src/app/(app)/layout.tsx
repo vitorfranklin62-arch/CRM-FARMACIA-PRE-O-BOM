@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { AtlasFloatingWidget } from "@/components/consulta-ia/AtlasFloatingWidget";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const usuario = await requireUser();
@@ -14,6 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <main className="flex-1 px-4 pb-20 pt-5 md:px-8 md:pb-8">{children}</main>
       </div>
       <MobileNav role={usuario.role} />
+      <AtlasFloatingWidget />
     </div>
   );
 }

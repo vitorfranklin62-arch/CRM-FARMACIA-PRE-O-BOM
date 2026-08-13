@@ -69,7 +69,7 @@ Veja `.env.example`. Resumo:
 - `SUPABASE_SERVICE_ROLE_KEY` — só usado no servidor (webhooks e administração de usuários), nunca exposto ao browser
 - `N8N_WEBHOOK_SECRET` — token que o N8N deve enviar em `Authorization: Bearer <token>` nos webhooks
 - `N8N_BASE_URL`, `UAIZAP_API_KEY`, `UAIZAP_BASE_URL` — configuração das integrações
-- `ANTHROPIC_API_KEY` — usada só pela aba interna **ATLAS AI** (`/consulta-ia`), nunca pela IA que atende cliente
+- `ANTHROPIC_API_KEY` — usada só pelo widget flutuante interno **ATLAS AI**, nunca pela IA que atende cliente
 
 ## Webhooks / API para o N8N
 
@@ -123,16 +123,16 @@ Uma encomenda em "Aguardando chegar" ou "Chegou" também pode ser cancelada (`ca
 
 O aviso automático só dispara uma vez por encomenda (na transição pra "chegou" — mudar o status de novo não reenvia); se o N8N não estiver configurado, o status muda normalmente e só a notificação por WhatsApp é pulada. Rota: `POST /api/encomendas/:id/status`, autenticada por sessão.
 
-## ATLAS AI (aba interna de referência farmacêutica)
+## ATLAS AI (widget flutuante de referência farmacêutica)
 
-Em **ATLAS AI**, qualquer usuária logada (dona ou funcionária) pode perguntar coisas como "qual o genérico do Buscopan?" ou "Losartana tem contraindicação pra gestante?" e recebe uma resposta gerada pela Claude API (`POST /api/consulta-farmaceutica` → `src/lib/claude.ts`, modelo `claude-opus-5`).
+O **ATLAS AI** é uma bolha flutuante (`src/components/consulta-ia/AtlasFloatingWidget.tsx`), visível em qualquer tela do painel pra qualquer usuária logada (dona ou funcionária) — clica pra abrir um chat pequeno, pergunta coisas como "qual o genérico do Buscopan?" ou "Losartana tem contraindicação pra gestante?" e recebe uma resposta gerada pela Claude API (`POST /api/consulta-farmaceutica` → `src/lib/claude.ts`, modelo `claude-opus-5`).
 
 Pontos importantes sobre essa ferramenta:
 
-- **É uma ferramenta interna, separada da IA que atende cliente no WhatsApp/Instagram** (a "Vitória", que roda no N8N) — as duas não se comunicam entre si. Ninguém de fora da equipe logada no painel tem acesso a essa aba.
-- **A resposta vem do conhecimento geral do modelo, não de uma bula oficial ou base de dados da Anvisa em tempo real** — por isso tanto a tela quanto o próprio prompt da IA (`SYSTEM_PROMPT_FARMACEUTICO` em `src/lib/claude.ts`) deixam claro que é uma referência rápida, não uma fonte oficial, e que a bula do fabricante + julgamento do farmacêutico responsável são sempre a decisão final antes de orientar ou vender pra um cliente.
-- Cada pergunta e resposta fica salva em `consultas_farmaceuticas` (histórico visível na própria aba, compartilhado entre a equipe) — não é pensado pra perguntas com dados pessoais de clientes.
-- Requer `ANTHROPIC_API_KEY` configurada no servidor; sem ela, a aba retorna erro explicando que a IA não está configurada.
+- **É uma ferramenta interna, separada da IA que atende cliente no WhatsApp/Instagram** (a "Vitória", que roda no N8N) — as duas não se comunicam entre si. Ninguém de fora da equipe logada no painel tem acesso a esse widget.
+- **A resposta vem do conhecimento geral do modelo, não de uma bula oficial ou base de dados da Anvisa em tempo real** — por isso tanto o aviso no topo do chat quanto o próprio prompt da IA (`SYSTEM_PROMPT_FARMACEUTICO` em `src/lib/claude.ts`) deixam claro que é uma referência rápida, não uma fonte oficial, e que a bula do fabricante + julgamento do farmacêutico responsável são sempre a decisão final antes de orientar ou vender pra um cliente.
+- Cada pergunta e resposta é salva em `consultas_farmaceuticas` (fica no audit trail do banco), mas o histórico mostrado no chat é local do navegador (`localStorage`) — não é compartilhado entre a equipe nem entre dispositivos, e não é pensado pra perguntas com dados pessoais de clientes.
+- Requer `ANTHROPIC_API_KEY` configurada no servidor; sem ela, o chat retorna erro explicando que a IA não está configurada.
 
 ## Importação de estoque
 
@@ -199,7 +199,6 @@ src/
       clientes/             # cadastro e observações
       campanhas/            # campanhas de mensagens (só dona)
       templates/            # templates de resposta
-      consulta-ia/          # referência farmacêutica interna (contraindicação/genérico)
       configuracoes/        # dados da farmácia, usuários, segurança (só dona)
     api/                    # webhooks e endpoints consumidos pelo N8N
   components/               # componentes de UI e por domínio
