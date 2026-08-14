@@ -157,6 +157,26 @@ create table if not exists bairros_entrega (
 
 create unique index if not exists idx_bairros_entrega_nome on bairros_entrega (lower(bairro));
 
+-- vitrine_itens: promoções/itens exibidos no site público
+-- (farmaciaprecobom.com.br). Só campos não sensíveis (nada de estoque, custo
+-- ou cliente) — o site lê essa tabela direto do Supabase com a chave anon,
+-- sem passar pelo CRM.
+create table if not exists vitrine_itens (
+  id uuid primary key default gen_random_uuid(),
+  titulo text not null,
+  descricao text,
+  tag text,
+  preco decimal(10, 2) not null,
+  imagem_url text,
+  video_url text,
+  ordem integer not null default 0,
+  ativo boolean not null default true,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+
+create index if not exists idx_vitrine_itens_ordem on vitrine_itens(ordem);
+
 create table if not exists vendas_log (
   id uuid primary key default gen_random_uuid(),
   pedido_id uuid not null references pedidos(id),
@@ -261,6 +281,10 @@ drop trigger if exists trg_templates_atualizado_em on templates_mensagem;
 create trigger trg_templates_atualizado_em before update on templates_mensagem
   for each row execute function set_atualizado_em();
 
+drop trigger if exists trg_vitrine_itens_atualizado_em on vitrine_itens;
+create trigger trg_vitrine_itens_atualizado_em before update on vitrine_itens
+  for each row execute function set_atualizado_em();
+
 -- ============================================================================
 -- Helpers para RLS (SECURITY DEFINER evita recursão nas policies de usuarios)
 -- ============================================================================
@@ -346,6 +370,7 @@ alter table configuracoes enable row level security;
 alter table login_tentativas enable row level security;
 alter table audit_log enable row level security;
 alter table consultas_farmaceuticas enable row level security;
+alter table vitrine_itens enable row level security;
 
 -- usuarios: cada um vê o próprio registro; dona vê e gerencia todos
 drop policy if exists usuarios_select on usuarios;
@@ -400,6 +425,23 @@ drop policy if exists bairros_entrega_update on bairros_entrega;
 create policy bairros_entrega_update on bairros_entrega for update using (is_dona());
 drop policy if exists bairros_entrega_delete on bairros_entrega;
 create policy bairros_entrega_delete on bairros_entrega for delete using (is_dona());
+
+-- vitrine_itens: leitura pública (site) só dos itens ativos; equipe logada
+-- vê todos (inclusive inativos, pra poder reativar); escrita só dona.
+drop policy if exists vitrine_itens_select_publico on vitrine_itens;
+create policy vitrine_itens_select_publico on vitrine_itens for select
+  using (ativo = true);
+
+drop policy if exists vitrine_itens_select_equipe on vitrine_itens;
+create policy vitrine_itens_select_equipe on vitrine_itens for select
+  using (is_usuario_ativo());
+
+drop policy if exists vitrine_itens_write on vitrine_itens;
+create policy vitrine_itens_write on vitrine_itens for insert with check (is_dona());
+drop policy if exists vitrine_itens_update on vitrine_itens;
+create policy vitrine_itens_update on vitrine_itens for update using (is_dona());
+drop policy if exists vitrine_itens_delete on vitrine_itens;
+create policy vitrine_itens_delete on vitrine_itens for delete using (is_dona());
 
 -- pedidos: qualquer usuário ativo vê e atualiza status (fila de separação)
 drop policy if exists pedidos_select on pedidos;

@@ -44,6 +44,7 @@ export default async function ConfiguracoesPage() {
           n8nUrl={config.get("integracao_n8n_url") ?? ""}
           n8nChatWebhookUrl={config.get("integracao_n8n_chat_webhook_url") ?? ""}
           n8nCampanhaWebhookUrl={config.get("integracao_n8n_campanha_webhook_url") ?? ""}
+          siteRevalidateUrl={config.get("site_revalidate_url") ?? ""}
         />
         <VitoriaIAForm
           prompt={config.get("vitoria_ia_prompt") || PROMPT_PADRAO_VITORIA_IA}

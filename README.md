@@ -190,6 +190,19 @@ Assim como o `.pdf`, esse formato **não tem código/SKU** — casa por **nome n
 
 Como o `.pdf` casa produtos pelo nome (sem código/SKU), qualquer importação feita antes de uma correção no parser pode ter deixado produtos duplicados no catálogo (o mesmo produto cadastrado 2x, com preço/estoque diferentes entre as cópias). Em **Produtos → Limpar duplicados**, a dona vê uma prévia de quantos grupos duplicados existem antes de confirmar a remoção — mantém sempre a linha mais recentemente atualizada de cada nome e remove as outras. Produtos já usados em algum pedido nunca são removidos (o banco tem uma trava de chave estrangeira pra isso — `pedido_itens.produto_id references produtos(id)`). Rota: `GET /api/produtos/duplicados` (prévia, só leitura) e `POST /api/produtos/duplicados` (executa), ambas só a dona.
 
+## Vitrine (integração com o site público)
+
+Em **Vitrine**, a dona cadastra os itens/promoções que aparecem no site institucional (`farmaciaprecobom.com.br`, projeto separado — repo `site-farmacia-pre-o-bom`) — título, descrição, selo (ex.: "Gripe"), preço, foto, vídeo opcional e se está visível agora. É a única tela que edita o que o site mostra; o site nunca é editado direto.
+
+Como funciona de ponta a ponta:
+
+- **Escrita**: as ações de criar/editar/excluir/reordenar acontecem direto do navegador (Supabase client-side), protegidas por RLS na tabela `vitrine_itens` (só `is_dona()` grava). Fotos e vídeos sobem por `POST /api/vitrine/upload` (essa rota usa a service role, então precisa ir por trás do servidor) pro bucket `branding` do Storage — imagem até 5MB (JPEG/PNG/WEBP), vídeo até 25MB (MP4/WEBM).
+- **Leitura pelo site**: o site lê a tabela `vitrine_itens` **direto do Supabase**, com a chave `anon`, sem passar pelo CRM — a RLS só libera `select` dos itens com `ativo = true` pra quem não está logado (política `vitrine_itens_select_publico`); a equipe logada no painel vê todos, inclusive os ocultos.
+- **Atualização do site**: o site usa ISR do Next.js (revalida sozinho a cada alguns minutos) e, pra não esperar isso, toda vez que a dona salva algo em Vitrine o CRM chama a URL configurada em Configurações → Integrações (`site_revalidate_url`) — o site atualiza a página em segundos. Essa chamada é só best-effort: se a URL não estiver configurada ou o site estiver fora do ar, a ação no CRM não falha por causa disso.
+- Sem nenhum item cadastrado, o site mostra uma lista padrão fixa (não fica vazio) até a dona adicionar o primeiro.
+
+Nada sensível passa por essa tabela (nunca estoque, custo ou dados de cliente) — é seguro que o site leia isso publicamente.
+
 ## Estrutura
 
 ```

@@ -80,6 +80,20 @@ export type BairroEntrega = {
   atualizado_em: string;
 }
 
+export type VitrineItem = {
+  id: string;
+  titulo: string;
+  descricao: string | null;
+  tag: string | null;
+  preco: number;
+  imagem_url: string | null;
+  video_url: string | null;
+  ordem: number;
+  ativo: boolean;
+  criado_em: string;
+  atualizado_em: string;
+}
+
 export type ItemPedido = {
   id: string;
   pedido_id: string;
@@ -180,7 +194,10 @@ export type AuditAcao =
   | "bairro_entrega_atualizado"
   | "bairro_entrega_excluido"
   | "conversas_duplicadas_mescladas"
-  | "clientes_duplicados_mesclados";
+  | "clientes_duplicados_mesclados"
+  | "vitrine_item_criado"
+  | "vitrine_item_atualizado"
+  | "vitrine_item_excluido";
 
 export type AuditLog = {
   id: string;
@@ -324,6 +341,7 @@ export interface Database {
       >;
       vendas_log: TableDef<VendaLog>;
       bairros_entrega: TableDef<BairroEntrega>;
+      vitrine_itens: TableDef<VitrineItem>;
       configuracoes: TableDef<Configuracao>;
       login_tentativas: TableDef<LoginTentativa>;
       audit_log: TableDef<

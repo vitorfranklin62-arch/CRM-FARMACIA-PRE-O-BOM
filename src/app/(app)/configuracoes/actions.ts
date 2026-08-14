@@ -15,6 +15,7 @@ const CONFIG_KEYS = [
   "integracao_n8n_chat_webhook_url",
   "integracao_n8n_campanha_webhook_url",
   "vitoria_ia_prompt",
+  "site_revalidate_url",
 ] as const;
 
 export interface ActionState {

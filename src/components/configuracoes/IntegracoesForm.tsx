@@ -23,11 +23,13 @@ export function IntegracoesForm({
   n8nUrl,
   n8nChatWebhookUrl,
   n8nCampanhaWebhookUrl,
+  siteRevalidateUrl,
 }: {
   uaizapUrl: string;
   n8nUrl: string;
   n8nChatWebhookUrl: string;
   n8nCampanhaWebhookUrl: string;
+  siteRevalidateUrl: string;
 }) {
   const [state, formAction] = useFormState(updateConfiguracoesAction, initialState);
 
@@ -75,6 +77,19 @@ export function IntegracoesForm({
           <p className="mt-1 text-xs text-gray-400">
             Usado pelo botão &quot;Disparar agora&quot; em Campanhas. Campanhas agendadas também são pegas
             automaticamente pelo N8N no horário marcado.
+          </p>
+        </div>
+        <div>
+          <Label htmlFor="site_revalidate_url">URL de revalidação do site (Vitrine)</Label>
+          <Input
+            id="site_revalidate_url"
+            name="site_revalidate_url"
+            defaultValue={siteRevalidateUrl}
+            placeholder="https://farmaciaprecobom.com.br/api/revalidate"
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            Quando você salva um item em Vitrine, o CRM chama essa URL pra o site público atualizar a página na
+            hora, sem esperar a atualização automática por tempo.
           </p>
         </div>
         <p className="text-xs text-gray-400">

@@ -13,6 +13,7 @@ import {
   FileText,
   Settings,
   Boxes,
+  Store,
   ChevronLeft,
   ChevronRight,
   type LucideIcon,
@@ -38,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/produtos", label: "Produtos", icon: Boxes },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/campanhas", label: "Campanhas", icon: Megaphone, donaOnly: true },
+  { href: "/vitrine", label: "Vitrine", icon: Store, donaOnly: true },
   { href: "/templates", label: "Templates", icon: FileText },
   { href: "/configuracoes", label: "Configurações", icon: Settings, donaOnly: true },
 ];

@@ -95,6 +95,17 @@ export const bairroEntregaCreateSchema = z.object({
   ativo: z.boolean(),
 });
 
+export const vitrineItemCreateSchema = z.object({
+  titulo: z.string().trim().min(1).max(200),
+  descricao: z.string().trim().max(1000).nullable().optional(),
+  tag: z.string().trim().max(40).nullable().optional(),
+  preco: z.number().nonnegative(),
+  imagem_url: z.string().trim().url().max(2000).nullable().optional(),
+  video_url: z.string().trim().url().max(2000).nullable().optional(),
+  ordem: z.number().int(),
+  ativo: z.boolean(),
+});
+
 export const clienteCreateSchema = z.object({
   nome: z.string().trim().min(1).max(200),
   telefone: z.string().trim().min(8).max(30),
