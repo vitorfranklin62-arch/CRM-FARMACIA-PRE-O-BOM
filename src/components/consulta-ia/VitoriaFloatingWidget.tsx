@@ -12,6 +12,8 @@ type Mensagem = {
   pergunta: string;
   resposta: string | null;
   pendente?: boolean;
+  /** Erro dessa pergunta específica. A pergunta continua na tela pra equipe poder reenviar. */
+  erro?: string | null;
 };
 
 /**
@@ -58,26 +60,46 @@ export function VitoriaFloatingWidget({ fotoUrl }: { fotoUrl?: string | null }) 
     setEnviando(true);
     setError(null);
 
+    function marcarErro(mensagem: string) {
+      setHistorico((atual) =>
+        atual.map((m) => (m.id === id ? { ...m, pendente: false, erro: mensagem } : m))
+      );
+      setError(mensagem);
+    }
+
     try {
       const res = await fetch("/api/consulta-farmaceutica", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pergunta: texto }),
       });
-      const body = await res.json();
 
-      if (!res.ok) {
-        setHistorico((atual) => atual.filter((m) => m.id !== id));
-        setError(body.error ?? "Não foi possível consultar a IA agora.");
+      // Quando a função serverless morre no timeout, a plataforma devolve uma
+      // página de erro em HTML — `res.json()` estourava aqui e o erro real
+      // sumia. Por isso lemos como texto e só tentamos interpretar como JSON.
+      const bruto = await res.text();
+      let body: { resposta?: string; error?: string } = {};
+      try {
+        body = JSON.parse(bruto);
+      } catch {
+        marcarErro(
+          res.ok
+            ? "A IA respondeu num formato inesperado."
+            : `A IA não respondeu (erro ${res.status}). Tente de novo em instantes.`
+        );
+        return;
+      }
+
+      if (!res.ok || !body.resposta) {
+        marcarErro(body.error ?? "Não foi possível consultar a IA agora.");
         return;
       }
 
       setHistorico((atual) =>
-        atual.map((m) => (m.id === id ? { ...m, resposta: body.resposta, pendente: false } : m))
+        atual.map((m) => (m.id === id ? { ...m, resposta: body.resposta!, pendente: false, erro: null } : m))
       );
     } catch {
-      setHistorico((atual) => atual.filter((m) => m.id !== id));
-      setError("Não foi possível conectar à IA agora.");
+      marcarErro("Não foi possível conectar à IA agora.");
     } finally {
       setEnviando(false);
     }
@@ -128,6 +150,8 @@ export function VitoriaFloatingWidget({ fotoUrl }: { fotoUrl?: string | null }) 
                       <span className="inline-flex items-center gap-1.5 text-gray-400 dark:text-gray-500">
                         <Loader2 size={13} className="animate-spin" /> digitando...
                       </span>
+                    ) : item.erro ? (
+                      <span className="text-red-600 dark:text-red-400">{item.erro}</span>
                     ) : (
                       <span className="whitespace-pre-wrap">{item.resposta}</span>
                     )}

@@ -43,15 +43,31 @@ function getClient(): Anthropic {
 /** Erro esperado (config ausente, recusa, resposta vazia) — distinto de falhas da API da Anthropic. */
 export class ConsultaFarmaceuticaError extends Error {}
 
+/**
+ * Teto de tokens da resposta. IMPORTANTE: com `thinking: adaptive` o
+ * raciocínio interno do modelo é descontado desse mesmo teto. Com o valor
+ * antigo (1500) uma pergunta clínica comum ("grávida pode tomar X?") gastava
+ * o teto inteiro pensando, a resposta voltava com `stop_reason: "max_tokens"`
+ * e SEM bloco de texto — e a tela mostrava "a IA não retornou uma resposta".
+ * 8000 dá folga pro raciocínio e ainda sobra bastante pra resposta final.
+ */
+const MAX_TOKENS = 8000;
+
 export async function perguntarClaude(pergunta: string, promptCustom?: string | null): Promise<string> {
-  const response = await getClient().messages.create({
+  // Streaming: a resposta com raciocínio pode levar dezenas de segundos e uma
+  // chamada não-streaming nesse tempo estoura o timeout de HTTP do SDK. O
+  // `finalMessage()` devolve a mensagem completa, então o resto do código
+  // continua tratando uma resposta única.
+  const stream = getClient().messages.stream({
     model: "claude-opus-5",
-    max_tokens: 1500,
+    max_tokens: MAX_TOKENS,
     thinking: { type: "adaptive" },
     output_config: { effort: "medium" },
     system: promptCustom?.trim() || PROMPT_PADRAO_VITORIA_IA,
     messages: [{ role: "user", content: pergunta }],
   });
+
+  const response = await stream.finalMessage();
 
   if (response.stop_reason === "refusal") {
     throw new ConsultaFarmaceuticaError(
@@ -61,7 +77,15 @@ export async function perguntarClaude(pergunta: string, promptCustom?: string | 
 
   const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
   const texto = textBlock?.text?.trim();
+
   if (!texto) {
+    // Sem texto quase sempre significa que o teto de tokens acabou antes da
+    // resposta final. Mensagem específica pra equipe saber o que fazer.
+    if (response.stop_reason === "max_tokens") {
+      throw new ConsultaFarmaceuticaError(
+        "A resposta ficou longa demais e foi cortada. Faça uma pergunta mais específica (um medicamento por vez)."
+      );
+    }
     throw new ConsultaFarmaceuticaError("A IA não retornou uma resposta.");
   }
 

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { getUsuarioApi } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { consultaFarmaceuticaSchema } from "@/lib/validation";
 import { perguntarClaude, ConsultaFarmaceuticaError } from "@/lib/claude";
@@ -12,8 +12,19 @@ import { perguntarClaude, ConsultaFarmaceuticaError } from "@/lib/claude";
  * WhatsApp (que roda no N8N, sem relação com essa rota); é uma ferramenta
  * separada, só para uso da equipe logada.
  */
+// A consulta com raciocínio da IA leva dezenas de segundos. Sem esse teto a
+// função serverless é morta no timeout padrão (10-15s) e o widget fica
+// travado em "digitando..." — que é exatamente o sintoma relatado.
+export const maxDuration = 300;
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
-  const usuario = await requireUser();
+  // `getUsuarioApi` devolve null em vez de redirecionar: numa rota de API o
+  // redirect viraria HTML de login e o front quebraria no `res.json()`.
+  const usuario = await getUsuarioApi();
+  if (!usuario) {
+    return NextResponse.json({ error: "Sessão expirada. Faça login de novo." }, { status: 401 });
+  }
 
   let body: unknown;
   try {
