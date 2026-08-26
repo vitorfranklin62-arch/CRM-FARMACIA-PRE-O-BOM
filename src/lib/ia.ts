@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
 /**
  * Prompt padrão do agente de referência farmacêutica — ferramenta INTERNA
@@ -27,61 +27,62 @@ Regras importantes:
 
 Responda sempre em português do Brasil.`;
 
-let client: Anthropic | null = null;
+let client: OpenAI | null = null;
 
-function getClient(): Anthropic {
+function getClient(): OpenAI {
   if (!client) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      throw new ConsultaFarmaceuticaError("ANTHROPIC_API_KEY não configurada no servidor.");
+      throw new ConsultaFarmaceuticaError("OPENAI_API_KEY não configurada no servidor.");
     }
-    client = new Anthropic({ apiKey });
+    client = new OpenAI({ apiKey });
   }
   return client;
 }
 
-/** Erro esperado (config ausente, recusa, resposta vazia) — distinto de falhas da API da Anthropic. */
+/** Erro esperado (config ausente, recusa, resposta vazia) — distinto de falhas da API da OpenAI. */
 export class ConsultaFarmaceuticaError extends Error {}
 
 /**
- * Teto de tokens da resposta. IMPORTANTE: com `thinking: adaptive` o
- * raciocínio interno do modelo é descontado desse mesmo teto. Com o valor
- * antigo (1500) uma pergunta clínica comum ("grávida pode tomar X?") gastava
- * o teto inteiro pensando, a resposta voltava com `stop_reason: "max_tokens"`
- * e SEM bloco de texto — e a tela mostrava "a IA não retornou uma resposta".
- * 8000 dá folga pro raciocínio e ainda sobra bastante pra resposta final.
+ * Modelo usado na consulta. Configurável por variável de ambiente pra dar
+ * pra trocar (ou testar um modelo novo) sem mexer no código e sem redeploy
+ * de aplicação — só reiniciar com a variável nova.
  */
-const MAX_TOKENS = 8000;
+const MODELO = process.env.OPENAI_MODEL || "gpt-4o";
 
-export async function perguntarClaude(pergunta: string, promptCustom?: string | null): Promise<string> {
-  // Streaming: a resposta com raciocínio pode levar dezenas de segundos e uma
-  // chamada não-streaming nesse tempo estoura o timeout de HTTP do SDK. O
-  // `finalMessage()` devolve a mensagem completa, então o resto do código
-  // continua tratando uma resposta única.
-  const stream = getClient().messages.stream({
-    model: "claude-opus-5",
-    max_tokens: MAX_TOKENS,
-    thinking: { type: "adaptive" },
-    output_config: { effort: "medium" },
-    system: promptCustom?.trim() || PROMPT_PADRAO_VITORIA_IA,
-    messages: [{ role: "user", content: pergunta }],
+/** Teto de tokens da resposta. Folga suficiente pra uma consulta de balcão bem detalhada. */
+const MAX_TOKENS = 2000;
+
+export async function perguntarIa(pergunta: string, promptCustom?: string | null): Promise<string> {
+  const response = await getClient().chat.completions.create({
+    model: MODELO,
+    max_completion_tokens: MAX_TOKENS,
+    messages: [
+      { role: "system", content: promptCustom?.trim() || PROMPT_PADRAO_VITORIA_IA },
+      { role: "user", content: pergunta },
+    ],
   });
 
-  const response = await stream.finalMessage();
+  const escolha = response.choices[0];
 
-  if (response.stop_reason === "refusal") {
+  // A OpenAI devolve a recusa num campo próprio, separado do texto normal.
+  if (escolha?.message?.refusal) {
     throw new ConsultaFarmaceuticaError(
       "A IA não pôde responder essa pergunta. Tente reformular focando em informações farmacêuticas gerais."
     );
   }
 
-  const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
-  const texto = textBlock?.text?.trim();
+  if (escolha?.finish_reason === "content_filter") {
+    throw new ConsultaFarmaceuticaError(
+      "A resposta foi bloqueada pelo filtro de conteúdo da IA. Tente reformular a pergunta."
+    );
+  }
+
+  const texto = escolha?.message?.content?.trim();
 
   if (!texto) {
-    // Sem texto quase sempre significa que o teto de tokens acabou antes da
-    // resposta final. Mensagem específica pra equipe saber o que fazer.
-    if (response.stop_reason === "max_tokens") {
+    // "length" = o teto de tokens acabou antes da resposta terminar.
+    if (escolha?.finish_reason === "length") {
       throw new ConsultaFarmaceuticaError(
         "A resposta ficou longa demais e foi cortada. Faça uma pergunta mais específica (um medicamento por vez)."
       );

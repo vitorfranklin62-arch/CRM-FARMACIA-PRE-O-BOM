@@ -69,7 +69,8 @@ Veja `.env.example`. Resumo:
 - `SUPABASE_SERVICE_ROLE_KEY` — só usado no servidor (webhooks e administração de usuários), nunca exposto ao browser
 - `N8N_WEBHOOK_SECRET` — token que o N8N deve enviar em `Authorization: Bearer <token>` nos webhooks
 - `N8N_BASE_URL`, `UAIZAP_API_KEY`, `UAIZAP_BASE_URL` — configuração das integrações
-- `ANTHROPIC_API_KEY` — usada só pelo widget flutuante interno **Vitória AI**, nunca pela IA que atende cliente
+- `OPENAI_API_KEY` — usada só pelo widget flutuante interno **Vitória AI**, nunca pela IA que atende cliente
+- `OPENAI_MODEL` — opcional; modelo usado pela Vitória AI (padrão `gpt-4o`). Serve pra trocar de modelo sem mexer no código
 
 ## Webhooks / API para o N8N
 
@@ -125,19 +126,19 @@ O aviso automático só dispara uma vez por encomenda (na transição pra "chego
 
 ## Vitória AI (widget flutuante de referência farmacêutica)
 
-A **Vitória AI** é uma bolha flutuante (`src/components/consulta-ia/VitoriaFloatingWidget.tsx`), visível em qualquer tela do painel pra qualquer usuária logada (dona ou funcionária) — clica pra abrir um chat pequeno, pergunta coisas como "qual o genérico do Buscopan?" ou "Losartana tem contraindicação pra gestante?" e recebe uma resposta gerada pela Claude API (`POST /api/consulta-farmaceutica` → `src/lib/claude.ts`, modelo `claude-opus-5`). Até pouco tempo essa ferramenta se chamava "ATLAS AI" — o nome mudou, o comportamento é o mesmo.
+A **Vitória AI** é uma bolha flutuante (`src/components/consulta-ia/VitoriaFloatingWidget.tsx`), visível em qualquer tela do painel pra qualquer usuária logada (dona ou funcionária) — clica pra abrir um chat pequeno, pergunta coisas como "qual o genérico do Buscopan?" ou "Losartana tem contraindicação pra gestante?" e recebe uma resposta gerada pela API da OpenAI (`POST /api/consulta-farmaceutica` → `src/lib/ia.ts`, modelo definido em `OPENAI_MODEL`, padrão `gpt-4o`). Até pouco tempo essa ferramenta se chamava "ATLAS AI" — o nome mudou, o comportamento é o mesmo.
 
-> ⚠️ **Cuidado com o nome duplicado:** essa ferramenta interna e a IA que atende cliente no WhatsApp/Instagram (a que roda no N8N) **têm o mesmo nome de persona ("Vitória") por coincidência de escolha da dona, mas são sistemas completamente separados** — não se comunicam entre si, não compartilham prompt nem histórico. Ao mexer em qualquer uma das duas, confirme se está no código certo: essa daqui é `src/lib/claude.ts` / `POST /api/consulta-farmaceutica` (widget interno); a outra vive inteira no N8N (fora deste repositório).
+> ⚠️ **Cuidado com o nome duplicado:** essa ferramenta interna e a IA que atende cliente no WhatsApp/Instagram (a que roda no N8N) **têm o mesmo nome de persona ("Vitória") por coincidência de escolha da dona, mas são sistemas completamente separados** — não se comunicam entre si, não compartilham prompt nem histórico. Ao mexer em qualquer uma das duas, confirme se está no código certo: essa daqui é `src/lib/ia.ts` / `POST /api/consulta-farmaceutica` (widget interno); a outra vive inteira no N8N (fora deste repositório).
 
 Pontos importantes sobre essa ferramenta:
 
 - **É uma ferramenta interna** — ninguém de fora da equipe logada no painel tem acesso a esse widget.
 - **A resposta vem do conhecimento geral do modelo, não de uma bula oficial ou base de dados da Anvisa em tempo real** — por isso tanto o aviso no topo do chat quanto o próprio prompt da IA deixam claro que é uma referência rápida, não uma fonte oficial, e que a bula do fabricante + julgamento do farmacêutico responsável são sempre a decisão final antes de orientar ou vender pra um cliente.
 - **Prompt e foto são customizáveis pela dona**, em Configurações → Vitória AI:
-  - O prompt (texto que define o comportamento da IA) começa com o padrão embutido em `PROMPT_PADRAO_VITORIA_IA` (`src/lib/claude.ts`) e fica salvo em `configuracoes.vitoria_ia_prompt` — deixar o campo em branco volta a usar o padrão.
+  - O prompt (texto que define o comportamento da IA) começa com o padrão embutido em `PROMPT_PADRAO_VITORIA_IA` (`src/lib/ia.ts`) e fica salvo em `configuracoes.vitoria_ia_prompt` — deixar o campo em branco volta a usar o padrão.
   - A foto é enviada via upload (JPEG/PNG/WEBP, até 5MB) pro bucket `branding` do Supabase Storage (`POST /api/configuracoes/vitoria-foto`) e a URL fica em `configuracoes.vitoria_ia_foto_url`; sem foto configurada, usa o desenho ilustrado padrão (SVG).
 - Cada pergunta e resposta é salva em `consultas_farmaceuticas` (fica no audit trail do banco), mas o histórico mostrado no chat é local do navegador (`localStorage`) — não é compartilhado entre a equipe nem entre dispositivos, e não é pensado pra perguntas com dados pessoais de clientes.
-- Requer `ANTHROPIC_API_KEY` configurada no servidor; sem ela, o chat retorna erro explicando que a IA não está configurada.
+- Requer `OPENAI_API_KEY` configurada no servidor; sem ela, o chat retorna erro explicando que a IA não está configurada.
 
 ## Importação de estoque
 

@@ -1,9 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { getUsuarioApi } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { consultaFarmaceuticaSchema } from "@/lib/validation";
-import { perguntarClaude, ConsultaFarmaceuticaError } from "@/lib/claude";
+import { perguntarIa, ConsultaFarmaceuticaError } from "@/lib/ia";
 
 /**
  * POST /api/consulta-farmaceutica
@@ -12,9 +12,9 @@ import { perguntarClaude, ConsultaFarmaceuticaError } from "@/lib/claude";
  * WhatsApp (que roda no N8N, sem relação com essa rota); é uma ferramenta
  * separada, só para uso da equipe logada.
  */
-// A consulta com raciocínio da IA leva dezenas de segundos. Sem esse teto a
-// função serverless é morta no timeout padrão (10-15s) e o widget fica
-// travado em "digitando..." — que é exatamente o sintoma relatado.
+// Sem esse teto a função serverless é morta no timeout padrão da plataforma
+// (10-15s): ela devolve HTML de erro, o `res.json()` do widget quebra e a
+// bolha fica travada em "digitando...". Uma consulta lenta cabe folgada aqui.
 export const maxDuration = 300;
 export const runtime = "nodejs";
 
@@ -41,14 +41,14 @@ export async function POST(request: Request) {
   try {
     const supabase = await createClient();
     // Prompt customizável pela dona (Configurações → Vitória AI); sem valor
-    // salvo, `perguntarClaude` cai no prompt padrão embutido no código.
+    // salvo, `perguntarIa` cai no prompt padrão embutido no código.
     const { data: configPrompt } = await supabase
       .from("configuracoes")
       .select("valor")
       .eq("chave", "vitoria_ia_prompt")
       .maybeSingle();
 
-    const resposta = await perguntarClaude(parsed.data.pergunta, configPrompt?.valor);
+    const resposta = await perguntarIa(parsed.data.pergunta, configPrompt?.valor);
 
     const { data: registro } = await supabase
       .from("consultas_farmaceuticas")
@@ -65,13 +65,13 @@ export async function POST(request: Request) {
     if (error instanceof ConsultaFarmaceuticaError) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }
-    if (error instanceof Anthropic.AuthenticationError) {
+    if (error instanceof OpenAI.AuthenticationError) {
       return NextResponse.json({ error: "Configuração da IA inválida no servidor." }, { status: 500 });
     }
-    if (error instanceof Anthropic.RateLimitError) {
+    if (error instanceof OpenAI.RateLimitError) {
       return NextResponse.json({ error: "Muitas consultas agora. Tente novamente em instantes." }, { status: 429 });
     }
-    if (error instanceof Anthropic.APIError) {
+    if (error instanceof OpenAI.APIError) {
       return NextResponse.json({ error: "Não foi possível consultar a IA agora." }, { status: 502 });
     }
     return NextResponse.json({ error: "Erro inesperado ao consultar a IA." }, { status: 500 });

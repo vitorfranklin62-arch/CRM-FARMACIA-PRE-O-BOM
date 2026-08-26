@@ -7,7 +7,7 @@ import { SegurancaForm } from "@/components/configuracoes/SegurancaForm";
 import { UsuariosSection } from "@/components/configuracoes/UsuariosSection";
 import { EntregaSection } from "@/components/configuracoes/EntregaSection";
 import { AtividadeSection } from "@/components/configuracoes/AtividadeSection";
-import { PROMPT_PADRAO_VITORIA_IA } from "@/lib/claude";
+import { PROMPT_PADRAO_VITORIA_IA } from "@/lib/ia";
 import type { BairroEntrega, Configuracao, Usuario } from "@/types/database";
 import type { AuditLogComUsuario } from "@/types/relations";
 
