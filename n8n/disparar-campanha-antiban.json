@@ -1,0 +1,1186 @@
+{
+  "name": "Farmácia Preço Bom - Disparar Campanha (anti-ban)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "DISPARAR-CAMPANHA-FARMACIA",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -160,
+        620
+      ],
+      "id": "dea38576-51b3-41d5-b2e3-293b47b37822",
+      "name": "Webhook Disparo",
+      "webhookId": "9832b91a-2e17-4b67-9213-6ab0f95553d2",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRM_FARMACIA",
+          "name": "CRM Farmácia (N8N_WEBHOOK_SECRET)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, modo: 'assincrono' }) }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        80,
+        480
+      ],
+      "id": "68e71b1c-8b7d-49e2-85fe-7bdce057a638",
+      "name": "Responder CRM"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -160,
+        860
+      ],
+      "id": "da7112f0-b224-4e19-ab77-1d8a922d80ae",
+      "name": "A cada 5 min"
+    },
+    {
+      "parameters": {
+        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/campanhas",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "id,titulo,mensagem,clientes_alvo,filtro_json"
+            },
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.body.campanha_id }}"
+            },
+            {
+              "name": "status",
+              "value": "=neq.enviada"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        80,
+        680
+      ],
+      "id": "f830a580-89f1-4c8e-9220-4b289ecc5b01",
+      "name": "Buscar campanha por ID",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "SUPABASE_FARMACIA",
+          "name": "Supabase Farmácia (service_role)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/campanhas",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "id,titulo,mensagem,clientes_alvo,filtro_json"
+            },
+            {
+              "name": "status",
+              "value": "eq.agendada"
+            },
+            {
+              "name": "agendada_para",
+              "value": "=lte.{{ $now.toISO() }}"
+            },
+            {
+              "name": "order",
+              "value": "agendada_para.asc"
+            },
+            {
+              "name": "limit",
+              "value": "5"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        80,
+        880
+      ],
+      "id": "e402bde4-7a8a-4f28-a287-af177bcb039b",
+      "name": "Buscar campanhas devidas",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "SUPABASE_FARMACIA",
+          "name": "Supabase Farmácia (service_role)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// ===========================================================================\n// PAINEL DE CONTROLE — é aqui que se mexe pra afrouxar ou apertar o disparo.\n// ===========================================================================\nconst cfg = {\n  // --- Ritmo entre uma mensagem e a próxima (segundos, sorteado no intervalo)\n  // Intervalo fixo é assinatura de robô; o sorteio quebra o padrão.\n  pausaMinSeg: 25,\n  pausaMaxSeg: 75,\n\n  // --- A cada N mensagens, uma parada longa (minutos, também sorteada).\n  // Imita gente: manda um punhado, larga o celular, volta depois.\n  loteTamanho: 20,\n  pausaLongaMinMin: 4,\n  pausaLongaMaxMin: 9,\n\n  // --- Tetos de volume\n  limiteDia: 250,        // total no dia, somando TODAS as campanhas\n  limitePorExecucao: 60, // máximo que uma rodada tenta enviar\n\n  // --- Janela de horário (hora local de São Paulo) e dias da semana.\n  // 0 = domingo. Mensagem de madrugada é o que mais rende denúncia.\n  horaInicio: 8,\n  horaFim: 20,\n  diasPermitidos: [1, 2, 3, 4, 5, 6],\n\n  // --- Disjuntor: N falhas seguidas param tudo e a campanha volta pra\n  // rascunho, esperando alguém olhar. Falha em série normalmente quer dizer\n  // que a instância caiu ou que o número já está limitado.\n  falhasSeguidasParaAbortar: 5,\n\n  // --- Rodapé de descadastro. Dar uma saída fácil é o que evita o cliente\n  // usar a única outra saída que ele tem: denunciar como spam.\n  rodapeOptout: '\\n\\nPara não receber mais, responda SAIR.',\n\n  // --- Saudações. A primeira lista entra no lugar de {{saudacao}} e precisa\n  // combinar com o nome logo depois (\"Oi, Maria!\"). A segunda só é usada\n  // quando o cliente não tem nome no cadastro, aí a frase inteira é trocada.\n  saudacoes: ['Oi', 'Olá'],\n  saudacoesSemNome: ['Oi, tudo bem?', 'Olá, tudo bem?', 'Oi!', 'Olá!'],\n};\n\n// Webhook e agendamento podem trazer a mesma campanha na mesma rodada.\nconst vistas = new Set();\nconst saida = [];\n\nfor (const item of $input.all()) {\n  const c = item.json;\n  if (!c || !c.id || vistas.has(c.id)) continue;\n  vistas.add(c.id);\n  saida.push({ json: { ...c, cfg } });\n}\n\nreturn saida;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        780
+      ],
+      "id": "57411c60-2fe6-44b4-a31d-68bcda7aea5c",
+      "name": "Preparar campanhas"
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        540,
+        780
+      ],
+      "id": "91800211-7edc-4f40-a52e-419ff86a808d",
+      "name": "Loop Campanhas"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        760,
+        620
+      ],
+      "id": "7db437a9-d757-4694-bd12-7737aa6547f6",
+      "name": "Fim"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://empresarialconectfly.uazapi.com/instance/status",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        760,
+        880
+      ],
+      "id": "80a4a835-d8a3-4c3b-8f08-2a886baeab73",
+      "name": "Checar instância",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "UAZAPI_FARMACIA",
+          "name": "UAZAPI Farmácia (token da instância)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Duas perguntas antes de encostar no WhatsApp: a instância está de pé, e\n// estamos dentro do horário combinado? Se qualquer uma falhar, a campanha\n// fica como está e a próxima rodada tenta de novo — nada se perde.\nconst campanha = $('Loop Campanhas').item.json;\nconst cfg = campanha.cfg;\nconst resposta = $input.first().json || {};\n\n// A resposta de /instance/status varia de versão pra versão, então olhamos\n// os lugares conhecidos e caímos num texto único pra inspecionar.\nconst bruto = [\n  resposta.status,\n  resposta.instance && resposta.instance.status,\n  resposta.connectionStatus,\n  resposta.state,\n].filter(Boolean).join(' ').toLowerCase();\n\nlet instanciaOk;\nlet motivo = '';\n\nif (resposta.error) {\n  instanciaOk = false;\n  motivo = 'não deu pra consultar a instância';\n} else if (!bruto) {\n  // Formato desconhecido: seguimos em frente. Se estiver mesmo fora do ar,\n  // os envios falham e o disjuntor mais adiante interrompe.\n  instanciaOk = true;\n  motivo = 'status da instância não reconhecido — seguindo com cautela';\n} else {\n  instanciaOk = /connected|open|online/.test(bruto) && !/disconnect|close|offline/.test(bruto);\n  if (!instanciaOk) motivo = 'instância desconectada (' + bruto + ')';\n}\n\nconst agora = new Date(\n  new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })\n);\nconst hora = agora.getHours();\nconst dia = agora.getDay();\n\nconst horaOk = hora >= cfg.horaInicio && hora < cfg.horaFim;\nconst diaOk = cfg.diasPermitidos.includes(dia);\n\nif (instanciaOk && !horaOk) motivo = 'fora da janela de horário (' + hora + 'h)';\nif (instanciaOk && horaOk && !diaOk) motivo = 'dia da semana não liberado';\n\nreturn [{\n  json: {\n    ...campanha,\n    pode_disparar: instanciaOk && horaOk && diaOk,\n    motivo,\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        880
+      ],
+      "id": "b5dd9f13-bafb-479f-9dca-b0530c784113",
+      "name": "Pode disparar agora?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "lib1",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.pode_disparar }}",
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        880
+      ],
+      "id": "bc4494b4-bb8e-4628-829c-fd9ebd271536",
+      "name": "Liberado?"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        1060
+      ],
+      "id": "f96082e0-df50-44dc-8c29-e0c041499e9f",
+      "name": "Adiar campanha"
+    },
+    {
+      "parameters": {
+        "url": "=https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/clientes?select=id,nome,telefone,origem_chat&aceita_campanhas=eq.true&limit=5000{{ $json.filtro_json && $json.filtro_json.origem_chat ? '&origem_chat=eq.' + $json.filtro_json.origem_chat : '' }}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1420,
+        820
+      ],
+      "id": "20e10895-a037-4f68-8eb0-76e5e9109630",
+      "name": "Buscar clientes da campanha",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "SUPABASE_FARMACIA",
+          "name": "Supabase Farmácia (service_role)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/campanha_envios",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "telefone"
+            },
+            {
+              "name": "campanha_id",
+              "value": "=eq.{{ $('Loop Campanhas').item.json.id }}"
+            },
+            {
+              "name": "limit",
+              "value": "10000"
+            }
+          ]
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1640,
+        820
+      ],
+      "id": "a29b6ab9-5833-442a-bc72-596eff385dc9",
+      "name": "Buscar já enviados",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "SUPABASE_FARMACIA",
+          "name": "Supabase Farmácia (service_role)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/campanha_envios",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "id"
+            },
+            {
+              "name": "status",
+              "value": "eq.enviado"
+            },
+            {
+              "name": "enviado_em",
+              "value": "=gte.{{ $now.setZone('America/Sao_Paulo').startOf('day').toISO() }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "count=exact"
+            },
+            {
+              "name": "Range",
+              "value": "0-0"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1860,
+        820
+      ],
+      "id": "7f434635-b8a6-464c-8fa3-a52b371de454",
+      "name": "Cota do dia",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "SUPABASE_FARMACIA",
+          "name": "Supabase Farmácia (service_role)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Monta a lista de quem vai receber AGORA, já limpa: sem telefone inválido,\n// sem repetido, sem quem já recebeu esta campanha e dentro dos tetos do dia.\nconst campanha = $('Loop Campanhas').item.json;\nconst cfg = campanha.cfg;\n\nconst clientes = $('Buscar clientes da campanha').all().map(i => i.json);\n\nconst jaEnviados = new Set(\n  $('Buscar já enviados').all()\n    .map(i => String(i.json.telefone || ''))\n    .filter(Boolean)\n);\n\n// A contagem do dia vem no cabeçalho Content-Range, formato \"0-0/123\".\nlet enviadosHoje = 0;\ntry {\n  const cabecalhos = $('Cota do dia').first().json.headers || {};\n  const faixa = String(cabecalhos['content-range'] || '');\n  enviadosHoje = Number(faixa.split('/')[1]) || 0;\n} catch (e) {\n  // Sem a contagem, o teto por execução ainda protege.\n  enviadosHoje = 0;\n}\n\nconst restanteDia = Math.max(0, cfg.limiteDia - enviadosHoje);\nlet vagas = Math.min(cfg.limitePorExecucao, restanteDia);\n\n// DDDs que existem de fato no Brasil. Sem esta conferência, um número\n// estrangeiro de 11 dígitos ganha o 55 na frente e vira um \"brasileiro\"\n// inventado — envio que nunca entrega e ainda conta como tentativa suspeita.\nconst DDDS = new Set([\n  11, 12, 13, 14, 15, 16, 17, 18, 19,\n  21, 22, 24, 27, 28,\n  31, 32, 33, 34, 35, 37, 38,\n  41, 42, 43, 44, 45, 46, 47, 48, 49,\n  51, 53, 54, 55,\n  61, 62, 63, 64, 65, 66, 67, 68, 69,\n  71, 73, 74, 75, 77, 79,\n  81, 82, 83, 84, 85, 86, 87, 88, 89,\n  91, 92, 93, 94, 95, 96, 97, 98, 99,\n]);\n\nfunction normalizar(bruto) {\n  let d = String(bruto || '').replace(/\\D/g, '');\n  if (!d) return null;\n  d = d.replace(/^0+/, '');  // 0 de operadora / DDI mal colado\n\n  // Se já veio com o DDI do Brasil, tira pra validar o miolo.\n  if ((d.length === 12 || d.length === 13) && d.startsWith('55')) {\n    d = d.slice(2);\n  }\n\n  // Daqui pra frente tem que ser um número local brasileiro.\n  if (d.length !== 10 && d.length !== 11) return null;\n  if (!DDDS.has(Number(d.slice(0, 2)))) return null;\n\n  const resto = d.slice(2);\n  const celular = resto.length === 9 && resto[0] === '9';\n  const fixo = resto.length === 8 && /^[2-5]/.test(resto);\n  if (!celular && !fixo) return null;\n\n  return '55' + d;\n}\n\nfunction sortear(lista) {\n  return lista[Math.floor(Math.random() * lista.length)];\n}\n\nconst vistos = new Set();\nconst fila = [];\nlet descartadosInvalidos = 0;\n\nfor (const c of clientes) {\n  if (vagas <= 0) break;\n\n  const numero = normalizar(c.telefone);\n  // Número torto é o pior tipo de envio: não entrega e ainda conta como\n  // tentativa suspeita. Melhor nem tentar.\n  if (!numero) { descartadosInvalidos++; continue; }\n  if (vistos.has(numero)) continue;\n  vistos.add(numero);\n  if (jaEnviados.has(numero)) continue;\n\n  const primeiro = String(c.nome || '').trim().split(/\\s+/)[0] || '';\n  let texto = String(campanha.mensagem || '');\n\n  texto = texto.replace(/\\{\\{\\s*saudacao\\s*\\}\\}/gi, sortear(cfg.saudacoes));\n\n  if (primeiro) {\n    texto = texto.replace(/\\{\\{\\s*nome\\s*\\}\\}/gi, primeiro);\n  } else {\n    // Sem nome no cadastro, \"Oi, !\" fica ridículo — troca a frase inteira.\n    texto = texto.replace(/(oi|olá|ola)[,\\s]*\\{\\{\\s*nome\\s*\\}\\}\\s*!?/gi, sortear(cfg.saudacoesSemNome));\n    texto = texto.replace(/\\{\\{\\s*nome\\s*\\}\\}/gi, '');\n  }\n\n  texto = texto.replace(/[ \\t]{2,}/g, ' ').trim();\n\n  if (cfg.rodapeOptout && !/responda\\s+sair/i.test(texto)) {\n    texto += cfg.rodapeOptout;\n  }\n\n  fila.push({\n    campanha_id: campanha.id,\n    cliente_id: c.id,\n    nome: c.nome,\n    numero,\n    texto,\n    cfg,\n  });\n  vagas--;\n}\n\nif (fila.length === 0) {\n  // Ninguém elegível: devolve um item de controle pra campanha poder ser\n  // fechada em vez de ficar sendo tentada de 5 em 5 minutos pra sempre.\n  return [{ json: {\n    nada_a_enviar: true,\n    campanha_id: campanha.id,\n    cfg,\n    diagnostico: {\n      clientes_lidos: clientes.length,\n      ja_receberam: jaEnviados.size,\n      telefones_invalidos: descartadosInvalidos,\n      enviados_hoje: enviadosHoje,\n      teto_dia: cfg.limiteDia,\n    },\n  }}];\n}\n\nreturn fila.map(f => ({ json: f }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        820
+      ],
+      "id": "37030e0d-4e74-4394-9b21-a2df75d6ae82",
+      "name": "Montar fila"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://empresarialconectfly.uazapi.com/chat/check",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ numbers: $('Montar fila').all().map(i => i.json.numero).filter(i => i && i !== undefined) }) }}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2300,
+        820
+      ],
+      "id": "461e6687-50d8-4778-bcd2-68f9f33459d0",
+      "name": "Checar números no WhatsApp",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "UAZAPI_FARMACIA",
+          "name": "UAZAPI Farmácia (token da instância)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Mandar pra número que não tem WhatsApp é um dos sinais que mais pesam\n// contra o remetente. Conferimos a lista inteira numa chamada só e\n// separamos quem fica de quem sai.\nconst fila = $('Montar fila').all().map(i => i.json);\n\nif (fila.length === 1 && fila[0].nada_a_enviar) {\n  return [{ json: fila[0] }];\n}\n\nconst cfg = fila[0].cfg;\n\n// A resposta de /chat/check muda de formato conforme a versão; juntamos\n// tudo que parecer uma lista de resultados e indexamos pelos dígitos.\nconst respostas = $input.all().map(i => i.json);\nconst registros = [];\nfor (const r of respostas) {\n  if (!r || r.error) continue;\n  const possiveis = Array.isArray(r) ? r\n    : Array.isArray(r.numbers) ? r.numbers\n    : Array.isArray(r.result) ? r.result\n    : Array.isArray(r.data) ? r.data\n    : Array.isArray(r.chats) ? r.chats\n    : [r];\n  registros.push(...possiveis.filter(Boolean));\n}\n\nconst mapa = new Map();\nfor (const reg of registros) {\n  const chave = String(\n    reg.query || reg.number || reg.jid || reg.phone || reg.wa_id || ''\n  ).replace(/\\D/g, '');\n  if (!chave) continue;\n  // Só tratamos como \"não tem\" quando a API diz isso com todas as letras.\n  // Na dúvida, manda: barrar por causa de uma resposta que não entendemos\n  // pararia a campanha inteira à toa.\n  const naoTem = reg.exists === false || reg.exists === 'false' || reg.isInWhatsapp === false;\n  mapa.set(chave, !naoTem);\n}\n\nconst houveResposta = mapa.size > 0;\n\nconst saida = fila.map(f => {\n  // Sem resposta utilizável da checagem, seguimos com o envio: barrar todo\n  // mundo por causa de uma API fora do ar seria pior que o problema.\n  const temWhatsapp = houveResposta ? (mapa.get(f.numero) ?? true) : true;\n  return { json: { ...f, tem_whatsapp: temWhatsapp, descartar: !temWhatsapp } };\n});\n\nconst aptos = saida.filter(s => s.json.tem_whatsapp);\n\nif (aptos.length === 0) {\n  return [{ json: {\n    nada_a_enviar: true,\n    campanha_id: fila[0].campanha_id,\n    cfg,\n    descartados: saida.map(s => s.json),\n    diagnostico: { motivo: 'nenhum número da fila tem WhatsApp' },\n  }}];\n}\n\nreturn saida;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2520,
+        820
+      ],
+      "id": "aeae63af-d2cd-4910-b528-418d156bdd0e",
+      "name": "Separar quem tem WhatsApp"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sw1",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.descartar }}",
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        2740,
+        1040
+      ],
+      "id": "a4a8ed03-c275-4908-9c3a-2f0e17468ef2",
+      "name": "Sem WhatsApp"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/campanha_envios",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ campanha_id: $json.campanha_id, cliente_id: $json.cliente_id, telefone: $json.numero, status: 'sem_whatsapp' }) }}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2960,
+        1040
+      ],
+      "id": "6c966905-01ab-49f4-af42-76e3a738a6ed",
+      "name": "Registrar sem WhatsApp",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "SUPABASE_FARMACIA",
+          "name": "Supabase Farmácia (service_role)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ta1",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.tem_whatsapp === true }}",
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        2740,
+        820
+      ],
+      "id": "7fd45d91-5a38-4d5c-9e2a-8f24d61e6f1c",
+      "name": "Tem alguém pra enviar?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ne1",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.nada_a_enviar === true }}",
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2960,
+        640
+      ],
+      "id": "cccabf6e-a898-4d19-afa9-e2e0c844ec54",
+      "name": "Nada a enviar?"
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        3180,
+        820
+      ],
+      "id": "31ba02ca-cfbb-44dc-9f0c-cd2f3843db60",
+      "name": "Loop Clientes"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://empresarialconectfly.uazapi.com/send/text",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.numero, text: $json.texto, delay: Math.floor(Math.random() * 5000) + 3000, readchat: true }) }}",
+        "options": {
+          "timeout": 30000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3400,
+        900
+      ],
+      "id": "da7b660c-ce2e-4784-9787-6453e870b54d",
+      "name": "Enviar mensagem",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "UAZAPI_FARMACIA",
+          "name": "UAZAPI Farmácia (token da instância)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Três coisas acontecem aqui:\n//   1. decide se o envio deu certo;\n//   2. sorteia quanto tempo esperar antes do próximo (e a parada longa\n//      quando fecha um lote);\n//   3. segura o disjuntor — falha em série faz o disparo parar.\nconst cfg = $('Loop Campanhas').item.json.cfg;\nconst enviado = $('Loop Clientes').item.json;\nconst resposta = $input.first().json || {};\n\nconst deuErro = !!resposta.error;\nconst mensagemErro = deuErro\n  ? String(resposta.error.message || resposta.error.description || resposta.error).slice(0, 500)\n  : null;\n\n// Estado de execução. Zera quando muda a execução, então uma rodada nunca\n// herda o contador da anterior.\nconst estado = $getWorkflowStaticData('global');\nif (estado.execucao !== $execution.id) {\n  estado.execucao = $execution.id;\n  estado.falhasSeguidas = 0;\n  estado.enviados = 0;\n}\n\nif (deuErro) {\n  estado.falhasSeguidas++;\n} else {\n  estado.falhasSeguidas = 0;\n  estado.enviados++;\n}\n\nconst abortar = estado.falhasSeguidas >= cfg.falhasSeguidasParaAbortar;\n\nfunction sortearInteiro(min, max) {\n  return Math.floor(Math.random() * (max - min + 1)) + min;\n}\n\n// Fecha lote? Para mais tempo. Senão, só o intervalo curto sorteado.\nconst fechouLote = estado.enviados > 0 && estado.enviados % cfg.loteTamanho === 0;\nconst esperar = fechouLote\n  ? sortearInteiro(cfg.pausaLongaMinMin, cfg.pausaLongaMaxMin) * 60\n  : sortearInteiro(cfg.pausaMinSeg, cfg.pausaMaxSeg);\n\nreturn [{\n  json: {\n    campanha_id: enviado.campanha_id,\n    cliente_id: enviado.cliente_id,\n    telefone: enviado.numero,\n    status: deuErro ? 'falhou' : 'enviado',\n    erro: mensagemErro,\n    abortar,\n    fechou_lote: fechouLote,\n    esperar_segundos: abortar ? 1 : esperar,\n    falhas_seguidas: estado.falhasSeguidas,\n    enviados_nesta_execucao: estado.enviados,\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3620,
+        900
+      ],
+      "id": "6cecf45d-a300-4e95-b450-f371095fd864",
+      "name": "Ritmo e proteção"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/campanha_envios",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ campanha_id: $json.campanha_id, cliente_id: $json.cliente_id, telefone: $json.telefone, status: $json.status, erro: $json.erro }) }}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3840,
+        900
+      ],
+      "id": "9479f63b-dcab-4c7e-9348-bb02a31b0fe3",
+      "name": "Registrar envio",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "SUPABASE_FARMACIA",
+          "name": "Supabase Farmácia (service_role)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ab1",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $('Ritmo e proteção').item.json.abortar }}",
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4060,
+        900
+      ],
+      "id": "8177d870-254a-488c-8b48-e9c64f0a976c",
+      "name": "Abortar disparo?"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/campanhas",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "=eq.{{ $('Loop Campanhas').item.json.id }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'rascunho' }) }}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4280,
+        1080
+      ],
+      "id": "4afc04e6-fa3c-40f2-a520-0b7292972584",
+      "name": "Pausar campanha pra revisão",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "SUPABASE_FARMACIA",
+          "name": "Supabase Farmácia (service_role)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Ritmo e proteção').item.json.esperar_segundos }}",
+        "unit": "seconds"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4280,
+        900
+      ],
+      "id": "9ed22efd-c508-4202-a5b6-ce3c40e35fb9",
+      "name": "Aguardar",
+      "webhookId": "2509f288-2e1d-45a6-bcad-b7dff1c76329"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://conectfly-crm-farmacia.lnuwza.easypanel.host/api/campanhas/' + $('Loop Campanhas').item.json.id + '/status' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'enviada' }) }}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3400,
+        620
+      ],
+      "id": "512a5b56-bfe9-41b6-9b9e-4aaa7e3e553c",
+      "name": "Marcar campanha enviada",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRM_FARMACIA",
+          "name": "CRM Farmácia (N8N_WEBHOOK_SECRET)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "Webhook Disparo": {
+      "main": [
+        [
+          {
+            "node": "Responder CRM",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Buscar campanha por ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A cada 5 min": {
+      "main": [
+        [
+          {
+            "node": "Buscar campanhas devidas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar campanha por ID": {
+      "main": [
+        [
+          {
+            "node": "Preparar campanhas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar campanhas devidas": {
+      "main": [
+        [
+          {
+            "node": "Preparar campanhas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar campanhas": {
+      "main": [
+        [
+          {
+            "node": "Loop Campanhas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Campanhas": {
+      "main": [
+        [
+          {
+            "node": "Fim",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Checar instância",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checar instância": {
+      "main": [
+        [
+          {
+            "node": "Pode disparar agora?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pode disparar agora?": {
+      "main": [
+        [
+          {
+            "node": "Liberado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Liberado?": {
+      "main": [
+        [
+          {
+            "node": "Buscar clientes da campanha",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Adiar campanha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adiar campanha": {
+      "main": [
+        [
+          {
+            "node": "Loop Campanhas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar clientes da campanha": {
+      "main": [
+        [
+          {
+            "node": "Buscar já enviados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar já enviados": {
+      "main": [
+        [
+          {
+            "node": "Cota do dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cota do dia": {
+      "main": [
+        [
+          {
+            "node": "Montar fila",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar fila": {
+      "main": [
+        [
+          {
+            "node": "Checar números no WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checar números no WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Separar quem tem WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Separar quem tem WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Nada a enviar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nada a enviar?": {
+      "main": [
+        [
+          {
+            "node": "Marcar campanha enviada",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tem alguém pra enviar?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Sem WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sem WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Registrar sem WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem alguém pra enviar?": {
+      "main": [
+        [
+          {
+            "node": "Loop Clientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Clientes": {
+      "main": [
+        [
+          {
+            "node": "Marcar campanha enviada",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar mensagem": {
+      "main": [
+        [
+          {
+            "node": "Ritmo e proteção",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ritmo e proteção": {
+      "main": [
+        [
+          {
+            "node": "Registrar envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar envio": {
+      "main": [
+        [
+          {
+            "node": "Abortar disparo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Abortar disparo?": {
+      "main": [
+        [
+          {
+            "node": "Pausar campanha pra revisão",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aguardar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aguardar": {
+      "main": [
+        [
+          {
+            "node": "Loop Clientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar campanha enviada": {
+      "main": [
+        [
+          {
+            "node": "Loop Campanhas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 10800
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
