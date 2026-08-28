@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { formatCurrency, formatDateTime, formatRelativeTime, cn } from "@/lib/utils";
-import { ETAPAS } from "./kanban-config";
+import { ETAPAS } from "./etapas";
 import type { PedidoCompleto } from "@/types/relations";
 import type { PedidoStatus } from "@/types/database";
 

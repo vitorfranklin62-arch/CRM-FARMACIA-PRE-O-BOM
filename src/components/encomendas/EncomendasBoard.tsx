@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import { Input } from "@/components/ui/Field";
@@ -8,18 +8,30 @@ import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
 import { logAudit } from "@/lib/audit";
 import { ehHoje } from "@/lib/utils";
+import { ColunaKanban } from "@/components/kanban/ColunaKanban";
+import { BarraFinalizar } from "@/components/kanban/BarraFinalizar";
+import { CartaoFantasma } from "@/components/kanban/CartaoFantasma";
+import { useKanbanArrastar } from "@/components/kanban/useKanbanArrastar";
+import { ALVO_FINALIZAR, alvoDaColuna, statusDoAlvo } from "@/components/kanban/paletas";
 import { EncomendaCard } from "./EncomendaCard";
 import { EncomendaForm } from "./EncomendaForm";
+import { ETAPAS, ORDEM_ETAPAS, STATUS_FINALIZADO, STATUS_AVISA_CLIENTE } from "./etapas";
 import type { EncomendaComCliente } from "@/types/relations";
 import type { EncomendaStatus } from "@/types/database";
 
-const COLUMNS: { status: EncomendaStatus; label: string; somenteHoje?: boolean }[] = [
-  { status: "pendente", label: "Aguardando chegar" },
-  { status: "chegou", label: "Chegou" },
-  { status: "entregue", label: "Retirada hoje", somenteHoje: true },
-];
+type EtapaVisivel = (typeof ORDEM_ETAPAS)[number];
 
-export function EncomendasBoard({ initialEncomendas, userId }: { initialEncomendas: EncomendaComCliente[]; userId: string }) {
+// A coluna de retiradas só mostra o que saiu hoje — sem isso, o histórico
+// inteiro ia empilhando e ficava difícil bater o olho no dia.
+const SOMENTE_HOJE: Partial<Record<EtapaVisivel, boolean>> = { entregue: true };
+
+export function EncomendasBoard({
+  initialEncomendas,
+  userId,
+}: {
+  initialEncomendas: EncomendaComCliente[];
+  userId: string;
+}) {
   const [encomendas, setEncomendas] = useState(initialEncomendas);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
@@ -42,43 +54,78 @@ export function EncomendasBoard({ initialEncomendas, userId }: { initialEncomend
     };
   }, [router]);
 
-  async function handleUpdateStatus(id: string, status: EncomendaStatus) {
-    setUpdatingId(id);
-    setEncomendas((prev) => prev.map((e) => (e.id === id ? { ...e, status } : e)));
+  const handleUpdateStatus = useCallback(
+    async (id: string, status: EncomendaStatus) => {
+      const atual = encomendas.find((e) => e.id === id);
+      if (!atual || atual.status === status) return;
 
-    if (status === "chegou") {
-      // Precisa passar pelo servidor: é essa etapa que avisa o cliente por WhatsApp.
-      const res = await fetch(`/api/encomendas/${id}/status`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) router.refresh();
-    } else {
-      const supabase = createClient();
-      const { error } = await supabase.from("encomendas").update({ status }).eq("id", id);
-      if (error) {
-        router.refresh();
+      setUpdatingId(id);
+      setEncomendas((prev) => prev.map((e) => (e.id === id ? { ...e, status } : e)));
+
+      if (status === STATUS_AVISA_CLIENTE) {
+        // Precisa passar pelo servidor: é essa etapa que avisa o cliente por WhatsApp.
+        const res = await fetch(`/api/encomendas/${id}/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        if (!res.ok) router.refresh();
       } else {
-        await logAudit(supabase, "encomenda_status_atualizado", "encomendas", id, { status });
+        const supabase = createClient();
+        const { error } = await supabase.from("encomendas").update({ status }).eq("id", id);
+        if (error) {
+          router.refresh();
+        } else {
+          await logAudit(supabase, "encomenda_status_atualizado", "encomendas", id, { status });
+        }
       }
-    }
 
-    setUpdatingId(null);
-  }
+      setUpdatingId(null);
+    },
+    [encomendas, router]
+  );
+
+  const aoSoltar = useCallback(
+    (id: string, alvo: string) => {
+      if (alvo === ALVO_FINALIZAR) {
+        handleUpdateStatus(id, STATUS_FINALIZADO);
+        return;
+      }
+      const status = statusDoAlvo(alvo);
+      if (status) handleUpdateStatus(id, status as EncomendaStatus);
+    },
+    [handleUpdateStatus]
+  );
+
+  const { arrasto, iniciarArrasto } = useKanbanArrastar({ aoSoltar });
+
+  const arrastada = arrasto ? encomendas.find((e) => e.id === arrasto.id) ?? null : null;
+  const jaFinalizada = arrastada?.status === STATUS_FINALIZADO;
+  const sobreFinalizar = arrasto?.alvo === ALVO_FINALIZAR;
 
   const termo = busca.trim().toLowerCase();
-  const filtradas = termo
-    ? encomendas.filter(
-        (e) =>
-          e.clientes?.nome.toLowerCase().includes(termo) ||
-          e.produto_nome.toLowerCase().includes(termo) ||
-          e.clientes?.telefone.replace(/\D/g, "").includes(termo.replace(/\D/g, ""))
-      )
-    : encomendas;
+  const filtradas = useMemo(() => {
+    if (!termo) return encomendas;
+    return encomendas.filter(
+      (e) =>
+        e.clientes?.nome.toLowerCase().includes(termo) ||
+        e.produto_nome.toLowerCase().includes(termo) ||
+        e.clientes?.telefone.replace(/\D/g, "").includes(termo.replace(/\D/g, ""))
+    );
+  }, [encomendas, termo]);
+
+  const porEtapa = useMemo(() => {
+    const mapa = {} as Record<EtapaVisivel, EncomendaComCliente[]>;
+    for (const status of ORDEM_ETAPAS) {
+      mapa[status] = filtradas.filter(
+        (e) => e.status === status && (!SOMENTE_HOJE[status] || ehHoje(e.atualizado_em))
+      );
+    }
+    return mapa;
+  }, [filtradas]);
 
   return (
-    <>
+    <div className="relative">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="relative max-w-sm flex-1">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
@@ -95,39 +142,61 @@ export function EncomendasBoard({ initialEncomendas, userId }: { initialEncomend
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {COLUMNS.map((col) => {
-          const items = filtradas.filter(
-            (e) => e.status === col.status && (!col.somenteHoje || ehHoje(e.atualizado_em))
-          );
+        {ORDEM_ETAPAS.map((status) => {
+          const etapa = ETAPAS[status];
+          const itens = porEtapa[status];
+          const ativa = arrasto?.alvo === alvoDaColuna(status) && arrastada?.status !== status;
+          // Soltar em "Chegou" dispara o WhatsApp pro cliente — a coluna avisa
+          // disso enquanto está sob o cartão, porque do lado do cliente a
+          // mensagem não tem volta.
+          const avisaCliente = ativa && status === STATUS_AVISA_CLIENTE;
+
           return (
-            <div key={col.status} className="flex flex-col gap-3">
-              <div className="flex items-center justify-between px-1">
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{col.label}</h3>
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500 dark:bg-white/10 dark:text-gray-400">
-                  {items.length}
-                </span>
-              </div>
-              <div className="flex flex-col gap-3">
-                {items.length === 0 && (
-                  <p className="rounded-xl border border-dashed border-gray-200 py-8 text-center text-xs text-gray-400 dark:border-white/10 dark:text-gray-500">
-                    Nenhuma encomenda
-                  </p>
-                )}
-                {items.map((encomenda) => (
-                  <EncomendaCard
-                    key={encomenda.id}
-                    encomenda={encomenda}
-                    onUpdateStatus={handleUpdateStatus}
-                    updating={updatingId === encomenda.id}
-                  />
-                ))}
-              </div>
-            </div>
+            <ColunaKanban
+              key={status}
+              status={status}
+              paleta={etapa}
+              titulo={etapa.rotulo}
+              subtitulo={avisaCliente ? "O cliente será avisado no WhatsApp" : etapa.descricao}
+              contagem={itens.length}
+              ativa={ativa}
+              vazioTexto="Nenhuma encomenda"
+              ativaTexto={avisaCliente ? "Solte para avisar o cliente" : "Solte aqui"}
+            >
+              {itens.map((encomenda) => (
+                <EncomendaCard
+                  key={encomenda.id}
+                  encomenda={encomenda}
+                  onUpdateStatus={handleUpdateStatus}
+                  updating={updatingId === encomenda.id}
+                  arrastando={arrasto?.id === encomenda.id}
+                  aoIniciarArrasto={(evento) =>
+                    iniciarArrasto(evento, { id: encomenda.id, origem: encomenda.status })
+                  }
+                />
+              ))}
+            </ColunaKanban>
           );
         })}
       </div>
 
+      <BarraFinalizar
+        visivel={!!arrasto}
+        ativa={sobreFinalizar}
+        bloqueada={jaFinalizada}
+        titulo="Finalizar encomenda"
+        instrucao="Arraste até aqui para concluir"
+        instrucaoAtiva="Solte para marcar como retirada"
+        textoBloqueado="Esta encomenda já foi retirada"
+      />
+
+      {arrasto && arrastada && (
+        <CartaoFantasma arrasto={arrasto} encolhido={sobreFinalizar && !jaFinalizada}>
+          <EncomendaCard encomenda={arrastada} onUpdateStatus={() => {}} updating={false} fantasma />
+        </CartaoFantasma>
+      )}
+
       <EncomendaForm open={addingEncomenda} onClose={() => setAddingEncomenda(false)} userId={userId} />
-    </>
+    </div>
   );
 }
