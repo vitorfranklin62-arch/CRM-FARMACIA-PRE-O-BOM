@@ -1,23 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { logAudit } from "@/lib/audit";
-import { ehHoje } from "@/lib/utils";
+import { ehHoje, formatCurrency } from "@/lib/utils";
+import { ColunaKanban } from "@/components/kanban/ColunaKanban";
+import { BarraFinalizar } from "@/components/kanban/BarraFinalizar";
+import { CartaoFantasma } from "@/components/kanban/CartaoFantasma";
+import { useKanbanArrastar } from "@/components/kanban/useKanbanArrastar";
+import { ALVO_FINALIZAR, alvoDaColuna, statusDoAlvo } from "@/components/kanban/paletas";
 import { PedidoCard } from "./PedidoCard";
+import { ETAPAS, ORDEM_ETAPAS, STATUS_FINALIZADO } from "./etapas";
 import type { PedidoCompleto } from "@/types/relations";
 import type { PedidoStatus } from "@/types/database";
 
-const COLUMNS: { status: PedidoStatus; label: string; somenteHoje?: boolean }[] = [
-  { status: "novo", label: "Pronto pra separar" },
-  { status: "separando", label: "Separando" },
-  { status: "pronto", label: "Pronto" },
-  // Só mostra as entregues de hoje — sem isso, a coluna ia empilhando o
-  // histórico inteiro e ficava difícil de bater o olho no que interessa
-  // no dia. O pedido continua no banco pro dashboard, só some da coluna.
-  { status: "entregue", label: "Entregue hoje", somenteHoje: true },
-];
+// A coluna de finalizados só mostra o que saiu hoje — sem isso, o histórico
+// inteiro ia empilhando e ficava difícil bater o olho no dia. O pedido
+// continua no banco pro dashboard, só some da coluna.
+const SOMENTE_HOJE: Partial<Record<PedidoStatus, boolean>> = { entregue: true };
 
 export function PedidosBoard({ initialPedidos }: { initialPedidos: PedidoCompleto[] }) {
   const [pedidos, setPedidos] = useState(initialPedidos);
@@ -40,53 +41,106 @@ export function PedidosBoard({ initialPedidos }: { initialPedidos: PedidoComplet
     };
   }, [router]);
 
-  async function handleUpdateStatus(id: string, status: PedidoStatus) {
-    setUpdatingId(id);
-    setPedidos((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
+  const handleUpdateStatus = useCallback(
+    async (id: string, status: PedidoStatus) => {
+      const atual = pedidos.find((p) => p.id === id);
+      if (!atual || atual.status === status) return;
 
-    const supabase = createClient();
-    const { error } = await supabase.from("pedidos").update({ status }).eq("id", id);
+      setUpdatingId(id);
+      // Move na tela na hora e só depois confirma no banco — o balcão não
+      // pode ficar esperando a ida e volta pra ver o cartão sair do lugar.
+      setPedidos((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
 
-    if (error) {
-      router.refresh();
-    } else {
-      await logAudit(supabase, "pedido_status_atualizado", "pedidos", id, { status });
+      const supabase = createClient();
+      const { error } = await supabase.from("pedidos").update({ status }).eq("id", id);
+
+      if (error) {
+        router.refresh();
+      } else {
+        await logAudit(supabase, "pedido_status_atualizado", "pedidos", id, { status });
+      }
+      setUpdatingId(null);
+    },
+    [pedidos, router]
+  );
+
+  const aoSoltar = useCallback(
+    (id: string, alvo: string) => {
+      if (alvo === ALVO_FINALIZAR) {
+        handleUpdateStatus(id, STATUS_FINALIZADO);
+        return;
+      }
+      const status = statusDoAlvo(alvo);
+      if (status) handleUpdateStatus(id, status as PedidoStatus);
+    },
+    [handleUpdateStatus]
+  );
+
+  const { arrasto, iniciarArrasto } = useKanbanArrastar({ aoSoltar });
+
+  const pedidoArrastado = arrasto ? pedidos.find((p) => p.id === arrasto.id) ?? null : null;
+  const jaFinalizado = pedidoArrastado?.status === STATUS_FINALIZADO;
+  const sobreFinalizar = arrasto?.alvo === ALVO_FINALIZAR;
+
+  const porEtapa = useMemo(() => {
+    const mapa = {} as Record<PedidoStatus, PedidoCompleto[]>;
+    for (const status of ORDEM_ETAPAS) {
+      mapa[status] = pedidos.filter(
+        (p) => p.status === status && (!SOMENTE_HOJE[status] || ehHoje(p.atualizado_em))
+      );
     }
-    setUpdatingId(null);
-  }
+    return mapa;
+  }, [pedidos]);
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {COLUMNS.map((col) => {
-        const items = pedidos.filter(
-          (p) => p.status === col.status && (!col.somenteHoje || ehHoje(p.atualizado_em))
-        );
-        return (
-          <div key={col.status} className="flex flex-col gap-3">
-            <div className="flex items-center justify-between px-1">
-              <h3 className="text-sm font-semibold text-gray-700">{col.label}</h3>
-              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
-                {items.length}
-              </span>
-            </div>
-            <div className="flex flex-col gap-3">
-              {items.length === 0 && (
-                <p className="rounded-xl border border-dashed border-gray-200 py-8 text-center text-xs text-gray-400">
-                  Nenhum pedido
-                </p>
-              )}
-              {items.map((pedido) => (
+    <div className="relative">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {ORDEM_ETAPAS.map((status) => {
+          const etapa = ETAPAS[status];
+          const itens = porEtapa[status];
+          const total = itens.reduce((soma, p) => soma + Number(p.total ?? 0), 0);
+
+          return (
+            <ColunaKanban
+              key={status}
+              status={status}
+              paleta={etapa}
+              titulo={etapa.rotulo}
+              subtitulo={`${etapa.descricao} · ${formatCurrency(total)}`}
+              contagem={itens.length}
+              ativa={arrasto?.alvo === alvoDaColuna(status) && pedidoArrastado?.status !== status}
+              vazioTexto="Nenhum pedido"
+            >
+              {itens.map((pedido) => (
                 <PedidoCard
                   key={pedido.id}
                   pedido={pedido}
                   onUpdateStatus={handleUpdateStatus}
                   updating={updatingId === pedido.id}
+                  arrastando={arrasto?.id === pedido.id}
+                  aoIniciarArrasto={(evento) => iniciarArrasto(evento, { id: pedido.id, origem: pedido.status })}
                 />
               ))}
-            </div>
-          </div>
-        );
-      })}
+            </ColunaKanban>
+          );
+        })}
+      </div>
+
+      <BarraFinalizar
+        visivel={!!arrasto}
+        ativa={sobreFinalizar}
+        bloqueada={jaFinalizado}
+        titulo="Finalizar pedido"
+        instrucao="Arraste até aqui para concluir"
+        instrucaoAtiva="Solte para concluir a entrega"
+        textoBloqueado="Este pedido já está finalizado"
+      />
+
+      {arrasto && pedidoArrastado && (
+        <CartaoFantasma arrasto={arrasto} encolhido={sobreFinalizar && !jaFinalizado}>
+          <PedidoCard pedido={pedidoArrastado} onUpdateStatus={() => {}} updating={false} fantasma />
+        </CartaoFantasma>
+      )}
     </div>
   );
 }

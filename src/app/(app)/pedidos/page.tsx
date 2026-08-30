@@ -1,3 +1,4 @@
+import { ClipboardList, MoveHorizontal } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { PedidosBoard } from "@/components/pedidos/PedidosBoard";
@@ -36,9 +37,22 @@ export default async function PedidosPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Pedidos</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Fila de separação — arraste o pedido até a entrega.</p>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand-600 via-brand-500 to-accent-500 px-5 py-6 text-white shadow-card-md">
+        <div className="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/10" />
+        <div className="pointer-events-none absolute -bottom-20 right-24 h-40 w-40 rounded-full bg-white/5" />
+        <div className="relative flex items-center gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
+            <ClipboardList size={22} />
+          </span>
+          <div>
+            <h1 className="text-xl font-bold">Pedidos</h1>
+            <p className="flex items-center gap-1.5 text-sm text-white/80">
+              <MoveHorizontal size={14} className="shrink-0" />
+              Arraste o cartão entre as etapas — e solte na barra de{" "}
+              <strong className="font-semibold text-white">Finalizar pedido</strong> pra concluir.
+            </p>
+          </div>
+        </div>
       </div>
 
       <PedidosBoard initialPedidos={data as PedidoCompleto[]} />
