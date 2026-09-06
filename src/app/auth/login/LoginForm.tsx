@@ -13,7 +13,7 @@ function SubmitButton() {
     <button
       type="submit"
       disabled={pending}
-      className="w-full rounded-lg bg-accent-500 py-2.5 font-medium text-white transition hover:bg-accent-600 disabled:cursor-not-allowed disabled:opacity-60"
+      className="w-full rounded-xl bg-gradiente-acento py-2.5 font-semibold text-white shadow-brilho-acento transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
     >
       {pending ? "Entrando..." : "Entrar"}
     </button>
@@ -24,10 +24,10 @@ export function LoginForm() {
   const [state, formAction] = useFormState(loginAction, initialState);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F5F6FA] px-4 dark:bg-[#0A0F1E]">
+    <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-navy-900 shadow-lg shadow-navy-900/20">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradiente-marca shadow-brilho-marca">
             <LogoMark size={38} />
           </div>
           <div className="text-center leading-tight">
@@ -43,8 +43,9 @@ export function LoginForm() {
 
         <form
           action={formAction}
-          className="rounded-2xl border border-gray-100 bg-white p-6 shadow-card dark:border-white/10 dark:bg-[#11172A]"
+          className="relative overflow-hidden rounded-2xl border border-white/60 bg-white/90 p-6 shadow-card-md backdrop-blur-sm dark:border-white/10 dark:bg-[#11172A]/90"
         >
+          <span aria-hidden className="faixa-arcoiris absolute inset-x-0 top-0 h-1" />
           <div className="space-y-4">
             <div>
               <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -61,7 +62,7 @@ export function LoginForm() {
                   type="email"
                   autoComplete="email"
                   required
-                  className="w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-brand-400 dark:focus:ring-brand-500/20"
+                  className="w-full rounded-xl border border-brand-200/70 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-brand-400 dark:focus:ring-brand-500/25"
                   placeholder="voce@farmaciaprecobom.com"
                 />
               </div>
@@ -83,7 +84,7 @@ export function LoginForm() {
                   autoComplete="current-password"
                   required
                   minLength={6}
-                  className="w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-brand-400 dark:focus:ring-brand-500/20"
+                  className="w-full rounded-xl border border-brand-200/70 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-brand-400 dark:focus:ring-brand-500/25"
                   placeholder="••••••••"
                 />
               </div>

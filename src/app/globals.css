@@ -3,23 +3,74 @@
 @tailwind utilities;
 
 :root {
-  --background: #f8fafc;
+  --background: #f4f6fd;
   --foreground: #0f172a;
+
+  /* Gradientes da identidade Preço Bom (marinho -> coral). Ficam aqui pra
+     todo o painel usar a mesma linguagem de cor, sem cada tela inventar a sua. */
+  --gradiente-marca: linear-gradient(135deg, #24409e 0%, #3a57b3 55%, #5e7acb 100%);
+  --gradiente-acento: linear-gradient(135deg, #ed5b4c 0%, #e8483c 60%, #cc3b30 100%);
+  --gradiente-sucesso: linear-gradient(135deg, #34d399 0%, #059669 100%);
+}
+
+.dark {
+  --background: #070c2b;
+  --foreground: #e2e8f0;
 }
 
 body {
   color: var(--foreground);
-  background: var(--background);
+  background-color: var(--background);
+  /* Brilhos suaves nos cantos: dão cor ao fundo sem atrapalhar a leitura. */
+  background-image:
+    radial-gradient(60rem 32rem at 8% -10%, rgba(58, 87, 179, 0.14), transparent 60%),
+    radial-gradient(52rem 30rem at 100% 0%, rgba(232, 72, 60, 0.1), transparent 60%),
+    radial-gradient(46rem 28rem at 50% 110%, rgba(139, 92, 246, 0.1), transparent 60%);
+  background-attachment: fixed;
+}
+
+.dark body {
+  background-image:
+    radial-gradient(60rem 32rem at 8% -10%, rgba(58, 87, 179, 0.3), transparent 60%),
+    radial-gradient(52rem 30rem at 100% 0%, rgba(232, 72, 60, 0.16), transparent 60%),
+    radial-gradient(46rem 28rem at 50% 110%, rgba(139, 92, 246, 0.16), transparent 60%);
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Barra de rolagem discreta e colorida, usada nas listas longas (chat, tabelas). */
+  .rolagem-fina {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(58, 87, 179, 0.35) transparent;
+  }
+  .rolagem-fina::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+  .rolagem-fina::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: linear-gradient(180deg, rgba(58, 87, 179, 0.45), rgba(232, 72, 60, 0.35));
+  }
+  .rolagem-fina::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
 @layer components {
   .badge {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset;
+  }
+
+  /* Título de página com preenchimento em gradiente. */
+  .titulo-gradiente {
+    @apply bg-gradient-to-r from-brand-700 via-brand-500 to-accent-500 bg-clip-text text-transparent dark:from-brand-200 dark:via-brand-300 dark:to-accent-300;
+  }
+
+  /* Faixa fina colorida usada no topo de cartões e painéis. */
+  .faixa-arcoiris {
+    @apply bg-gradient-to-r from-brand-500 via-violet-500 to-accent-500;
   }
 }

@@ -53,6 +53,25 @@ const config: Config = {
       boxShadow: {
         card: "0 1px 3px rgba(15, 23, 42, 0.10)",
         "card-md": "0 6px 20px rgba(15, 23, 42, 0.10)",
+        // Sombras coloridas: dão relevo sem pesar o layout.
+        "brilho-marca": "0 8px 24px -8px rgba(36, 64, 158, 0.45)",
+        "brilho-acento": "0 8px 24px -8px rgba(232, 72, 60, 0.45)",
+        "brilho-sucesso": "0 8px 24px -8px rgba(5, 150, 105, 0.45)",
+      },
+      backgroundImage: {
+        "gradiente-marca": "var(--gradiente-marca)",
+        "gradiente-acento": "var(--gradiente-acento)",
+        "gradiente-sucesso": "var(--gradiente-sucesso)",
+      },
+      keyframes: {
+        // Pulso suave pro selo de conversa que precisa de atendimento humano.
+        "pulso-suave": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.55" },
+        },
+      },
+      animation: {
+        "pulso-suave": "pulso-suave 2s ease-in-out infinite",
       },
     },
   },

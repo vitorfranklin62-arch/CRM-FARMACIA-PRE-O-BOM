@@ -19,7 +19,7 @@ export default async function ClientesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Clientes</h1>
+        <h1 className="titulo-gradiente text-xl font-bold">Clientes</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">Histórico e observações de cada cliente.</p>
       </div>
 

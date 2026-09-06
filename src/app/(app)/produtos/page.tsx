@@ -22,7 +22,7 @@ export default async function ProdutosPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Produtos</h1>
+        <h1 className="titulo-gradiente text-xl font-bold">Produtos</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Catálogo consultado pela IA no atendimento — preço e estoque precisam estar sempre atualizados.
         </p>
