@@ -3,17 +3,22 @@ import { cn } from "@/lib/utils";
 export function Card({
   children,
   className,
+  comFaixa = false,
 }: {
   children: React.ReactNode;
   className?: string;
+  /** Desenha a faixa colorida no topo do cartão. */
+  comFaixa?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "rounded-2xl border border-gray-100 bg-white p-5 shadow-card dark:border-white/10 dark:bg-navy-800/60 dark:shadow-none",
+        "relative overflow-hidden rounded-2xl border border-white/60 bg-white/85 p-5 shadow-card backdrop-blur-sm transition dark:border-white/10 dark:bg-navy-800/60 dark:shadow-none",
+        comFaixa && "pt-6",
         className
       )}
     >
+      {comFaixa && <span aria-hidden className="faixa-arcoiris absolute inset-x-0 top-0 h-1" />}
       {children}
     </div>
   );
@@ -31,8 +36,11 @@ export function CardHeader({
   return (
     <div className="mb-4 flex items-start justify-between gap-4">
       <div>
-        <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-        {description && <p className="mt-0.5 text-sm text-gray-500">{description}</p>}
+        <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-white">
+          <span aria-hidden className="faixa-arcoiris h-4 w-1 rounded-full" />
+          {title}
+        </h2>
+        {description && <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{description}</p>}
       </div>
       {action}
     </div>

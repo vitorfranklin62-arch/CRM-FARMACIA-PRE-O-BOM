@@ -66,7 +66,7 @@ export function Sidebar({ role }: { role: UsuarioRole }) {
   return (
     <aside
       className={cn(
-        "hidden shrink-0 flex-col bg-navy-900 transition-[width] duration-200 md:flex",
+        "hidden shrink-0 flex-col bg-gradient-to-b from-navy-900 via-navy-900 to-brand-800 transition-[width] duration-200 md:flex",
         recolhida ? "w-[68px]" : "w-60"
       )}
     >
@@ -95,14 +95,14 @@ export function Sidebar({ role }: { role: UsuarioRole }) {
               href={item.href}
               title={recolhida ? item.label : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-lg border-l-[3px] px-3 py-2.5 text-[13.5px] font-medium transition",
+                "group flex items-center gap-3 rounded-lg border-l-[3px] px-3 py-2.5 text-[13.5px] font-medium transition",
                 recolhida && "justify-center px-0",
                 active
-                  ? "border-accent-500 bg-accent-500/15 font-semibold text-white"
-                  : "border-transparent text-white/75 hover:bg-white/[0.06] hover:text-white"
+                  ? "border-accent-400 bg-gradient-to-r from-accent-500/30 to-transparent font-semibold text-white shadow-brilho-acento"
+                  : "border-transparent text-white/75 hover:bg-white/[0.08] hover:text-white"
               )}
             >
-              <Icon size={18} className="shrink-0" />
+              <Icon size={18} className={cn("shrink-0 transition-colors", active ? "text-accent-300" : "text-white/60 group-hover:text-white")} />
               {!recolhida && item.label}
             </Link>
           );

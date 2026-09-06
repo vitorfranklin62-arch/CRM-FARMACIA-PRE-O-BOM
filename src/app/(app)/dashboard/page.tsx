@@ -16,30 +16,34 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Dashboard</h1>
+        <h1 className="titulo-gradiente text-xl font-bold">Dashboard</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">Visão geral do dia na Farmácia Preço Bom.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
+          cor="marinho"
           label="Faturamento do dia"
           value={formatCurrency(data.faturamento.hoje)}
           trend={data.faturamento.trend}
           icon={<DollarSign size={18} />}
         />
         <StatCard
+          cor="verde"
           label="Vendas do dia"
           value={String(data.vendas.hoje)}
           trend={data.vendas.trend}
           icon={<ShoppingBag size={18} />}
         />
         <StatCard
+          cor="azul"
           label="Pedidos processados"
           value={String(data.pedidos.hoje)}
           trend={data.pedidos.trend}
           icon={<Package size={18} />}
         />
         <StatCard
+          cor="violeta"
           label="Clientes novos"
           value={String(data.clientesNovos.hoje)}
           trend={data.clientesNovos.trend}
@@ -53,24 +57,28 @@ export default async function DashboardPage() {
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
+          cor="coral"
             label="Pedidos em aberto"
             value={String(data.pedidosAtivos)}
             caption="fila ativa agora"
             icon={<ListChecks size={18} />}
           />
           <StatCard
+          cor="laranja"
             label="Ticket médio hoje"
             value={formatCurrency(data.ticketMedio)}
             caption="por venda"
             icon={<Receipt size={18} />}
           />
           <StatCard
+          cor="turquesa"
             label="Encomendas aguardando"
             value={String(data.encomendasPendentes)}
             caption="a caminho ou pra avisar"
             icon={<PackageSearch size={18} />}
           />
           <StatCard
+          cor="indigo"
             label="Produtos zerados"
             value={String(data.produtosZerados)}
             caption="sem estoque agora"

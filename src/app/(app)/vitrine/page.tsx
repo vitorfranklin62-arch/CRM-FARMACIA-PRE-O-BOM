@@ -14,7 +14,7 @@ export default async function VitrinePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Vitrine</h1>
+        <h1 className="titulo-gradiente text-xl font-bold">Vitrine</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Promoções e produtos em destaque no site — o que aparece aqui é o que os clientes veem em farmaciaprecobom.com.br.
         </p>
