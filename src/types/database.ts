@@ -190,6 +190,7 @@ export type AuditAcao =
   | "campanha_disparada"
   | "estoque_importado"
   | "produtos_duplicados_removidos"
+  | "produtos_fora_do_arquivo_removidos"
   | "bairro_entrega_criado"
   | "bairro_entrega_atualizado"
   | "bairro_entrega_excluido"

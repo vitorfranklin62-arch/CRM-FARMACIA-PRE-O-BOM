@@ -1,5 +1,13 @@
 /**
- * Parser do relatório de inventário em PDF (formato "Nome do Produto /
+ * Leitura dos relatórios de estoque em PDF. Existem dois formatos, e o
+ * `parseEstoquePdf` reconhece qual é pelo cabeçalho da primeira página:
+ *
+ *  - **inventário** (esse arquivo): "Nome do Produto / Apresentação /
+ *    Laboratório / Cla / Qtde / Custo / Total Custo / Venda / Total Venda".
+ *  - **lista de medicamentos**: "Nome do Produto | Laboratório | Preço de
+ *    Venda | Observações" — lido por `estoque-pdf-lista-import.ts`.
+ *
+ * Parser do relatório de inventário (formato "Nome do Produto /
  * Apresentação / Laboratório / Cla / Qtde / Custo / Total Custo / Venda /
  * Total Venda"), gerado por outro sistema de gestão de farmácia.
  *
@@ -20,32 +28,9 @@
  * checagem — essas ficam de fora da importação automática.
  */
 
-import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { parseNumeroBR } from "@/lib/estoque-import";
-import { garantirPolyfillDOMMatrix } from "@/lib/dommatrix-polyfill";
-
-/**
- * O pdfjs resolve seus próprios arquivos auxiliares (dados de
- * fontes/cmaps e o "worker" que faz o parsing) por caminho relativo ao
- * módulo em que está rodando. Isso quebra assim que o Next.js empacota a
- * rota (o arquivo físico não fica mais do lado do módulo bundlado) — daí
- * os erros "standardFontDataUrl not provided" e depois "Cannot find
- * module '.../pdf.worker.mjs'". `__filename`/`createRequire` também não
- * servem aqui: dentro do bundle do webpack, `__filename` vira um ID de
- * módulo (não um caminho) e `createRequire` some silenciosamente. A única
- * coisa confiável em produção é `process.cwd()` (raiz do projeto, onde o
- * `next start` roda) — monta o caminho até o pacote via node_modules
- * direto, sem depender de nenhuma resolução dinâmica de módulo.
- */
-function resolverCaminhosPdfjs() {
-  const raizPdfjs = path.join(process.cwd(), "node_modules", "pdfjs-dist");
-  return {
-    standardFontDataUrl: pathToFileURL(path.join(raizPdfjs, "standard_fonts") + path.sep).toString(),
-    cMapUrl: pathToFileURL(path.join(raizPdfjs, "cmaps") + path.sep).toString(),
-    workerSrc: pathToFileURL(path.join(raizPdfjs, "legacy", "build", "pdf.worker.mjs")).toString(),
-  };
-}
+import { abrirDocumentoPdf, itensDeTextoDaPagina, type DocumentoPdf } from "@/lib/pdfjs";
+import { parseEstoquePdfLista } from "@/lib/estoque-pdf-lista-import";
 
 const NAME_COL_END = 180;
 const APRES_COL_END = 330;
@@ -68,16 +53,22 @@ const VENDA_X1_MAX = 915; // Venda (x1≈861)
 
 const TOLERANCIA = 0.02;
 
+export type FormatoPdfEstoque = "inventario" | "lista";
+
 export interface EstoquePdfRow {
   pagina: number;
   nome: string;
   laboratorio: string | null;
-  estoque: number;
-  custo: number;
   venda: number;
+  /** Só no relatório de inventário — a lista de medicamentos não traz quantidade nem custo. */
+  estoque?: number;
+  custo?: number;
+  /** Só na lista de medicamentos. */
+  observacoes?: string | null;
 }
 
 export interface ParseEstoquePdfResult {
+  formato: FormatoPdfEstoque;
   linhas: EstoquePdfRow[];
   duvidosas: number;
   paginasDuvidosas: number[];
@@ -115,15 +106,7 @@ function bucketPorX1(items: TextItem[], lo: number, hi: number): string {
     .trim();
 }
 
-export async function parseEstoquePdf(buffer: ArrayBuffer, signal?: AbortSignal): Promise<ParseEstoquePdfResult> {
-  garantirPolyfillDOMMatrix();
-  const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-
-  const { standardFontDataUrl, cMapUrl, workerSrc } = resolverCaminhosPdfjs();
-  GlobalWorkerOptions.workerSrc = workerSrc;
-
-  const doc = await getDocument({ data: new Uint8Array(buffer), standardFontDataUrl, cMapUrl }).promise;
-
+async function parseInventario(doc: DocumentoPdf, signal?: AbortSignal): Promise<ParseEstoquePdfResult> {
   const linhas: EstoquePdfRow[] = [];
   const paginasDuvidosasSet = new Set<number>();
   let duvidosas = 0;
@@ -137,8 +120,7 @@ export async function parseEstoquePdf(buffer: ArrayBuffer, signal?: AbortSignal)
     // mesmo com ninguém mais esperando a resposta.
     if (signal?.aborted) throw new DOMException("Importação cancelada pelo cliente", "AbortError");
 
-    const page = await doc.getPage(pageNo);
-    const content = await page.getTextContent();
+    const itensDaPagina = await itensDeTextoDaPagina(doc, pageNo);
 
     let phase: "nome" | "dados" = "nome";
     let nomeParts: string[] = [];
@@ -178,11 +160,8 @@ export async function parseEstoquePdf(buffer: ArrayBuffer, signal?: AbortSignal)
       linhas.push({ pagina: pageNo, nome, laboratorio, estoque: qtde, custo, venda });
     };
 
-    for (const item of content.items) {
-      if (!("str" in item)) continue;
-      const x0 = item.transform[4];
-      const x1 = x0 + item.width;
-      const text = item.str;
+    for (const item of itensDaPagina) {
+      const { x0, x1, text } = item;
 
       if (text.trim()) {
         itensDeTexto += 1;
@@ -204,9 +183,40 @@ export async function parseEstoquePdf(buffer: ArrayBuffer, signal?: AbortSignal)
   }
 
   return {
+    formato: "inventario",
     linhas,
     duvidosas,
     paginasDuvidosas: Array.from(paginasDuvidosasSet).sort((a, b) => a - b),
     diagnostico: { paginas: doc.numPages, itensDeTexto, amostraTexto: amostraPartes.join(" | ") },
+  };
+}
+
+/**
+ * Descobre qual dos dois relatórios é o arquivo, olhando o cabeçalho da
+ * primeira página. A lista de medicamentos tem as colunas "Preço de Venda"
+ * e "Observações"; o inventário tem "Qtde" e "Total Custo".
+ */
+async function detectarFormato(doc: DocumentoPdf): Promise<FormatoPdfEstoque> {
+  const texto = (await itensDeTextoDaPagina(doc, 1))
+    .map((i) => i.text)
+    .join(" ")
+    .replace(/\s+/g, " ");
+  const ehLista = /Pre[çc]o de Venda/i.test(texto) && /Observa[çc][õo]es/i.test(texto);
+  return ehLista ? "lista" : "inventario";
+}
+
+/** Lê o PDF de estoque, seja ele o inventário completo ou a lista de medicamentos. */
+export async function parseEstoquePdf(buffer: ArrayBuffer, signal?: AbortSignal): Promise<ParseEstoquePdfResult> {
+  const doc = await abrirDocumentoPdf(buffer);
+
+  if ((await detectarFormato(doc)) === "inventario") return parseInventario(doc, signal);
+
+  const lista = await parseEstoquePdfLista(doc, signal);
+  return {
+    formato: "lista",
+    linhas: lista.linhas,
+    duvidosas: lista.duvidosas,
+    paginasDuvidosas: lista.paginasDuvidosas,
+    diagnostico: { paginas: doc.numPages, itensDeTexto: lista.itensDeTexto, amostraTexto: lista.amostraTexto },
   };
 }
