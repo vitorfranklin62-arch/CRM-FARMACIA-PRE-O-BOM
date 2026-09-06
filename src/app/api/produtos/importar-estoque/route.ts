@@ -1,74 +1,29 @@
 import { NextResponse } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireDona } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { logAudit } from "@/lib/audit";
 import { parseEstoqueFile, normalizarNome } from "@/lib/estoque-import";
 import { parseEstoquePdf } from "@/lib/estoque-pdf-import";
 import { parseEstoqueXlsx } from "@/lib/estoque-xlsx-import";
 import { selecionarTodos } from "@/lib/supabase/fetch-all";
+import type { LinhaImportacao, PlanoImportacao } from "@/types/importacao";
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
-const CHUNK_SIZE = 500;
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
-  return chunks;
-}
-
-/**
- * Grava em lotes de CHUNK_SIZE (rápido — poucas idas ao banco). Se o lote
- * inteiro falhar (um insert/upsert em massa é uma transação só — 1 linha
- * ruim derruba as ~500 boas do lote junto), tenta de novo linha por linha
- * só pra isolar exatamente qual(is) falharam, sem perder as boas.
- */
-async function gravarComIsolamento<T>(
-  supabase: SupabaseClient,
-  linhas: T[],
-  montarLinha: (item: T) => Record<string, unknown>,
-  opcoesUpsert?: { onConflict: string },
-  signal?: AbortSignal
-): Promise<{ ok: number; erros: number; primeiroErro: string | null }> {
-  let ok = 0;
-  let erros = 0;
-  let primeiroErro: string | null = null;
-
-  const gravar = (payload: Record<string, unknown>[]) =>
-    opcoesUpsert
-      ? supabase.from("produtos").upsert(payload, opcoesUpsert)
-      : supabase.from("produtos").insert(payload);
-
-  for (const grupo of chunk(linhas, CHUNK_SIZE)) {
-    // Mesma ideia do parser: se o cliente já desistiu, parar de gravar em
-    // vez de continuar em segundo plano sem ninguém esperando — sem isso,
-    // uma importação "cancelada" no navegador podia terminar de qualquer
-    // jeito no servidor, e uma nova tentativa em cima dela duplicava tudo.
-    if (signal?.aborted) throw new DOMException("Importação cancelada pelo cliente", "AbortError");
-
-    const { error } = await gravar(grupo.map(montarLinha));
-    if (!error) {
-      ok += grupo.length;
-      continue;
-    }
-    for (const item of grupo) {
-      const { error: erroUnico } = await gravar([montarLinha(item)]);
-      if (erroUnico) {
-        erros += 1;
-        primeiroErro ??= erroUnico.message;
-      } else {
-        ok += 1;
-      }
-    }
-  }
-
-  return { ok, erros, primeiroErro };
-}
 
 /**
  * POST /api/produtos/importar-estoque
- * Importa o relatório de inventário exportado pelo sistema da farmácia, em
- * um de três formatos. Nenhum deles apaga produtos — só cria/atualiza.
+ *
+ * Etapa 1 de 2 da importação: **só lê e confere o arquivo**, sem gravar
+ * nada. Devolve o "plano" — a lista pronta do que atualizar e do que criar.
+ * Quem grava é /api/produtos/importar-estoque/gravar, em lotes.
+ *
+ * Por que dividido em duas etapas: com catálogo grande (milhares de
+ * produtos), ler o arquivo E gravar tudo numa requisição só passava de 2
+ * minutos, e a importação era cancelada no meio pelo navegador (ou pelo
+ * proxy do servidor) — sem ninguém saber o que tinha entrado e o que não.
+ * Em lotes, cada requisição é curta, nada estoura o tempo limite e a tela
+ * consegue mostrar a barra de progresso subindo de verdade.
+ *
+ * Formatos aceitos (nenhum apaga produtos — só cria/atualiza):
  *  - .fp3/.xml: casa pelo código interno (sku). Só tem custo, não tem preço
  *    de venda, então NUNCA toca no preço de produto já existente — produtos
  *    novos entram com preco = custo (precisa de revisão manual).
@@ -90,7 +45,7 @@ export async function POST(request: Request) {
   const inicio = Date.now();
   // Logs simples (visíveis nos logs do EasyPanel) — sem eles, uma
   // importação lenta é uma caixa preta: não dá pra saber se o gargalo é
-  // ler o PDF, buscar o catálogo atual ou gravar no banco.
+  // ler o PDF ou buscar o catálogo atual.
   const log = (etapa: string) => console.log(`[importar-estoque] ${etapa} (+${Date.now() - inicio}ms)`);
 
   try {
@@ -133,10 +88,9 @@ export async function POST(request: Request) {
     }
     log(`buscou catálogo atual (${existentes.length} produtos)`);
 
-    let atualizados = 0;
-    let criados = 0;
-    let erros = 0;
-    let primeiroErro: string | null = null;
+    const atualizarPorId: LinhaImportacao[] = [];
+    const atualizarPorSku: LinhaImportacao[] = [];
+    const criar: LinhaImportacao[] = [];
     let total = 0;
     let ignoradas = 0;
     let paginasParaRevisar: number[] = [];
@@ -169,73 +123,41 @@ export async function POST(request: Request) {
       // time"). Mantém só a primeira ocorrência de cada nome.
       const nomesVistos = new Set<string>();
       let duplicadasNoArquivo = 0;
-      const linhasUnicas = linhas.filter((l) => {
+
+      for (const l of linhas) {
         const chave = normalizarNome(l.nome);
         if (nomesVistos.has(chave)) {
           duplicadasNoArquivo += 1;
-          return false;
+          continue;
         }
         nomesVistos.add(chave);
-        return true;
-      });
 
-      const paraAtualizar = linhasUnicas.filter((l) => nomeParaId.has(normalizarNome(l.nome)));
-      const paraCriar = linhasUnicas.filter((l) => !nomeParaId.has(normalizarNome(l.nome)));
+        const id = nomeParaId.get(chave);
+        if (id) {
+          // Diferente do .fp3 (que só tem custo), esse PDF traz o preço de
+          // venda de verdade — por isso essa importação TAMBÉM atualiza o
+          // preço de produtos já existentes, mas só quando o PDF tem uma
+          // venda válida (> 0) pra essa linha; nas raras linhas sem venda,
+          // o preço já cadastrado não é tocado (pra nunca zerar um preço).
+          atualizarPorId.push({
+            id,
+            laboratorio: l.laboratorio,
+            custo: l.custo,
+            estoque: l.estoque,
+            ...(l.venda > 0 ? { preco: l.venda } : {}),
+          });
+        } else {
+          criar.push({
+            nome: l.nome,
+            laboratorio: l.laboratorio,
+            custo: l.custo,
+            estoque: l.estoque,
+            preco: l.venda > 0 ? l.venda : l.custo,
+          });
+        }
+      }
 
-      // Diferente do .fp3 (que só tem custo), esse PDF traz o preço de
-      // venda de verdade — por isso, ao contrário do .fp3, essa importação
-      // TAMBÉM atualiza o preço de produtos já existentes, mas só quando o
-      // PDF tem uma venda válida (> 0) pra essa linha; nas raras linhas sem
-      // venda no PDF, o preço que já estava cadastrado não é tocado (pra
-      // nunca zerar um preço que já existia).
-      const paraAtualizarComPreco = paraAtualizar.filter((l) => l.venda > 0);
-      const paraAtualizarSemPreco = paraAtualizar.filter((l) => l.venda <= 0);
-
-      const resultadoComPreco = await gravarComIsolamento(
-        supabase,
-        paraAtualizarComPreco,
-        (l) => ({
-          id: nomeParaId.get(normalizarNome(l.nome))!,
-          laboratorio: l.laboratorio,
-          custo: l.custo,
-          estoque: l.estoque,
-          preco: l.venda,
-        }),
-        { onConflict: "id" },
-        request.signal
-      );
-      const resultadoSemPreco = await gravarComIsolamento(
-        supabase,
-        paraAtualizarSemPreco,
-        (l) => ({
-          id: nomeParaId.get(normalizarNome(l.nome))!,
-          laboratorio: l.laboratorio,
-          custo: l.custo,
-          estoque: l.estoque,
-        }),
-        { onConflict: "id" },
-        request.signal
-      );
-      const resultadoCriar = await gravarComIsolamento(
-        supabase,
-        paraCriar,
-        (l) => ({
-          nome: l.nome,
-          laboratorio: l.laboratorio,
-          custo: l.custo,
-          estoque: l.estoque,
-          preco: l.venda > 0 ? l.venda : l.custo,
-        }),
-        undefined,
-        request.signal
-      );
-
-      atualizados = resultadoComPreco.ok + resultadoSemPreco.ok;
-      criados = resultadoCriar.ok;
-      erros = resultadoComPreco.erros + resultadoSemPreco.erros + resultadoCriar.erros;
-      primeiroErro = resultadoComPreco.primeiroErro ?? resultadoSemPreco.primeiroErro ?? resultadoCriar.primeiroErro;
       ignoradas += duplicadasNoArquivo;
-      log(`terminou de gravar (${atualizados} atualizados, ${criados} criados, ${erros} erros)`);
     } else if (ehXlsx) {
       const buffer = await file.arrayBuffer();
       const { linhas, ignoradas: ignoradasSemNome } = parseEstoqueXlsx(buffer);
@@ -261,52 +183,36 @@ export async function POST(request: Request) {
       // upsert em lote (Postgres rejeita 2 updates pro mesmo id no mesmo lote).
       const nomesVistos = new Set<string>();
       let duplicadasNoArquivo = 0;
-      const linhasUnicas = linhas.filter((l) => {
+
+      for (const l of linhas) {
         const chave = normalizarNome(l.nome);
         if (nomesVistos.has(chave)) {
           duplicadasNoArquivo += 1;
-          return false;
+          continue;
         }
         nomesVistos.add(chave);
-        return true;
-      });
 
-      const paraAtualizar = linhasUnicas.filter((l) => nomeParaId.has(normalizarNome(l.nome)));
-      const paraCriar = linhasUnicas.filter((l) => !nomeParaId.has(normalizarNome(l.nome)));
+        const id = nomeParaId.get(chave);
+        if (id) {
+          atualizarPorId.push({
+            id,
+            laboratorio: l.laboratorio,
+            estoque: l.estoque,
+            observacoes: l.observacoes,
+            ...(l.venda > 0 ? { preco: l.venda } : {}),
+          });
+        } else {
+          criar.push({
+            nome: l.nome,
+            laboratorio: l.laboratorio,
+            estoque: l.estoque,
+            observacoes: l.observacoes,
+            preco: l.venda,
+          });
+        }
+      }
 
-      const resultadoAtualizar = await gravarComIsolamento(
-        supabase,
-        paraAtualizar,
-        (l) => ({
-          id: nomeParaId.get(normalizarNome(l.nome))!,
-          laboratorio: l.laboratorio,
-          estoque: l.estoque,
-          observacoes: l.observacoes,
-          ...(l.venda > 0 ? { preco: l.venda } : {}),
-        }),
-        { onConflict: "id" },
-        request.signal
-      );
-      const resultadoCriar = await gravarComIsolamento(
-        supabase,
-        paraCriar,
-        (l) => ({
-          nome: l.nome,
-          laboratorio: l.laboratorio,
-          estoque: l.estoque,
-          observacoes: l.observacoes,
-          preco: l.venda,
-        }),
-        undefined,
-        request.signal
-      );
-
-      atualizados = resultadoAtualizar.ok;
-      criados = resultadoCriar.ok;
-      erros = resultadoAtualizar.erros + resultadoCriar.erros;
-      primeiroErro = resultadoAtualizar.primeiroErro ?? resultadoCriar.primeiroErro;
       ignoradas += duplicadasNoArquivo;
-      log(`terminou de gravar (${atualizados} atualizados, ${criados} criados, ${erros} erros)`);
     } else {
       const content = await file.text();
       const { linhas, ignoradas: ignoradasSemNome } = parseEstoqueFile(content);
@@ -321,59 +227,45 @@ export async function POST(request: Request) {
       total = linhas.length;
       ignoradas = ignoradasSemNome;
 
-      const skuParaId = new Map(existentes.filter((p) => p.sku).map((p) => [p.sku as string, p.id]));
+      const skusExistentes = new Set(existentes.filter((p) => p.sku).map((p) => p.sku as string));
 
-      const paraAtualizar = linhas.filter((l) => l.sku && skuParaId.has(l.sku));
-      const paraCriar = linhas.filter((l) => !l.sku || !skuParaId.has(l.sku));
-
-      const resultadoAtualizar = await gravarComIsolamento(
-        supabase,
-        paraAtualizar,
-        (l) => ({ sku: l.sku, nome: l.nome, laboratorio: l.laboratorio, custo: l.custo, estoque: l.estoque }),
-        { onConflict: "sku" },
-        request.signal
-      );
-      const resultadoCriar = await gravarComIsolamento(
-        supabase,
-        paraCriar,
-        (l) => ({
-          sku: l.sku,
-          nome: l.nome,
-          laboratorio: l.laboratorio,
-          custo: l.custo,
-          estoque: l.estoque,
-          preco: l.custo,
-        }),
-        undefined,
-        request.signal
-      );
-
-      atualizados = resultadoAtualizar.ok;
-      criados = resultadoCriar.ok;
-      erros = resultadoAtualizar.erros + resultadoCriar.erros;
-      primeiroErro = resultadoAtualizar.primeiroErro ?? resultadoCriar.primeiroErro;
+      for (const l of linhas) {
+        if (l.sku && skusExistentes.has(l.sku)) {
+          atualizarPorSku.push({
+            sku: l.sku,
+            nome: l.nome,
+            laboratorio: l.laboratorio,
+            custo: l.custo,
+            estoque: l.estoque,
+          });
+        } else {
+          criar.push({
+            sku: l.sku,
+            nome: l.nome,
+            laboratorio: l.laboratorio,
+            custo: l.custo,
+            estoque: l.estoque,
+            preco: l.custo,
+          });
+        }
+      }
     }
 
-    await logAudit(supabase, "estoque_importado", "produtos", null, {
+    const plano: PlanoImportacao = {
       arquivo: file.name,
       formato: ehPdf ? "pdf" : ehXlsx ? "xlsx" : "fp3",
       total,
-      atualizados,
-      criados,
-      erros,
       ignoradas,
-    });
-
-    log("concluído, respondendo");
-    return NextResponse.json({
-      total,
-      atualizados,
-      criados,
-      erros,
-      ignoradas,
-      primeiroErro,
       paginasParaRevisar: paginasParaRevisar.length > 0 ? paginasParaRevisar : undefined,
-    });
+      atualizarPorId,
+      atualizarPorSku,
+      criar,
+    };
+
+    log(
+      `plano pronto (${atualizarPorId.length + atualizarPorSku.length} pra atualizar, ${criar.length} pra criar), respondendo`
+    );
+    return NextResponse.json(plano);
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       log("interrompido: cliente cancelou/desconectou");

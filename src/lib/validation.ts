@@ -156,3 +156,43 @@ export const consultaFarmaceuticaSchema = z.object({
 export function digitsOnly(value: string): string {
   return value.replace(/\D/g, "");
 }
+
+/**
+ * Importação de estoque, etapa 2 (gravação em lotes). O navegador manda de
+ * volta as linhas que o servidor montou na etapa 1, então aqui a validação
+ * serve pra duas coisas: garantir que os números continuam números e, mais
+ * importante, deixar passar só as colunas de `produtos` que a importação
+ * pode tocar — o zod descarta qualquer outro campo que venha no corpo.
+ */
+export const importacaoLinhaSchema = z.object({
+  id: z.string().uuid().optional(),
+  sku: z.string().trim().min(1).max(100).nullable().optional(),
+  nome: z.string().trim().min(1).max(300).optional(),
+  laboratorio: z.string().trim().max(200).nullable().optional(),
+  custo: z.number().nonnegative().optional(),
+  estoque: z.number().int().optional(),
+  preco: z.number().nonnegative().optional(),
+  observacoes: z.string().max(5000).nullable().optional(),
+});
+
+export const importarEstoqueLoteSchema = z.object({
+  modo: z.enum(["atualizar_por_id", "atualizar_por_sku", "criar"]),
+  /**
+   * Validadas uma a uma na rota (não aqui): uma linha estranha no meio do
+   * arquivo vira erro só dela, sem derrubar o lote inteiro de ~250 boas.
+   * Pode vir vazio no lote final, que só fecha a importação (resumo).
+   */
+  linhas: z.array(z.unknown()).max(1000),
+  /** Só no último lote: fecha a importação registrando o resumo na auditoria. */
+  resumo: z
+    .object({
+      arquivo: z.string().trim().min(1).max(300),
+      formato: z.enum(["pdf", "xlsx", "fp3"]),
+      total: z.number().int().nonnegative(),
+      atualizados: z.number().int().nonnegative(),
+      criados: z.number().int().nonnegative(),
+      erros: z.number().int().nonnegative(),
+      ignoradas: z.number().int().nonnegative(),
+    })
+    .optional(),
+});
