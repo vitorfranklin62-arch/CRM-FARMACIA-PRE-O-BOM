@@ -45,8 +45,8 @@ O painel é um Progressive Web App — dá pra "instalar" ele no computador ou n
 
 No SQL editor do Supabase, rode nesta ordem:
 
-1. `supabase/schema.sql` — tabelas, enums, índices, RLS e realtime
-2. `supabase/seed.sql` — dados de exemplo (opcional, útil pra testar o painel)
+1. `supabase/schema/schema.sql` — tabelas, enums, índices, RLS e realtime
+2. `supabase/seed/seed.sql` — dados de exemplo (opcional, útil pra testar o painel)
 
 Depois crie o primeiro usuário **dona**:
 
@@ -223,8 +223,10 @@ src/
   lib/                      # supabase clients, auth, validação, rate limit
   types/                    # tipos do banco (Database) e relações
 supabase/
-  schema.sql                # schema + RLS + realtime
-  seed.sql                  # dados de exemplo
+  schema/schema.sql         # schema + RLS + realtime
+  seed/seed.sql             # dados de exemplo
+  fixes/                    # scripts avulsos de correção (ex.: mesclar clientes duplicados)
+  migrations/               # alterações incrementais versionadas, com data no nome
 ```
 
 ## Segurança
@@ -234,7 +236,7 @@ Nenhum sistema é 100% imune a ataques, mas as camadas abaixo cobrem as classes 
 ### Autenticação e controle de acesso
 
 - Autenticação via Supabase Auth (hash de senha com bcrypt, gerenciado pelo Supabase — nenhuma senha é manipulada em texto puro pelo nosso código)
-- **Row Level Security (RLS) em todas as tabelas** — a autorização é garantida pelo próprio Postgres, não só pela UI: mesmo uma requisição direta à API do Supabase com a `anon key` respeita as mesmas regras (funcionária não lê `campanhas`/`configuracoes`/`vendas_log`, dona vê tudo). Ver `supabase/schema.sql`.
+- **Row Level Security (RLS) em todas as tabelas** — a autorização é garantida pelo próprio Postgres, não só pela UI: mesmo uma requisição direta à API do Supabase com a `anon key` respeita as mesmas regras (funcionária não lê `campanhas`/`configuracoes`/`vendas_log`, dona vê tudo). Ver `supabase/schema/schema.sql`.
 - Funções `is_dona()` / `is_usuario_ativo()` / `auth_role()` são `SECURITY DEFINER` — evitam recursão nas policies e centralizam a lógica de permissão num único lugar auditável.
 - Sessões geridas via cookies HttpOnly do Supabase Auth (`@supabase/ssr`), refresh automático no middleware.
 - Todas as páginas fazem dupla checagem de sessão: além do middleware, cada rota chama `requireUser()`/`requireDona()` (`src/lib/auth.ts`) — se uma nunca rodar, a outra ainda barra o acesso.

@@ -10,6 +10,36 @@ import type { LinhaImportacao, PlanoImportacao } from "@/types/importacao";
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 
 /**
+ * Casa cada linha lida do arquivo (.pdf ou .xlsx) com o catálogo atual pelo
+ * nome normalizado — usado pelos dois formatos que não têm código/SKU de
+ * produto. Uma linha cujo nome (normalizado) já apareceu antes no mesmo
+ * arquivo é descartada: sem isso, ou vira um produto novo duplicado no
+ * catálogo, ou tenta atualizar o mesmo produto 2x no mesmo lote (o Postgres
+ * rejeita: "ON CONFLICT DO UPDATE... affect row a second time").
+ */
+function casarPorNomeNormalizado<T extends { nome: string }>(
+  linhas: T[],
+  existentes: { id: string; nome: string }[]
+): { unicas: { id: string | undefined; linha: T }[]; duplicadasNoArquivo: number } {
+  const nomeParaId = new Map(existentes.map((p) => [normalizarNome(p.nome), p.id]));
+  const nomesVistos = new Set<string>();
+  const unicas: { id: string | undefined; linha: T }[] = [];
+  let duplicadasNoArquivo = 0;
+
+  for (const linha of linhas) {
+    const chave = normalizarNome(linha.nome);
+    if (nomesVistos.has(chave)) {
+      duplicadasNoArquivo += 1;
+      continue;
+    }
+    nomesVistos.add(chave);
+    unicas.push({ id: nomeParaId.get(chave), linha });
+  }
+
+  return { unicas, duplicadasNoArquivo };
+}
+
+/**
  * POST /api/produtos/importar-estoque
  *
  * Etapa 1 de 2 da importação: **só lê e confere o arquivo**, sem gravar
@@ -112,33 +142,14 @@ export async function POST(request: Request) {
       ignoradas = duvidosas;
       paginasParaRevisar = paginasDuvidosas;
 
-      const nomeParaId = new Map(existentes.map((p) => [normalizarNome(p.nome), p.id]));
-
-      // O PDF pode ter mais de uma linha com o mesmo nome (produto que
-      // aparece 2x no relatório, ou 2 produtos diferentes cujo nome ficou
-      // igual por causa de alguma linha mal reconstruída) — sem isso, cada
-      // repetição virava um produto novo separado (duplicando o catálogo)
-      // ou tentava atualizar o mesmo produto 2x no mesmo lote (o que o
-      // Postgres rejeita: "ON CONFLICT DO UPDATE... affect row a second
-      // time"). Mantém só a primeira ocorrência de cada nome.
-      const nomesVistos = new Set<string>();
-      let duplicadasNoArquivo = 0;
-
-      for (const l of linhas) {
-        const chave = normalizarNome(l.nome);
-        if (nomesVistos.has(chave)) {
-          duplicadasNoArquivo += 1;
-          continue;
-        }
-        nomesVistos.add(chave);
-
-        const id = nomeParaId.get(chave);
+      // Diferente do .fp3 (que só tem custo), esse PDF traz o preço de venda
+      // de verdade — por isso essa importação TAMBÉM atualiza o preço de
+      // produtos já existentes, mas só quando o PDF tem uma venda válida
+      // (> 0) pra essa linha; nas raras linhas sem venda, o preço já
+      // cadastrado não é tocado (pra nunca zerar um preço).
+      const { unicas, duplicadasNoArquivo } = casarPorNomeNormalizado(linhas, existentes);
+      for (const { id, linha: l } of unicas) {
         if (id) {
-          // Diferente do .fp3 (que só tem custo), esse PDF traz o preço de
-          // venda de verdade — por isso essa importação TAMBÉM atualiza o
-          // preço de produtos já existentes, mas só quando o PDF tem uma
-          // venda válida (> 0) pra essa linha; nas raras linhas sem venda,
-          // o preço já cadastrado não é tocado (pra nunca zerar um preço).
           atualizarPorId.push({
             id,
             laboratorio: l.laboratorio,
@@ -176,23 +187,11 @@ export async function POST(request: Request) {
       total = linhas.length;
       ignoradas = ignoradasSemNome;
 
-      const nomeParaId = new Map(existentes.map((p) => [normalizarNome(p.nome), p.id]));
-
       // Mesmo motivo do .pdf: uma planilha pode ter o mesmo nome repetido —
       // mantém só a primeira ocorrência pra não duplicar nem quebrar o
       // upsert em lote (Postgres rejeita 2 updates pro mesmo id no mesmo lote).
-      const nomesVistos = new Set<string>();
-      let duplicadasNoArquivo = 0;
-
-      for (const l of linhas) {
-        const chave = normalizarNome(l.nome);
-        if (nomesVistos.has(chave)) {
-          duplicadasNoArquivo += 1;
-          continue;
-        }
-        nomesVistos.add(chave);
-
-        const id = nomeParaId.get(chave);
+      const { unicas, duplicadasNoArquivo } = casarPorNomeNormalizado(linhas, existentes);
+      for (const { id, linha: l } of unicas) {
         if (id) {
           atualizarPorId.push({
             id,

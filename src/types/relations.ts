@@ -1,7 +1,6 @@
 import type {
   AuditLog,
   Cliente,
-  ConsultaFarmaceutica,
   Conversa,
   Encomenda,
   ItemPedido,
@@ -34,9 +33,5 @@ export interface MensagemComUsuario extends Mensagem {
 }
 
 export interface AuditLogComUsuario extends AuditLog {
-  usuarios: Usuario | null;
-}
-
-export interface ConsultaFarmaceuticaComUsuario extends ConsultaFarmaceutica {
   usuarios: Usuario | null;
 }

@@ -36,7 +36,7 @@ create table if not exists clientes (
 -- Se a tabela clientes já existia antes do `unique` acima (instalação já em
 -- uso): NÃO rode só o alter table direto — se já houver telefones
 -- duplicados, ele vai falhar. Rode em vez disso o script
--- supabase/fix_clientes_duplicados.sql, que mescla as duplicatas existentes
+-- supabase/fixes/fix_clientes_duplicados.sql, que mescla as duplicatas existentes
 -- (sem perder conversa/pedido) e só então adiciona essa trava.
 
 create table if not exists produtos (
@@ -305,9 +305,19 @@ returns boolean as $$
 $$ language sql stable security definer set search_path = public;
 
 -- ============================================================================
--- Busca de produtos (usada pela IA via RPC) — ignora espaços e diferenças de
--- caixa na comparação, pra "500mg", "500 mg" e "500MG" encontrarem o mesmo
--- produto independente de como o texto veio (evita falso "sem estoque").
+-- Normalização de texto pra busca (ignora acento/caixa/espaço) — usada tanto
+-- em buscar_produtos() quanto em calcular_taxa_entrega(), pra "500mg",
+-- "500 mg" e "500MG" (ou "Jardim das Flores"/"JARDIM DAS FLORES")
+-- encontrarem o mesmo resultado independente de como o texto veio.
+-- ============================================================================
+
+create or replace function normalizar_busca(texto text)
+returns text as $$
+  select regexp_replace(lower(coalesce(texto, '')), '[^a-z0-9]', '', 'g');
+$$ language sql immutable;
+
+-- ============================================================================
+-- Busca de produtos (usada pela IA via RPC).
 --
 -- Também busca em `observacoes` (substância, referência e "nomes parecidos"
 -- vindos da importação em planilha) — assim "Tylenol" acha o produto mesmo
@@ -319,21 +329,16 @@ create or replace function buscar_produtos(termo text)
 returns setof produtos as $$
   select *
   from produtos
-  where regexp_replace(lower(nome), '[^a-z0-9]', '', 'g')
-        ilike '%' || regexp_replace(lower(termo), '[^a-z0-9]', '', 'g') || '%'
-     or regexp_replace(lower(coalesce(observacoes, '')), '[^a-z0-9]', '', 'g')
-        ilike '%' || regexp_replace(lower(termo), '[^a-z0-9]', '', 'g') || '%'
+  where normalizar_busca(nome) ilike '%' || normalizar_busca(termo) || '%'
+     or normalizar_busca(observacoes) ilike '%' || normalizar_busca(termo) || '%'
   order by
-    (regexp_replace(lower(nome), '[^a-z0-9]', '', 'g')
-      ilike '%' || regexp_replace(lower(termo), '[^a-z0-9]', '', 'g') || '%') desc,
+    (normalizar_busca(nome) ilike '%' || normalizar_busca(termo) || '%') desc,
     nome
   limit 10;
 $$ language sql stable;
 
 -- ============================================================================
--- Cálculo de taxa de entrega por bairro (usada pela IA via RPC) — mesma
--- lógica de normalização do buscar_produtos, pra "Jardim das Flores",
--- "jardim das flores" e "JARDIM DAS FLORES" baterem igual. Devolve o
+-- Cálculo de taxa de entrega por bairro (usada pela IA via RPC). Devolve o
 -- bairro cadastrado mais curto que combina (evita que "Centro" capture
 -- "Centro Novo" por engano) — nenhuma linha significa que a farmácia não
 -- entrega nesse bairro.
@@ -344,8 +349,7 @@ returns table(bairro text, valor decimal) as $$
   select b.bairro, b.valor
   from bairros_entrega b
   where b.ativo
-    and regexp_replace(lower(b.bairro), '[^a-z0-9]', '', 'g')
-        ilike '%' || regexp_replace(lower(bairro_busca), '[^a-z0-9]', '', 'g') || '%'
+    and normalizar_busca(b.bairro) ilike '%' || normalizar_busca(bairro_busca) || '%'
   order by length(b.bairro) asc
   limit 1;
 $$ language sql stable;
