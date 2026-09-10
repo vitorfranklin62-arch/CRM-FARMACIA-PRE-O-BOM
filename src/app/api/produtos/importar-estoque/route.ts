@@ -5,7 +5,8 @@ import { parseEstoqueFile, normalizarNome } from "@/lib/estoque-import";
 import { parseEstoquePdf } from "@/lib/estoque-pdf-import";
 import { parseEstoqueXlsx } from "@/lib/estoque-xlsx-import";
 import { selecionarTodos } from "@/lib/supabase/fetch-all";
-import type { LinhaImportacao, PlanoImportacao } from "@/types/importacao";
+import type { FormatoPdfEstoque } from "@/lib/estoque-pdf-import";
+import type { LinhaImportacao, PlanoImportacao, ProdutoForaDoArquivo } from "@/types/importacao";
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
 
@@ -94,11 +95,16 @@ export async function POST(request: Request) {
     let total = 0;
     let ignoradas = 0;
     let paginasParaRevisar: number[] = [];
+    let formatoPdf: FormatoPdfEstoque | undefined;
+    // Chaves (nome normalizado ou sku) encontradas no arquivo — usadas
+    // depois pra listar o que está no sistema mas ficou de fora do arquivo.
+    const nomesDoArquivo = new Set<string>();
+    const skusDoArquivo = new Set<string>();
 
     if (ehPdf) {
       const buffer = await file.arrayBuffer();
-      const { linhas, duvidosas, paginasDuvidosas, diagnostico } = await parseEstoquePdf(buffer, request.signal);
-      log(`terminou de ler o PDF (${linhas.length} linhas válidas, ${duvidosas} duvidosas)`);
+      const { formato, linhas, duvidosas, paginasDuvidosas, diagnostico } = await parseEstoquePdf(buffer, request.signal);
+      log(`terminou de ler o PDF (formato ${formato}, ${linhas.length} linhas válidas, ${duvidosas} duvidosas)`);
 
       if (linhas.length === 0) {
         const detalhe = `[diagnóstico: ${diagnostico.paginas} página(s), ${diagnostico.itensDeTexto} item(ns) de texto, ${duvidosas} linha(s) reconhecida(s) mas reprovada(s) na conferência. Amostra: ${diagnostico.amostraTexto || "(vazio)"}]`;
@@ -111,6 +117,7 @@ export async function POST(request: Request) {
       total = linhas.length;
       ignoradas = duvidosas;
       paginasParaRevisar = paginasDuvidosas;
+      formatoPdf = formato;
 
       const nomeParaId = new Map(existentes.map((p) => [normalizarNome(p.nome), p.id]));
 
@@ -131,28 +138,39 @@ export async function POST(request: Request) {
           continue;
         }
         nomesVistos.add(chave);
+        nomesDoArquivo.add(chave);
 
         const id = nomeParaId.get(chave);
         if (id) {
-          // Diferente do .fp3 (que só tem custo), esse PDF traz o preço de
-          // venda de verdade — por isso essa importação TAMBÉM atualiza o
-          // preço de produtos já existentes, mas só quando o PDF tem uma
-          // venda válida (> 0) pra essa linha; nas raras linhas sem venda,
-          // o preço já cadastrado não é tocado (pra nunca zerar um preço).
+          // Os dois formatos trazem o preço de venda de verdade — por isso
+          // essa importação TAMBÉM atualiza o preço de quem já está
+          // cadastrado, mas só quando o arquivo tem uma venda válida (> 0);
+          // sem isso, o preço já cadastrado não é tocado (pra nunca zerar
+          // um preço que já existia).
+          //
+          // A diferença entre os formatos: o inventário traz quantidade e
+          // custo (e atualiza os dois), enquanto a lista de medicamentos
+          // não traz nenhum dos dois — nela o estoque de quem já existe
+          // fica exatamente como está.
           atualizarPorId.push({
             id,
             laboratorio: l.laboratorio,
-            custo: l.custo,
-            estoque: l.estoque,
+            ...(l.custo !== undefined ? { custo: l.custo } : {}),
+            ...(l.estoque !== undefined ? { estoque: l.estoque } : {}),
+            ...(l.observacoes !== undefined ? { observacoes: l.observacoes } : {}),
             ...(l.venda > 0 ? { preco: l.venda } : {}),
           });
         } else {
           criar.push({
             nome: l.nome,
             laboratorio: l.laboratorio,
-            custo: l.custo,
-            estoque: l.estoque,
-            preco: l.venda > 0 ? l.venda : l.custo,
+            ...(l.custo !== undefined ? { custo: l.custo } : {}),
+            // Produto novo vindo da lista de medicamentos entra com estoque
+            // 0: esse relatório não informa quantidade, e chutar um número
+            // seria inventar dado. A dona ajusta a quantidade na tela.
+            estoque: l.estoque ?? 0,
+            ...(l.observacoes !== undefined ? { observacoes: l.observacoes } : {}),
+            preco: l.venda > 0 ? l.venda : (l.custo ?? 0),
           });
         }
       }
@@ -191,6 +209,7 @@ export async function POST(request: Request) {
           continue;
         }
         nomesVistos.add(chave);
+        nomesDoArquivo.add(chave);
 
         const id = nomeParaId.get(chave);
         if (id) {
@@ -230,6 +249,9 @@ export async function POST(request: Request) {
       const skusExistentes = new Set(existentes.filter((p) => p.sku).map((p) => p.sku as string));
 
       for (const l of linhas) {
+        if (l.sku) skusDoArquivo.add(l.sku);
+        nomesDoArquivo.add(normalizarNome(l.nome));
+
         if (l.sku && skusExistentes.has(l.sku)) {
           atualizarPorSku.push({
             sku: l.sku,
@@ -251,11 +273,27 @@ export async function POST(request: Request) {
       }
     }
 
+    // O que está cadastrado mas não apareceu no arquivo. Só é listado — a
+    // remoção depende de confirmação explícita na tela e acontece na rota
+    // /api/produtos/importar-estoque/remover.
+    const foraDoArquivo: ProdutoForaDoArquivo[] = existentes
+      .filter((p) =>
+        // No .fp3 o casamento é por código (sku); nos outros formatos é por
+        // nome. Em ambos, o nome também vale como segunda chance, pra não
+        // marcar como "fora do arquivo" um produto que está lá com outro código.
+        skusDoArquivo.size > 0 && p.sku
+          ? !skusDoArquivo.has(p.sku) && !nomesDoArquivo.has(normalizarNome(p.nome))
+          : !nomesDoArquivo.has(normalizarNome(p.nome))
+      )
+      .map((p) => ({ id: p.id, nome: p.nome }));
+
     const plano: PlanoImportacao = {
       arquivo: file.name,
       formato: ehPdf ? "pdf" : ehXlsx ? "xlsx" : "fp3",
+      formatoPdf,
       total,
       ignoradas,
+      foraDoArquivo,
       paginasParaRevisar: paginasParaRevisar.length > 0 ? paginasParaRevisar : undefined,
       atualizarPorId,
       atualizarPorSku,
@@ -263,7 +301,8 @@ export async function POST(request: Request) {
     };
 
     log(
-      `plano pronto (${atualizarPorId.length + atualizarPorSku.length} pra atualizar, ${criar.length} pra criar), respondendo`
+      `plano pronto (${atualizarPorId.length + atualizarPorSku.length} pra atualizar, ${criar.length} pra criar, ` +
+        `${foraDoArquivo.length} fora do arquivo), respondendo`
     );
     return NextResponse.json(plano);
   } catch (err) {

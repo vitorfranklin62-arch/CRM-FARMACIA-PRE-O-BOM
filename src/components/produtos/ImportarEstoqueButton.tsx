@@ -4,7 +4,13 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import type { LinhaImportacao, ModoGravacao, PlanoImportacao, ResultadoLote } from "@/types/importacao";
+import type {
+  LinhaImportacao,
+  ModoGravacao,
+  PlanoImportacao,
+  ResultadoLote,
+  ResultadoRemocao,
+} from "@/types/importacao";
 
 /** Linhas por lote enviado ao servidor. Lote pequeno = resposta rápida = barra subindo. */
 const LINHAS_POR_LOTE = 250;
@@ -12,6 +18,8 @@ const LINHAS_POR_LOTE = 250;
 const TIMEOUT_LEITURA = 300_000;
 /** Tempo limite de cada lote (etapa 2). */
 const TIMEOUT_LOTE = 120_000;
+/** Ids por lote na remoção dos produtos que não estão no arquivo. */
+const IDS_POR_LOTE_REMOCAO = 100;
 
 interface Lote {
   modo: ModoGravacao;
@@ -97,14 +105,37 @@ export function ImportarEstoqueButton() {
       const lotes = montarLotes(plano);
       const totalLinhas = lotes.reduce((soma, lote) => soma + lote.linhas.length, 0);
 
+      // Produtos cadastrados que não apareceram no arquivo. Só são apagados
+      // se a dona confirmar aqui — o padrão é manter tudo.
+      const foraDoArquivo = plano.foraDoArquivo ?? [];
+      let idsParaRemover: string[] = [];
+      if (foraDoArquivo.length > 0) {
+        const amostra = foraDoArquivo
+          .slice(0, 10)
+          .map((p) => `• ${p.nome}`)
+          .join("\n");
+        const resto = foraDoArquivo.length > 10 ? `\n...e mais ${foraDoArquivo.length - 10}.` : "";
+        const confirmar = confirm(
+          `O arquivo "${plano.arquivo}" traz ${plano.total} produto(s).\n\n` +
+            `${foraDoArquivo.length} produto(s) cadastrados NÃO estão nesse arquivo:\n${amostra}${resto}\n\n` +
+            `Quer APAGAR esses ${foraDoArquivo.length} produtos do sistema? Isso não pode ser desfeito.\n` +
+            `(Produto que já aparece em algum pedido não é apagado, pra não quebrar o histórico.)\n\n` +
+            `OK = apagar. Cancelar = manter todos e só atualizar o catálogo com o arquivo.`
+        );
+        if (confirmar) idsParaRemover = foraDoArquivo.map((p) => p.id);
+      }
+
       let atualizados = 0;
       let criados = 0;
       let erros = 0;
       let primeiroErro: string | null = null;
       let gravadas = 0;
+      let removidos = 0;
+      let bloqueados = 0;
 
-      // A barra vai de 10% (arquivo lido) a 100% (tudo gravado).
-      const percentDe = (feitas: number) => (totalLinhas === 0 ? 100 : 10 + Math.round((feitas / totalLinhas) * 90));
+      // A barra vai de 10% (arquivo lido) a 100% (tudo gravado e removido).
+      const totalTrabalho = totalLinhas + idsParaRemover.length;
+      const percentDe = (feitas: number) => (totalTrabalho === 0 ? 100 : 10 + Math.round((feitas / totalTrabalho) * 90));
 
       for (const lote of lotes) {
         setProgresso({
@@ -132,6 +163,26 @@ export function ImportarEstoqueButton() {
         });
       }
 
+      for (let i = 0; i < idsParaRemover.length; i += IDS_POR_LOTE_REMOCAO) {
+        const ids = idsParaRemover.slice(i, i + IDS_POR_LOTE_REMOCAO);
+
+        setProgresso({
+          percent: percentDe(gravadas + i),
+          fase: "Apagando produtos que não estão no arquivo...",
+          detalhe: `${i} de ${idsParaRemover.length} produto(s)`,
+        });
+
+        const resultado = (await postarJson(
+          "/api/produtos/importar-estoque/remover",
+          { ids, arquivo: plano.arquivo },
+          TIMEOUT_LOTE
+        )) as ResultadoRemocao;
+
+        removidos += resultado.removidos;
+        bloqueados += resultado.bloqueados;
+        primeiroErro ??= resultado.primeiroErro;
+      }
+
       // Fecha a importação: lote vazio, só com o resumo do que entrou, pra
       // ficar registrado na auditoria com os números finais de verdade.
       await postarJson(
@@ -157,7 +208,7 @@ export function ImportarEstoqueButton() {
       const partes = [
         `${plano.total} produto(s) encontrados no arquivo`,
         `${criados} novo(s) cadastrado(s)`,
-        `${atualizados} atualizado(s) (estoque/custo)`,
+        `${atualizados} atualizado(s)`,
       ];
       if (erros > 0) {
         partes.push(`⚠️ ${erros} com erro ao salvar`);
@@ -165,6 +216,18 @@ export function ImportarEstoqueButton() {
       }
       if (plano.ignoradas > 0) {
         partes.push(`${plano.ignoradas} linha(s) ignorada(s) (sem nome, dados não conferem, ou duplicada no arquivo)`);
+      }
+      if (removidos > 0 || bloqueados > 0) {
+        partes.push(`${removidos} produto(s) apagados por não estarem no arquivo`);
+        if (bloqueados > 0) {
+          partes.push(`${bloqueados} não puderam ser apagados (já aparecem em algum pedido) e continuam no catálogo`);
+        }
+      }
+      if (plano.formatoPdf === "lista") {
+        partes.push(
+          `\nEsse PDF é a lista de medicamentos (nome, laboratório, preço e observações) — ele não traz quantidade, ` +
+            `então o estoque de quem já estava cadastrado não foi alterado, e os produtos novos entraram com estoque 0.`
+        );
       }
       if (plano.paginasParaRevisar?.length) {
         partes.push(`⚠️ Confira manualmente a página ${plano.paginasParaRevisar.join(", ")} do PDF (nome/valores não bateram).`);

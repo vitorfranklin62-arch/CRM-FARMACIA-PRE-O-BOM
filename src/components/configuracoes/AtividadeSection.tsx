@@ -28,6 +28,7 @@ const ACAO_LABEL: Record<AuditAcao, string> = {
   campanha_disparada: "Disparou campanha",
   estoque_importado: "Importou arquivo de estoque",
   produtos_duplicados_removidos: "Removeu produtos duplicados",
+  produtos_fora_do_arquivo_removidos: "Removeu produtos fora do arquivo de estoque",
   bairro_entrega_criado: "Cadastrou bairro de entrega",
   bairro_entrega_atualizado: "Editou bairro de entrega",
   bairro_entrega_excluido: "Removeu bairro de entrega",

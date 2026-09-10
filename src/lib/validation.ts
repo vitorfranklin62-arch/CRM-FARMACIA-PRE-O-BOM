@@ -196,3 +196,13 @@ export const importarEstoqueLoteSchema = z.object({
     })
     .optional(),
 });
+
+/**
+ * Remoção dos produtos que não estão no arquivo de estoque importado.
+ * Só ids: quem decide o que entra nessa lista é a etapa de leitura do
+ * arquivo, e a tela ainda pede confirmação antes de mandar o primeiro lote.
+ */
+export const importarEstoqueRemoverSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(500),
+  arquivo: z.string().trim().min(1).max(300),
+});
