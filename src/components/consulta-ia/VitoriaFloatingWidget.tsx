@@ -58,29 +58,42 @@ export function VitoriaFloatingWidget({ fotoUrl }: { fotoUrl?: string | null }) 
     setEnviando(true);
     setError(null);
 
+    let res: Response;
     try {
-      const res = await fetch("/api/consulta-farmaceutica", {
+      res = await fetch("/api/consulta-farmaceutica", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pergunta: texto }),
       });
-      const body = await res.json();
-
-      if (!res.ok) {
-        setHistorico((atual) => atual.filter((m) => m.id !== id));
-        setError(body.error ?? "Não foi possível consultar a IA agora.");
-        return;
-      }
-
-      setHistorico((atual) =>
-        atual.map((m) => (m.id === id ? { ...m, resposta: body.resposta, pendente: false } : m))
-      );
     } catch {
       setHistorico((atual) => atual.filter((m) => m.id !== id));
-      setError("Não foi possível conectar à IA agora.");
-    } finally {
+      setError("Não foi possível conectar ao servidor. Verifique a internet ou avise a equipe técnica.");
       setEnviando(false);
+      return;
     }
+
+    // A resposta pode não ser JSON (ex.: página de erro do proxy/servidor em
+    // vez da rota do Next.js) — sem isso, esse caso caía no "catch" acima e
+    // escondia o status HTTP real, que é justamente o dado que ajuda a
+    // equipe técnica a diagnosticar o problema.
+    let body: { resposta?: string; error?: string } | null = null;
+    try {
+      body = await res.json();
+    } catch {
+      // segue com body null
+    }
+
+    if (!res.ok || !body) {
+      setHistorico((atual) => atual.filter((m) => m.id !== id));
+      setError(body?.error ?? `O servidor respondeu com erro (HTTP ${res.status}). Avise a equipe técnica.`);
+      setEnviando(false);
+      return;
+    }
+
+    setHistorico((atual) =>
+      atual.map((m) => (m.id === id ? { ...m, resposta: body!.resposta ?? null, pendente: false } : m))
+    );
+    setEnviando(false);
   }
 
   return (

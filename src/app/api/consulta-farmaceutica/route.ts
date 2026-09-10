@@ -61,8 +61,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Muitas consultas agora. Tente novamente em instantes." }, { status: 429 });
     }
     if (error instanceof Anthropic.APIError) {
+      console.error("[consulta-farmaceutica] erro da API da Anthropic:", error);
       return NextResponse.json({ error: "Não foi possível consultar a IA agora." }, { status: 502 });
     }
+    // Sem isso, um erro que não é nem ConsultaFarmaceuticaError nem um erro
+    // conhecido do SDK da Anthropic (ex.: falha de rede de saída pro
+    // api.anthropic.com, DNS, timeout) virava um 500 genérico sem nenhum
+    // rastro nos logs — impossível saber a causa real de fora do servidor.
+    console.error("[consulta-farmaceutica] erro inesperado:", error);
     return NextResponse.json({ error: "Erro inesperado ao consultar a IA." }, { status: 500 });
   }
 }
