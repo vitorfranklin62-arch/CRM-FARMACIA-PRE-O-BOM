@@ -23,6 +23,11 @@ export async function GET() {
     const res = await fetch(`${baseUrl.replace(/\/$/, "")}/instance/status`, {
       headers: { token: apiKey, Accept: "application/json" },
       cache: "no-store",
+      // Sem isso, uma UAIZAP fora do ar podia deixar a requisição pendurada
+      // até o proxy na frente do servidor cortar a conexão sozinho — aí o
+      // navegador recebia uma página de erro genérica em vez da nossa
+      // resposta JSON explicando o que houve.
+      signal: AbortSignal.timeout(15_000),
     });
 
     const dados = await res.json().catch(() => null);
@@ -36,8 +41,14 @@ export async function GET() {
 
     return NextResponse.json({ dados });
   } catch (erro) {
+    const timeout = erro instanceof Error && erro.name === "TimeoutError";
     return NextResponse.json(
-      { error: "Não foi possível falar com a UAIZAP.", detalhe: erro instanceof Error ? erro.message : String(erro) },
+      {
+        error: timeout
+          ? "A UAIZAP não respondeu a tempo (15s). Confira se UAIZAP_BASE_URL está correto e se o servidor está no ar."
+          : "Não foi possível falar com a UAIZAP.",
+        detalhe: erro instanceof Error ? erro.message : String(erro),
+      },
       { status: 502 }
     );
   }
