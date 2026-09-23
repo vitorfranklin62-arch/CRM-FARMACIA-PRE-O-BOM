@@ -89,10 +89,8 @@ export function ClientesTable({
     const supabase = createClient();
     if (temTag) {
       await supabase.from("cliente_tags").delete().eq("cliente_id", clienteId).eq("tag_id", tag.id);
-      await logAudit(supabase, "cliente_tag_removida", "clientes", clienteId, { tag: tag.nome });
     } else {
       await supabase.from("cliente_tags").insert({ cliente_id: clienteId, tag_id: tag.id });
-      await logAudit(supabase, "cliente_tag_adicionada", "clientes", clienteId, { tag: tag.nome });
     }
     router.refresh();
     setTagOcupada(null);
@@ -116,7 +114,6 @@ export function ClientesTable({
       return;
     }
 
-    await logAudit(supabase, "tag_criada", "tags", novaTag.id, { nome });
     await supabase.from("cliente_tags").insert({ cliente_id: clienteId, tag_id: novaTag.id });
     setNovoTagNome("");
     router.refresh();

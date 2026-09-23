@@ -215,15 +215,7 @@ export type AuditAcao =
   | "clientes_duplicados_mesclados"
   | "vitrine_item_criado"
   | "vitrine_item_atualizado"
-  | "vitrine_item_excluido"
-  | "cliente_ia_bloqueada"
-  | "cliente_ia_desbloqueada"
-  | "conversa_travada"
-  | "conversa_destravada"
-  | "tag_criada"
-  | "tag_excluida"
-  | "cliente_tag_adicionada"
-  | "cliente_tag_removida";
+  | "vitrine_item_excluido";
 
 export type AuditLog = {
   id: string;

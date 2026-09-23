@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Send, Bot, User, Headset, FileText, Camera, MessageSquare, Lock, Unlock, Ban, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { logAudit } from "@/lib/audit";
 import { cn, formatDateTime, maskPhone } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
@@ -71,7 +70,6 @@ export function MessageThread({
       .update({ status: novoStatus, atualizado_em: new Date().toISOString() })
       .eq("id", conversa.id);
     if (!error) {
-      await logAudit(supabase, travada ? "conversa_destravada" : "conversa_travada", "conversas", conversa.id);
       router.refresh();
     }
     setTravando(false);
@@ -95,12 +93,6 @@ export function MessageThread({
       })
       .eq("id", conversa.clientes.id);
     if (!error) {
-      await logAudit(
-        supabase,
-        numeroBloqueado ? "cliente_ia_desbloqueada" : "cliente_ia_bloqueada",
-        "clientes",
-        conversa.clientes.id
-      );
       router.refresh();
     }
     setBloqueando(false);
