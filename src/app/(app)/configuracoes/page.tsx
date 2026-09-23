@@ -1,6 +1,7 @@
 import { requireDona } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { FarmaciaForm } from "@/components/configuracoes/FarmaciaForm";
+import { WhatsappConexaoForm } from "@/components/configuracoes/WhatsappConexaoForm";
 import { IntegracoesForm } from "@/components/configuracoes/IntegracoesForm";
 import { VitoriaIAForm } from "@/components/configuracoes/VitoriaIAForm";
 import { SegurancaForm } from "@/components/configuracoes/SegurancaForm";
@@ -39,6 +40,7 @@ export default async function ConfiguracoesPage() {
           telefone={config.get("farmacia_telefone") ?? ""}
           horario={config.get("farmacia_horario") ?? ""}
         />
+        <WhatsappConexaoForm />
         <IntegracoesForm
           uaizapUrl={config.get("integracao_uaizap_url") ?? ""}
           n8nUrl={config.get("integracao_n8n_url") ?? ""}
