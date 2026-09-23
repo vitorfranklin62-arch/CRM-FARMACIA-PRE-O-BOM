@@ -27,7 +27,7 @@ export interface EncomendaComCliente extends Encomenda {
 }
 
 export interface ConversaCompleta extends Conversa {
-  clientes: Cliente | null;
+  clientes: ClienteComTags | null;
   mensagens?: Mensagem[];
 }
 

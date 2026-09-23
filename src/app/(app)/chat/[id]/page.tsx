@@ -5,9 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import { ChatShell } from "@/components/chat/ChatShell";
 import { MessageThread } from "@/components/chat/MessageThread";
 import type { ConversaCompleta, MensagemComUsuario } from "@/types/relations";
-import type { TemplateMensagem } from "@/types/database";
+import type { Tag, TemplateMensagem } from "@/types/database";
 
 export const dynamic = "force-dynamic";
+
+// Mesmo join usado na tela de Clientes — traz as tags junto pra aparecerem
+// no cabeçalho do Chat sem precisar de outra consulta.
+const CLIENTE_COM_TAGS_SELECT = "*, cliente_tags(cliente_id, tag_id, criado_em, tags(*))";
 
 export default async function ChatConversaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,16 +20,21 @@ export default async function ChatConversaPage({ params }: { params: Promise<{ i
 
   const conversasRes = await supabase
     .from("conversas")
-    .select("*, clientes(*)")
+    .select(`*, clientes(${CLIENTE_COM_TAGS_SELECT})`)
     .order("atualizado_em", { ascending: false })
     .limit(100);
-  const conversaRes = await supabase.from("conversas").select("*, clientes(*)").eq("id", id).maybeSingle();
+  const conversaRes = await supabase
+    .from("conversas")
+    .select(`*, clientes(${CLIENTE_COM_TAGS_SELECT})`)
+    .eq("id", id)
+    .maybeSingle();
   const mensagensRes = await supabase
     .from("mensagens")
     .select("*, usuarios(*)")
     .eq("conversa_id", id)
     .order("criado_em", { ascending: true });
   const templatesRes = await supabase.from("templates_mensagem").select("*").order("titulo");
+  const tagsRes = await supabase.from("tags").select("*").order("nome");
 
   if (!conversaRes.data) notFound();
 
@@ -50,6 +59,7 @@ export default async function ChatConversaPage({ params }: { params: Promise<{ i
           conversa={conversaRes.data as ConversaCompleta}
           initialMensagens={(mensagensRes.data as MensagemComUsuario[]) ?? []}
           templates={(templatesRes.data as TemplateMensagem[]) ?? []}
+          tagsDisponiveis={(tagsRes.data as Tag[]) ?? []}
         />
       </ChatShell>
     </div>
