@@ -18,6 +18,12 @@
   --foreground: #e2e8f0;
 }
 
+html {
+  /* Evita que algum componente um pouco mais largo (tabela, board) empurre
+     a página inteira e crie uma barra de rolagem horizontal no celular. */
+  overflow-x: hidden;
+}
+
 body {
   color: var(--foreground);
   background-color: var(--background);
