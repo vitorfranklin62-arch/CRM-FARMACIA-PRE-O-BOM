@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Bot, User, Headset, FileText, Camera, MessageSquare } from "lucide-react";
+import { Send, Bot, User, Headset, FileText, Camera, MessageSquare, Lock, Unlock, Ban, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { logAudit } from "@/lib/audit";
 import { cn, formatDateTime, maskPhone } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
@@ -48,8 +49,62 @@ export function MessageThread({
   const [texto, setTexto] = useState("");
   const [sending, setSending] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [travando, setTravando] = useState(false);
+  const [bloqueando, setBloqueando] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  const travada = conversa.status === "aguardando_humano";
+  const numeroBloqueado = conversa.clientes?.ia_bloqueada ?? false;
+
+  // Trava/destrava a IA só NESTA conversa — reaproveita o mesmo status que já
+  // é setado sozinho quando uma funcionária responde manualmente (ver
+  // /api/chat/enviar). Aqui vira um botão explícito, sem precisar mandar
+  // mensagem pra "tomar conta" da conversa.
+  async function alternarTrava() {
+    if (travando) return;
+    setTravando(true);
+    const novoStatus = travada ? "aberta" : "aguardando_humano";
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("conversas")
+      .update({ status: novoStatus, atualizado_em: new Date().toISOString() })
+      .eq("id", conversa.id);
+    if (!error) {
+      await logAudit(supabase, travada ? "conversa_destravada" : "conversa_travada", "conversas", conversa.id);
+      router.refresh();
+    }
+    setTravando(false);
+  }
+
+  // Bloqueio permanente do número — diferente da trava acima, vale pra
+  // qualquer conversa futura desse cliente, não só a atual.
+  async function alternarBloqueioNumero() {
+    if (bloqueando || !conversa.clientes) return;
+    const acao = numeroBloqueado ? "desbloquear" : "bloquear";
+    if (!confirm(`Tem certeza que quer ${acao} a IA pra este número? ${numeroBloqueado ? "A IA volta a responder normalmente." : "A IA para de responder automaticamente em qualquer conversa futura, até você desbloquear."}`)) {
+      return;
+    }
+    setBloqueando(true);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("clientes")
+      .update({
+        ia_bloqueada: !numeroBloqueado,
+        ...(numeroBloqueado ? {} : { ia_bloqueada_em: new Date().toISOString() }),
+      })
+      .eq("id", conversa.clientes.id);
+    if (!error) {
+      await logAudit(
+        supabase,
+        numeroBloqueado ? "cliente_ia_desbloqueada" : "cliente_ia_bloqueada",
+        "clientes",
+        conversa.clientes.id
+      );
+      router.refresh();
+    }
+    setBloqueando(false);
+  }
 
   useEffect(() => setMensagens(initialMensagens), [initialMensagens]);
 
@@ -106,6 +161,11 @@ export function MessageThread({
             {maskPhone(conversa.clientes?.telefone)}
           </p>
         </div>
+        {numeroBloqueado && (
+          <Badge variant="red" comBolinha className="hidden sm:inline-flex">
+            IA bloqueada
+          </Badge>
+        )}
         <Badge
           variant={conversa.status === "fechada" ? "gray" : conversa.status === "aguardando_humano" ? "yellow" : "blue"}
           comBolinha
@@ -113,6 +173,34 @@ export function MessageThread({
         >
           {conversa.status === "aberta" ? "IA ativa" : conversa.status === "aguardando_humano" ? "Precisa de você" : "Fechada"}
         </Badge>
+        <button
+          type="button"
+          onClick={alternarTrava}
+          disabled={travando}
+          title={travada ? "Destravar: deixar a IA responder de novo nesta conversa" : "Travar: a IA para de responder nesta conversa até você destravar"}
+          className={cn(
+            "rounded-xl p-2 transition disabled:opacity-50",
+            travada
+              ? "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:hover:bg-amber-500/25"
+              : "text-gray-400 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-white/10"
+          )}
+        >
+          {travada ? <Lock size={17} /> : <Unlock size={17} />}
+        </button>
+        <button
+          type="button"
+          onClick={alternarBloqueioNumero}
+          disabled={bloqueando || !conversa.clientes}
+          title={numeroBloqueado ? "Desbloquear IA para este número" : "Bloquear IA para este número (vale pra todas as conversas futuras)"}
+          className={cn(
+            "rounded-xl p-2 transition disabled:opacity-50",
+            numeroBloqueado
+              ? "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25"
+              : "text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-white/10"
+          )}
+        >
+          {numeroBloqueado ? <ShieldCheck size={17} /> : <Ban size={17} />}
+        </button>
       </div>
 
       <div className="rolagem-fina flex-1 space-y-3 overflow-y-auto bg-gradient-to-b from-transparent via-brand-50/25 to-accent-50/25 px-5 py-4 dark:via-brand-500/[0.06] dark:to-accent-500/[0.05]">

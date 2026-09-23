@@ -9,6 +9,7 @@ export type TemplateCategoria = "confirmacao" | "promocao" | "duvida" | "outro";
 export type ClientesAlvo = "todos" | "por_filtro";
 export type CampanhaStatus = "rascunho" | "agendada" | "enviada";
 export type ConfiguracaoTipo = "string" | "number" | "boolean" | "json";
+export type TagCor = "blue" | "green" | "yellow" | "gray" | "red" | "purple";
 
 export type Usuario = {
   id: string;
@@ -28,6 +29,22 @@ export type Cliente = {
   observacoes: string | null;
   foto_url: string | null;
   ultima_interacao: string | null;
+  /** true = a IA nunca responde automaticamente este número, em nenhuma conversa (bloqueio manual pelo CRM). */
+  ia_bloqueada: boolean;
+  ia_bloqueada_em: string | null;
+  criado_em: string;
+}
+
+export type Tag = {
+  id: string;
+  nome: string;
+  cor: TagCor;
+  criado_em: string;
+}
+
+export type ClienteTag = {
+  cliente_id: string;
+  tag_id: string;
   criado_em: string;
 }
 
@@ -198,7 +215,15 @@ export type AuditAcao =
   | "clientes_duplicados_mesclados"
   | "vitrine_item_criado"
   | "vitrine_item_atualizado"
-  | "vitrine_item_excluido";
+  | "vitrine_item_excluido"
+  | "cliente_ia_bloqueada"
+  | "cliente_ia_desbloqueada"
+  | "conversa_travada"
+  | "conversa_destravada"
+  | "tag_criada"
+  | "tag_excluida"
+  | "cliente_tag_adicionada"
+  | "cliente_tag_removida";
 
 export type AuditLog = {
   id: string;
@@ -343,6 +368,26 @@ export interface Database {
       vendas_log: TableDef<VendaLog>;
       bairros_entrega: TableDef<BairroEntrega>;
       vitrine_itens: TableDef<VitrineItem>;
+      tags: TableDef<Tag>;
+      cliente_tags: TableDef<
+        ClienteTag,
+        [
+          {
+            foreignKeyName: "cliente_tags_cliente_id_fkey";
+            columns: ["cliente_id"];
+            isOneToOne: false;
+            referencedRelation: "clientes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cliente_tags_tag_id_fkey";
+            columns: ["tag_id"];
+            isOneToOne: false;
+            referencedRelation: "tags";
+            referencedColumns: ["id"];
+          },
+        ]
+      >;
       configuracoes: TableDef<Configuracao>;
       login_tentativas: TableDef<LoginTentativa>;
       audit_log: TableDef<

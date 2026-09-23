@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MessageSquare, Camera } from "lucide-react";
+import { MessageSquare, Camera, Ban } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
@@ -79,6 +79,9 @@ export function ConversationList({
                 </span>
               </div>
               <div className="mt-1 flex items-center gap-1.5">
+                {conversa.clientes?.ia_bloqueada && (
+                  <Ban size={12} className="shrink-0 text-red-500 dark:text-red-400" aria-label="IA bloqueada" />
+                )}
                 {conversa.clientes?.origem_chat === "instagram" ? (
                   <Camera size={12} className="text-fuchsia-500 dark:text-fuchsia-400" />
                 ) : (

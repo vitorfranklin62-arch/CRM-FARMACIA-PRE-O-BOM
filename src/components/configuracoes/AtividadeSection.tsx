@@ -37,6 +37,14 @@ const ACAO_LABEL: Record<AuditAcao, string> = {
   vitrine_item_criado: "Criou item na vitrine",
   vitrine_item_atualizado: "Atualizou item na vitrine",
   vitrine_item_excluido: "Excluiu item da vitrine",
+  cliente_ia_bloqueada: "Bloqueou a IA para um número",
+  cliente_ia_desbloqueada: "Desbloqueou a IA para um número",
+  conversa_travada: "Travou a IA numa conversa",
+  conversa_destravada: "Destravou a IA numa conversa",
+  tag_criada: "Criou tag",
+  tag_excluida: "Excluiu tag",
+  cliente_tag_adicionada: "Adicionou tag a um cliente",
+  cliente_tag_removida: "Removeu tag de um cliente",
 };
 
 const ENTIDADE_LABEL: Record<string, string> = {
@@ -50,6 +58,7 @@ const ENTIDADE_LABEL: Record<string, string> = {
   produtos: "Produto",
   bairros_entrega: "Bairro de entrega",
   conversas: "Conversa",
+  tags: "Tag",
 };
 
 export function AtividadeSection({ logs }: { logs: AuditLogComUsuario[] }) {
