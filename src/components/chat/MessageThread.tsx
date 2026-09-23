@@ -2,14 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Bot, User, Headset, FileText, Camera, MessageSquare, Lock, Unlock, Ban, ShieldCheck } from "lucide-react";
+import { Send, Bot, User, Headset, FileText, Camera, MessageSquare, Lock, Unlock, Ban, ShieldCheck, Tag as TagIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn, formatDateTime, maskPhone } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
+import { TagPills } from "@/components/clientes/TagPills";
+import { TagsManagerModal } from "@/components/clientes/TagsManagerModal";
 import { TemplatePicker } from "./TemplatePicker";
 import type { ConversaCompleta, MensagemComUsuario } from "@/types/relations";
-import type { TemplateMensagem } from "@/types/database";
+import type { Tag, TemplateMensagem } from "@/types/database";
 
 // Cada remetente tem sua própria cor: a IA em violeta claro, o cliente no azul
 // da marca e a equipe em verde. Assim dá pra ler a conversa só pelas cores.
@@ -39,10 +41,12 @@ export function MessageThread({
   conversa,
   initialMensagens,
   templates,
+  tagsDisponiveis,
 }: {
   conversa: ConversaCompleta;
   initialMensagens: MensagemComUsuario[];
   templates: TemplateMensagem[];
+  tagsDisponiveis: Tag[];
 }) {
   const [mensagens, setMensagens] = useState(initialMensagens);
   const [texto, setTexto] = useState("");
@@ -50,6 +54,7 @@ export function MessageThread({
   const [showTemplates, setShowTemplates] = useState(false);
   const [travando, setTravando] = useState(false);
   const [bloqueando, setBloqueando] = useState(false);
+  const [gerenciandoTags, setGerenciandoTags] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -140,60 +145,95 @@ export function MessageThread({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-brand-100/70 bg-gradient-to-r from-brand-50/80 via-white to-accent-50/50 px-5 py-3.5 dark:border-white/10 dark:from-brand-500/15 dark:via-navy-800/40 dark:to-accent-500/10">
-        <Avatar nome={conversa.clientes?.nome ?? "?"} fotoUrl={conversa.clientes?.foto_url} size={38} comAnel />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{conversa.clientes?.nome ?? "Cliente"}</p>
-          <p className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-            {conversa.clientes?.origem_chat === "instagram" ? (
-              <Camera size={11} className="text-fuchsia-500 dark:text-fuchsia-400" />
-            ) : (
-              <MessageSquare size={11} className="text-emerald-500 dark:text-emerald-400" />
+      <div className="border-b border-brand-100/70 bg-gradient-to-r from-brand-50/80 via-white to-accent-50/50 px-5 py-3.5 dark:border-white/10 dark:from-brand-500/15 dark:via-navy-800/40 dark:to-accent-500/10">
+        <div className="flex items-center gap-3">
+          <Avatar nome={conversa.clientes?.nome ?? "?"} fotoUrl={conversa.clientes?.foto_url} size={38} comAnel />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{conversa.clientes?.nome ?? "Cliente"}</p>
+            <p className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+              {conversa.clientes?.origem_chat === "instagram" ? (
+                <Camera size={11} className="text-fuchsia-500 dark:text-fuchsia-400" />
+              ) : (
+                <MessageSquare size={11} className="text-emerald-500 dark:text-emerald-400" />
+              )}
+              {maskPhone(conversa.clientes?.telefone)}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            {numeroBloqueado && (
+              <Badge variant="red" comBolinha className="hidden sm:inline-flex">
+                IA bloqueada
+              </Badge>
             )}
-            {maskPhone(conversa.clientes?.telefone)}
-          </p>
+            <Badge
+              variant={conversa.status === "fechada" ? "gray" : conversa.status === "aguardando_humano" ? "yellow" : "blue"}
+              comBolinha
+              pulsando={conversa.status === "aguardando_humano"}
+            >
+              {conversa.status === "aberta" ? "IA ativa" : conversa.status === "aguardando_humano" ? "Precisa de você" : "Fechada"}
+            </Badge>
+          </div>
         </div>
-        {numeroBloqueado && (
-          <Badge variant="red" comBolinha className="hidden sm:inline-flex">
-            IA bloqueada
-          </Badge>
-        )}
-        <Badge
-          variant={conversa.status === "fechada" ? "gray" : conversa.status === "aguardando_humano" ? "yellow" : "blue"}
-          comBolinha
-          pulsando={conversa.status === "aguardando_humano"}
-        >
-          {conversa.status === "aberta" ? "IA ativa" : conversa.status === "aguardando_humano" ? "Precisa de você" : "Fechada"}
-        </Badge>
-        <button
-          type="button"
-          onClick={alternarTrava}
-          disabled={travando}
-          title={travada ? "Destravar: deixar a IA responder de novo nesta conversa" : "Travar: a IA para de responder nesta conversa até você destravar"}
-          className={cn(
-            "rounded-xl p-2 transition disabled:opacity-50",
-            travada
-              ? "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:hover:bg-amber-500/25"
-              : "text-gray-400 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-white/10"
-          )}
-        >
-          {travada ? <Lock size={17} /> : <Unlock size={17} />}
-        </button>
-        <button
-          type="button"
-          onClick={alternarBloqueioNumero}
-          disabled={bloqueando || !conversa.clientes}
-          title={numeroBloqueado ? "Desbloquear IA para este número" : "Bloquear IA para este número (vale pra todas as conversas futuras)"}
-          className={cn(
-            "rounded-xl p-2 transition disabled:opacity-50",
-            numeroBloqueado
-              ? "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25"
-              : "text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-white/10"
-          )}
-        >
-          {numeroBloqueado ? <ShieldCheck size={17} /> : <Ban size={17} />}
-        </button>
+
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <TagPills
+            tags={conversa.clientes?.cliente_tags ?? []}
+            onClick={conversa.clientes ? () => setGerenciandoTags(true) : undefined}
+            emptyLabel="+ adicionar tag"
+            className="min-w-0"
+          />
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setGerenciandoTags(true)}
+              disabled={!conversa.clientes}
+              title="Gerenciar tags deste cliente"
+              className="rounded-xl p-2 text-gray-400 transition hover:bg-brand-50 hover:text-brand-600 disabled:opacity-50 dark:hover:bg-white/10"
+            >
+              <TagIcon size={17} />
+            </button>
+            <button
+              type="button"
+              onClick={alternarTrava}
+              disabled={travando}
+              title={travada ? "Destravar: deixar a IA responder de novo nesta conversa" : "Travar: a IA para de responder nesta conversa até você destravar"}
+              className={cn(
+                "rounded-xl p-2 transition disabled:opacity-50",
+                travada
+                  ? "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:hover:bg-amber-500/25"
+                  : "text-gray-400 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-white/10"
+              )}
+            >
+              {travada ? <Lock size={17} /> : <Unlock size={17} />}
+            </button>
+            <button
+              type="button"
+              onClick={alternarBloqueioNumero}
+              disabled={bloqueando || !conversa.clientes}
+              title={numeroBloqueado ? "Desbloquear IA para este número" : "Bloquear IA para este número (vale pra todas as conversas futuras)"}
+              className={cn(
+                "rounded-xl p-2 transition disabled:opacity-50",
+                numeroBloqueado
+                  ? "bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25"
+                  : "text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-white/10"
+              )}
+            >
+              {numeroBloqueado ? <ShieldCheck size={17} /> : <Ban size={17} />}
+            </button>
+          </div>
+        </div>
       </div>
+
+      {conversa.clientes && (
+        <TagsManagerModal
+          open={gerenciandoTags}
+          onClose={() => setGerenciandoTags(false)}
+          clienteId={conversa.clientes.id}
+          clienteNome={conversa.clientes.nome}
+          tagsAtuais={conversa.clientes.cliente_tags}
+          tagsDisponiveis={tagsDisponiveis}
+        />
+      )}
 
       <div className="rolagem-fina flex-1 space-y-3 overflow-y-auto bg-gradient-to-b from-transparent via-brand-50/25 to-accent-50/25 px-5 py-4 dark:via-brand-500/[0.06] dark:to-accent-500/[0.05]">
         {mensagens.length === 0 && (

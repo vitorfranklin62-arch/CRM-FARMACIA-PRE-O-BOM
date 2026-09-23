@@ -30,6 +30,7 @@ export async function POST() {
       method: "POST",
       headers: { token: apiKey, Accept: "application/json", "Content-Type": "application/json" },
       cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
     });
 
     const dados = await res.json().catch(() => null);
@@ -43,8 +44,14 @@ export async function POST() {
 
     return NextResponse.json({ dados });
   } catch (erro) {
+    const timeout = erro instanceof Error && erro.name === "TimeoutError";
     return NextResponse.json(
-      { error: "Não foi possível falar com a UAIZAP.", detalhe: erro instanceof Error ? erro.message : String(erro) },
+      {
+        error: timeout
+          ? "A UAIZAP não respondeu a tempo (15s). Confira se UAIZAP_BASE_URL está correto e se o servidor está no ar."
+          : "Não foi possível falar com a UAIZAP.",
+        detalhe: erro instanceof Error ? erro.message : String(erro),
+      },
       { status: 502 }
     );
   }

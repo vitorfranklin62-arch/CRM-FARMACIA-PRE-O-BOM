@@ -40,12 +40,28 @@ function extrairConectado(dados: unknown): boolean | null {
   return null;
 }
 
+/**
+ * Lê a resposta como texto puro e só then tenta interpretar como JSON — se o
+ * servidor (ou um proxy na frente dele) devolver uma página de erro HTML em
+ * vez de JSON, isso não vira mais uma mensagem genérica sem explicação: o
+ * texto bruto (status + corpo) fica disponível pra mostrar na tela.
+ */
+async function lerResposta(res: Response): Promise<{ json: RespostaApi | null; bruto: string }> {
+  const bruto = await res.text();
+  try {
+    return { json: JSON.parse(bruto), bruto };
+  } catch {
+    return { json: null, bruto };
+  }
+}
+
 export function WhatsappConexaoForm() {
   const [carregandoStatus, setCarregandoStatus] = useState(true);
   const [gerandoQr, setGerandoQr] = useState(false);
   const [statusDados, setStatusDados] = useState<unknown>(null);
   const [qrDados, setQrDados] = useState<unknown>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [erroDetalhe, setErroDetalhe] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const conectado = extrairConectado(statusDados);
@@ -54,12 +70,14 @@ export function WhatsappConexaoForm() {
   const buscarStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/configuracoes/uazapi/status");
-      const json: RespostaApi = await res.json();
-      if (!res.ok) {
-        setErro(json.error ?? "Não foi possível consultar o status.");
+      const { json, bruto } = await lerResposta(res);
+      if (!res.ok || !json) {
+        setErro(json?.error ?? "Não foi possível consultar o status.");
+        setErroDetalhe(`HTTP ${res.status}${bruto ? ` — ${bruto.slice(0, 500)}` : ""}`);
         return;
       }
       setErro(null);
+      setErroDetalhe(null);
       setStatusDados(json.dados);
       // Conectou: para de mostrar o QR e o polling.
       if (extrairConectado(json.dados)) {
@@ -69,8 +87,9 @@ export function WhatsappConexaoForm() {
           pollRef.current = null;
         }
       }
-    } catch {
+    } catch (e) {
       setErro("Não foi possível falar com o servidor.");
+      setErroDetalhe(e instanceof Error ? e.message : String(e));
     } finally {
       setCarregandoStatus(false);
     }
@@ -86,11 +105,13 @@ export function WhatsappConexaoForm() {
   async function gerarQrCode() {
     setGerandoQr(true);
     setErro(null);
+    setErroDetalhe(null);
     try {
       const res = await fetch("/api/configuracoes/uazapi/conectar", { method: "POST" });
-      const json: RespostaApi = await res.json();
-      if (!res.ok) {
-        setErro(json.error ?? "Não foi possível gerar o QR code.");
+      const { json, bruto } = await lerResposta(res);
+      if (!res.ok || !json) {
+        setErro(json?.error ?? "Não foi possível gerar o QR code.");
+        setErroDetalhe(`HTTP ${res.status}${bruto ? ` — ${bruto.slice(0, 500)}` : ""}`);
         setGerandoQr(false);
         return;
       }
@@ -98,8 +119,9 @@ export function WhatsappConexaoForm() {
       // Fica checando o status a cada 4s enquanto espera o celular escanear.
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = setInterval(buscarStatus, 4000);
-    } catch {
+    } catch (e) {
       setErro("Não foi possível falar com o servidor.");
+      setErroDetalhe(e instanceof Error ? e.message : String(e));
     } finally {
       setGerandoQr(false);
     }
@@ -142,7 +164,12 @@ export function WhatsappConexaoForm() {
           </button>
         </div>
 
-        {erro && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{erro}</p>}
+        {erro && (
+          <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-500/10">
+            <p>{erro}</p>
+            {erroDetalhe && <p className="mt-1 break-all font-mono text-[11px] text-red-500/80">{erroDetalhe}</p>}
+          </div>
+        )}
 
         {qrCode && (
           <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-brand-200 bg-brand-50/40 p-4 dark:border-white/10 dark:bg-white/5">
