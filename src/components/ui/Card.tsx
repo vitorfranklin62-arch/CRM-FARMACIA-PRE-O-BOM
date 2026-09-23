@@ -34,15 +34,15 @@ export function CardHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-4 flex items-start justify-between gap-4">
-      <div>
+    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="min-w-0">
         <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-white">
-          <span aria-hidden className="faixa-arcoiris h-4 w-1 rounded-full" />
+          <span aria-hidden className="faixa-arcoiris h-4 w-1 shrink-0 rounded-full" />
           {title}
         </h2>
         {description && <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{description}</p>}
       </div>
-      {action}
+      {action && <div className="flex flex-wrap items-center gap-2 sm:shrink-0">{action}</div>}
     </div>
   );
 }

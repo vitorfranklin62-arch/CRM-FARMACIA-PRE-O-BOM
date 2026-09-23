@@ -117,6 +117,11 @@ export const clienteUpdateSchema = z.object({
   observacoes: z.string().trim().max(2000).nullable().optional(),
 });
 
+export const tagCreateSchema = z.object({
+  nome: z.string().trim().min(1).max(40),
+  cor: z.enum(["blue", "green", "yellow", "gray", "red", "purple"]),
+});
+
 export const encomendaCreateSchema = z.object({
   nome: z.string().trim().min(1).max(200),
   telefone: z.string().trim().min(8).max(30),

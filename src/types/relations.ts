@@ -1,6 +1,7 @@
 import type {
   AuditLog,
   Cliente,
+  ClienteTag,
   ConsultaFarmaceutica,
   Conversa,
   Encomenda,
@@ -8,6 +9,7 @@ import type {
   Mensagem,
   Pedido,
   Produto,
+  Tag,
   Usuario,
 } from "@/types/database";
 
@@ -39,4 +41,12 @@ export interface AuditLogComUsuario extends AuditLog {
 
 export interface ConsultaFarmaceuticaComUsuario extends ConsultaFarmaceutica {
   usuarios: Usuario | null;
+}
+
+export interface ClienteTagComTag extends ClienteTag {
+  tags: Tag | null;
+}
+
+export interface ClienteComTags extends Cliente {
+  cliente_tags: ClienteTagComTag[];
 }
