@@ -129,12 +129,18 @@ export type Conversa = {
   atualizado_em: string;
 }
 
+export type TipoMensagem = "texto" | "imagem" | "audio" | "documento";
+
 export type Mensagem = {
   id: string;
   conversa_id: string;
   remetente: Remetente;
   usuario_id: string | null;
   conteudo: string;
+  tipo: TipoMensagem;
+  midia_path: string | null;
+  midia_nome: string | null;
+  midia_mime: string | null;
   criado_em: string;
 }
 

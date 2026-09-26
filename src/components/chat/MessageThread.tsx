@@ -37,6 +37,49 @@ const REMETENTE_STYLE = {
   },
 } as const;
 
+// Foto, áudio ou PDF que o cliente mandou pelo WhatsApp. Sem midia_url (link
+// assinado ainda não gerado, ou arquivo não baixou — ver src/lib/chat-midia.ts)
+// não mostra nada, e a legenda/transcrição em `conteudo` continua aparecendo normal.
+function MensagemMidia({ msg }: { msg: MensagemComUsuario }) {
+  if (!msg.midia_url) return null;
+
+  if (msg.tipo === "imagem") {
+    return (
+      <a href={msg.midia_url} target="_blank" rel="noopener noreferrer" className="mb-1.5 block">
+        <img
+          src={msg.midia_url}
+          alt={msg.midia_nome ?? "Imagem enviada pelo cliente"}
+          className="max-h-64 w-auto rounded-lg object-cover"
+        />
+      </a>
+    );
+  }
+
+  if (msg.tipo === "audio") {
+    return (
+      <audio controls preload="none" src={msg.midia_url} className="mb-1.5 h-9 max-w-full">
+        Seu navegador não consegue tocar áudio.
+      </audio>
+    );
+  }
+
+  if (msg.tipo === "documento") {
+    return (
+      <a
+        href={msg.midia_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mb-1.5 flex items-center gap-2 rounded-lg bg-black/5 px-3 py-2 text-sm font-medium underline-offset-2 hover:underline dark:bg-white/10"
+      >
+        <FileText size={16} className="shrink-0" />
+        <span className="truncate">{msg.midia_nome ?? "Documento PDF"}</span>
+      </a>
+    );
+  }
+
+  return null;
+}
+
 export function MessageThread({
   conversa,
   initialMensagens,
@@ -249,6 +292,7 @@ export function MessageThread({
                   <Icon size={11} />
                   {msg.remetente === "funcionaria" && msg.usuarios ? msg.usuarios.nome : style.label}
                 </div>
+                <MensagemMidia msg={msg} />
                 <p className="whitespace-pre-wrap text-sm">{msg.conteudo}</p>
                 <p className="mt-1 text-[10px] opacity-60">{formatDateTime(msg.criado_em)}</p>
               </div>

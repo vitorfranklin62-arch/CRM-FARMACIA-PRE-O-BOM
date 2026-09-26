@@ -79,6 +79,13 @@ export const mensagemWebhookSchema = z.object({
   remetente: z.enum(["ia", "cliente", "funcionaria"]),
   conteudo: z.string().trim().min(1).max(4000),
   conversa_status: z.enum(["aberta", "aguardando_humano", "fechada"]).nullable().optional(),
+  // Mídia opcional (foto/áudio/PDF que o cliente mandou pelo WhatsApp). O N8N
+  // manda o link temporário de download da uazapi — esta rota baixa e guarda
+  // esse arquivo no Storage do CRM, porque o link da uazapi não dura pra sempre.
+  tipo: z.enum(["texto", "imagem", "audio", "documento"]).nullable().optional(),
+  midia_url_temporaria: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
+  midia_nome: z.string().trim().max(300).nullable().optional(),
+  midia_mime: z.string().trim().max(150).nullable().optional(),
 });
 
 export const produtoCreateSchema = z.object({
