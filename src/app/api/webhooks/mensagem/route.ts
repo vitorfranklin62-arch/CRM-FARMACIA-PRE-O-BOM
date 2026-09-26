@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { authorizeWebhook } from "@/lib/webhook-auth";
 import { mensagemWebhookSchema } from "@/lib/validation";
 import { normalizarTelefone } from "@/lib/telefone";
+import { baixarEArmazenarMidia } from "@/lib/chat-midia";
 
 /**
  * POST /api/webhooks/mensagem
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Payload inválido.", detalhes: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { cliente, remetente, conteudo, conversa_status } = parsed.data;
+  const { cliente, remetente, conteudo, conversa_status, tipo, midia_url_temporaria, midia_nome, midia_mime } = parsed.data;
   const supabase = createServiceClient();
   const now = new Date().toISOString();
   const telefoneNormalizado = normalizarTelefone(cliente.telefone);
@@ -105,10 +106,32 @@ export async function POST(request: Request) {
     await supabase.from("conversas").update({ status: conversa_status ?? "aberta" }).eq("id", conversaId);
   }
 
-  // 3. Registrar a mensagem
+  // 3. Baixar a mídia (se tiver) e guardar uma cópia permanente no Storage do
+  // CRM — o link temporário que a uazapi devolve não é garantido durar.
+  // Se der qualquer problema no download, a mensagem ainda é registrada, só
+  // que sem mídia (o texto/legenda que já veio no `conteudo` não se perde).
+  let midia: { midia_path: string; midia_mime: string } | null = null;
+  if (tipo && tipo !== "texto" && midia_url_temporaria) {
+    midia = await baixarEArmazenarMidia({
+      conversaId,
+      tipo,
+      urlTemporaria: midia_url_temporaria,
+      mimeInformado: midia_mime ?? null,
+    });
+  }
+
+  // 4. Registrar a mensagem
   const { data: mensagem, error: mensagemError } = await supabase
     .from("mensagens")
-    .insert({ conversa_id: conversaId, remetente, conteudo })
+    .insert({
+      conversa_id: conversaId,
+      remetente,
+      conteudo,
+      tipo: midia ? tipo! : "texto",
+      midia_path: midia?.midia_path ?? null,
+      midia_mime: midia?.midia_mime ?? null,
+      midia_nome: midia ? (midia_nome ?? null) : null,
+    })
     .select("id")
     .single();
 

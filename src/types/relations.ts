@@ -33,6 +33,9 @@ export interface ConversaCompleta extends Conversa {
 
 export interface MensagemComUsuario extends Mensagem {
   usuarios: Usuario | null;
+  // URL assinada (expira sozinha), calculada no servidor a partir de
+  // midia_path — nunca vem direto do banco, ver src/lib/chat-midia.ts.
+  midia_url?: string | null;
 }
 
 export interface AuditLogComUsuario extends AuditLog {

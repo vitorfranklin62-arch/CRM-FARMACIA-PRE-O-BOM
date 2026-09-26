@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ChatShell } from "@/components/chat/ChatShell";
 import { MessageThread } from "@/components/chat/MessageThread";
+import { anexarUrlsAssinadas } from "@/lib/chat-midia";
 import type { ConversaCompleta, MensagemComUsuario } from "@/types/relations";
 import type { Tag, TemplateMensagem } from "@/types/database";
 
@@ -38,6 +39,10 @@ export default async function ChatConversaPage({ params }: { params: Promise<{ i
 
   if (!conversaRes.data) notFound();
 
+  // Bucket de mídia do chat é privado — troca midia_path por um link
+  // assinado temporário antes de mandar as mensagens pra tela.
+  const mensagensComMidia = await anexarUrlsAssinadas((mensagensRes.data as MensagemComUsuario[]) ?? []);
+
   return (
     <div className="space-y-4">
       {/* Faixa colorida de topo, no mesmo padrão dos quadros de Pedidos e Encomendas. */}
@@ -57,7 +62,7 @@ export default async function ChatConversaPage({ params }: { params: Promise<{ i
       <ChatShell conversas={(conversasRes.data as ConversaCompleta[]) ?? []} selectedId={id}>
         <MessageThread
           conversa={conversaRes.data as ConversaCompleta}
-          initialMensagens={(mensagensRes.data as MensagemComUsuario[]) ?? []}
+          initialMensagens={mensagensComMidia}
           templates={(templatesRes.data as TemplateMensagem[]) ?? []}
           tagsDisponiveis={(tagsRes.data as Tag[]) ?? []}
         />
