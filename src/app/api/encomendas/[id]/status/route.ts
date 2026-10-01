@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/auth";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { encomendaStatusSchema } from "@/lib/validation";
 import { logAudit } from "@/lib/audit";
+import { lerCorpo, ehUuid } from "@/lib/api";
+import { notificarMensagemChat } from "@/lib/n8n";
+import { buscarConversaRecente } from "@/lib/conversas";
 import type { Database } from "@/types/database";
 
 /**
@@ -17,23 +20,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const usuario = await requireUser();
 
   const { id } = await params;
-  if (!/^[0-9a-f-]{36}$/i.test(id)) {
+  if (!ehUuid(id)) {
     return NextResponse.json({ error: "ID de encomenda inválido." }, { status: 400 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
-  }
+  const corpo = await lerCorpo(request, encomendaStatusSchema, { erro: "Status inválido." });
+  if (corpo.resposta) return corpo.resposta;
 
-  const parsed = encomendaStatusSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Status inválido." }, { status: 400 });
-  }
-
-  const { status } = parsed.data;
+  const { status } = corpo.dados;
   const supabase = await createClient();
 
   const { data: encomenda, error: encomendaError } = await supabase
@@ -97,15 +91,7 @@ async function avisarClienteEncomendaChegou(
 
   // Reaproveita a conversa mais recente do cliente (mesmo critério do
   // webhook de mensagens), só cria uma nova se ele nunca teve conversa.
-  const { data: conversaRecente } = await supabase
-    .from("conversas")
-    .select("id")
-    .eq("cliente_id", clienteId)
-    .order("criado_em", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let conversaId = conversaRecente?.id ?? null;
+  let conversaId = await buscarConversaRecente(supabase, clienteId);
 
   if (!conversaId) {
     const { data: novaConversa } = await supabase
@@ -131,30 +117,10 @@ async function avisarClienteEncomendaChegou(
 
   if (!mensagem) return;
 
-  const service = createServiceClient();
-  const { data: config } = await service
-    .from("configuracoes")
-    .select("valor")
-    .eq("chave", "integracao_n8n_chat_webhook_url")
-    .maybeSingle();
-
-  const webhookUrl = config?.valor;
-  const secret = process.env.N8N_WEBHOOK_SECRET;
-
-  if (webhookUrl && secret) {
-    try {
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
-        body: JSON.stringify({
-          conversa_id: conversaId,
-          mensagem_id: mensagem.id,
-          conteudo,
-          cliente: { nome: clienteNome, telefone: clienteTelefone },
-        }),
-      });
-    } catch {
-      // Falha ao notificar o N8N não deve impedir o status de já ter mudado
-    }
-  }
+  await notificarMensagemChat({
+    conversaId,
+    mensagemId: mensagem.id,
+    conteudo,
+    cliente: { nome: clienteNome, telefone: clienteTelefone },
+  });
 }

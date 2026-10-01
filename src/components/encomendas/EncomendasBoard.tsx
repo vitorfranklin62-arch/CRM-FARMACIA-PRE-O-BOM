@@ -6,8 +6,10 @@ import { Plus, Search } from "lucide-react";
 import { Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
+import { useRealtimeRefresh } from "@/lib/supabase/use-realtime-refresh";
 import { logAudit } from "@/lib/audit";
 import { ehHoje } from "@/lib/utils";
+import { normalizarTelefone } from "@/lib/telefone";
 import { ColunaKanban } from "@/components/kanban/ColunaKanban";
 import { BarraFinalizar } from "@/components/kanban/BarraFinalizar";
 import { CartaoFantasma } from "@/components/kanban/CartaoFantasma";
@@ -40,19 +42,7 @@ export function EncomendasBoard({
 
   useEffect(() => setEncomendas(initialEncomendas), [initialEncomendas]);
 
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel("encomendas-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "encomendas" }, () => {
-        router.refresh();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [router]);
+  useRealtimeRefresh("encomendas");
 
   const handleUpdateStatus = useCallback(
     async (id: string, status: EncomendaStatus) => {
@@ -106,11 +96,12 @@ export function EncomendasBoard({
   const termo = busca.trim().toLowerCase();
   const filtradas = useMemo(() => {
     if (!termo) return encomendas;
+    const digitos = normalizarTelefone(termo);
     return encomendas.filter(
       (e) =>
         e.clientes?.nome.toLowerCase().includes(termo) ||
         e.produto_nome.toLowerCase().includes(termo) ||
-        e.clientes?.telefone.replace(/\D/g, "").includes(termo.replace(/\D/g, ""))
+        (digitos && normalizarTelefone(e.clientes?.telefone ?? "").includes(digitos))
     );
   }, [encomendas, termo]);
 

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { mensagemCreateSchema } from "@/lib/validation";
+import { lerCorpo } from "@/lib/api";
+import { notificarMensagemChat } from "@/lib/n8n";
 
 /**
  * POST /api/chat/enviar
@@ -11,19 +13,10 @@ import { mensagemCreateSchema } from "@/lib/validation";
 export async function POST(request: Request) {
   const usuario = await requireUser();
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
-  }
+  const corpo = await lerCorpo(request, mensagemCreateSchema);
+  if (corpo.resposta) return corpo.resposta;
 
-  const parsed = mensagemCreateSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Payload inválido." }, { status: 400 });
-  }
-
-  const { conversa_id, conteudo } = parsed.data;
+  const { conversa_id, conteudo } = corpo.dados;
   const supabase = await createClient();
 
   const { data: conversa, error: conversaError } = await supabase
@@ -56,33 +49,13 @@ export async function POST(request: Request) {
     .eq("id", conversa_id);
 
   // Notifica o N8N pra entregar a mensagem via UAIZAP/WhatsApp (best-effort — a mensagem já foi salva)
-  const service = createServiceClient();
-  const { data: config } = await service
-    .from("configuracoes")
-    .select("valor")
-    .eq("chave", "integracao_n8n_chat_webhook_url")
-    .maybeSingle();
-
-  const webhookUrl = config?.valor;
-  const secret = process.env.N8N_WEBHOOK_SECRET;
   const cliente = Array.isArray(conversa.clientes) ? conversa.clientes[0] : conversa.clientes;
-
-  if (webhookUrl && secret) {
-    try {
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
-        body: JSON.stringify({
-          conversa_id,
-          mensagem_id: mensagem.id,
-          conteudo,
-          cliente: { nome: cliente?.nome ?? null, telefone: cliente?.telefone ?? null },
-        }),
-      });
-    } catch {
-      // Falha ao notificar o N8N não deve impedir a mensagem de aparecer no painel
-    }
-  }
+  await notificarMensagemChat({
+    conversaId: conversa_id,
+    mensagemId: mensagem.id,
+    conteudo,
+    cliente: { nome: cliente?.nome ?? null, telefone: cliente?.telefone ?? null },
+  });
 
   return NextResponse.json({ id: mensagem.id }, { status: 201 });
 }

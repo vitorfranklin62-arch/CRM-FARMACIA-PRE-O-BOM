@@ -68,7 +68,7 @@ Veja `.env.example`. Resumo:
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — client público (browser + SSR)
 - `SUPABASE_SERVICE_ROLE_KEY` — só usado no servidor (webhooks e administração de usuários), nunca exposto ao browser
 - `N8N_WEBHOOK_SECRET` — token que o N8N deve enviar em `Authorization: Bearer <token>` nos webhooks
-- `N8N_BASE_URL`, `UAIZAP_API_KEY`, `UAIZAP_BASE_URL` — configuração das integrações
+- `UAIZAP_API_KEY`, `UAIZAP_BASE_URL` — conexão com o WhatsApp (UAIZAP); as URLs dos webhooks do N8N ficam em Configurações → Integrações
 - `ANTHROPIC_API_KEY` — usada só pelo widget flutuante interno **Vitória AI**, nunca pela IA que atende cliente
 
 ## Webhooks / API para o N8N

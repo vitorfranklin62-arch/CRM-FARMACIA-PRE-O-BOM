@@ -5,7 +5,20 @@ export const loginSchema = z.object({
   password: z.string().min(6, "Senha deve ter no mínimo 6 caracteres").max(200),
 });
 
-export const pedidoItemWebhookSchema = z.object({
+export const clienteWebhookSchema = z.object({
+  nome: z.string().trim().min(1).max(200),
+  telefone: z.string().trim().min(8).max(30),
+  origem_chat: z.enum(["whatsapp", "instagram"]).nullable().optional(),
+  foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
+});
+
+// Dentro de pedido/mensagem o cliente pode vir com `id` (quando o chamador já
+// conhece o cliente) — o webhook de cliente em si sempre resolve por telefone.
+const clienteComIdWebhookSchema = clienteWebhookSchema.extend({
+  id: z.string().uuid().nullable().optional(),
+});
+
+const pedidoItemWebhookSchema = z.object({
   produto_id: z.string().uuid().nullable().optional(),
   sku: z.string().trim().max(100).nullable().optional(),
   nome: z.string().trim().max(300).nullable().optional(),
@@ -18,13 +31,7 @@ export const pedidoItemWebhookSchema = z.object({
 // explícito pra "sem valor" (ex.: pedido de retirada na loja sem
 // endereco_entrega) em vez de simplesmente omitir a chave.
 export const pedidoWebhookSchema = z.object({
-  cliente: z.object({
-    id: z.string().uuid().nullable().optional(),
-    nome: z.string().trim().min(1).max(200),
-    telefone: z.string().trim().min(8).max(30),
-    origem_chat: z.enum(["whatsapp", "instagram"]).nullable().optional(),
-    foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
-  }),
+  cliente: clienteComIdWebhookSchema,
   itens: z.array(pedidoItemWebhookSchema).min(1),
   total: z.number().nonnegative().nullable().optional(),
   endereco_entrega: z.string().trim().max(500).nullable().optional(),
@@ -32,13 +39,6 @@ export const pedidoWebhookSchema = z.object({
   pagamento_status: z.enum(["pendente", "confirmado"]).nullable().optional(),
   forma_pagamento: z.string().trim().max(100).nullable().optional(),
   taxa_entrega: z.number().nonnegative().nullable().optional(),
-});
-
-export const clienteWebhookSchema = z.object({
-  nome: z.string().trim().min(1).max(200),
-  telefone: z.string().trim().min(8).max(30),
-  origem_chat: z.enum(["whatsapp", "instagram"]).nullable().optional(),
-  foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
 });
 
 export const campanhaStatusWebhookSchema = z.object({
@@ -59,23 +59,13 @@ export const templateCreateSchema = z.object({
   categoria: z.enum(["confirmacao", "promocao", "duvida", "outro"]).nullable().optional(),
 });
 
-export const pedidoStatusSchema = z.object({
-  status: z.enum(["novo", "separando", "pronto", "entregue"]),
-});
-
 export const mensagemCreateSchema = z.object({
   conversa_id: z.string().uuid(),
   conteudo: z.string().trim().min(1).max(4000),
 });
 
 export const mensagemWebhookSchema = z.object({
-  cliente: z.object({
-    id: z.string().uuid().nullable().optional(),
-    nome: z.string().trim().min(1).max(200),
-    telefone: z.string().trim().min(8).max(30),
-    origem_chat: z.enum(["whatsapp", "instagram"]).nullable().optional(),
-    foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
-  }),
+  cliente: clienteComIdWebhookSchema,
   remetente: z.enum(["ia", "cliente", "funcionaria"]),
   conteudo: z.string().trim().min(1).max(4000),
   conversa_status: z.enum(["aberta", "aguardando_humano", "fechada"]).nullable().optional(),
@@ -120,15 +110,6 @@ export const clienteCreateSchema = z.object({
   observacoes: z.string().trim().max(2000).nullable().optional(),
 });
 
-export const clienteUpdateSchema = z.object({
-  observacoes: z.string().trim().max(2000).nullable().optional(),
-});
-
-export const tagCreateSchema = z.object({
-  nome: z.string().trim().min(1).max(40),
-  cor: z.enum(["blue", "green", "yellow", "gray", "red", "purple"]),
-});
-
 export const encomendaCreateSchema = z.object({
   nome: z.string().trim().min(1).max(200),
   telefone: z.string().trim().min(8).max(30),
@@ -148,26 +129,14 @@ export const usuarioCreateSchema = z.object({
   password: z.string().min(8).max(200),
 });
 
-export const usuarioUpdateSchema = z.object({
-  nome: z.string().trim().min(1).max(200).optional(),
-  ativo: z.boolean().optional(),
-  role: z.enum(["dona", "funcionaria"]).optional(),
-});
-
 export const senhaUpdateSchema = z.object({
   senhaAtual: z.string().min(6).max(200),
   novaSenha: z.string().min(8).max(200),
 });
 
-export const configuracaoUpdateSchema = z.record(z.string(), z.string());
-
 export const consultaFarmaceuticaSchema = z.object({
   pergunta: z.string().trim().min(3, "Escreva a pergunta completa.").max(500),
 });
-
-export function digitsOnly(value: string): string {
-  return value.replace(/\D/g, "");
-}
 
 /**
  * Importação de estoque, etapa 2 (gravação em lotes). O navegador manda de

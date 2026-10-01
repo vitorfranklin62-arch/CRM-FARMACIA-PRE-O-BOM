@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Textarea, Input } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
+import { normalizarTelefone } from "@/lib/telefone";
 import { logAudit } from "@/lib/audit";
 import { formatRelativeTime, maskPhone } from "@/lib/utils";
 import { MesclarClientesButton } from "./MesclarClientesButton";
@@ -37,11 +38,11 @@ export function ClientesTable({
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     if (!termo) return clientes;
-    const digitos = termo.replace(/\D/g, "");
+    const digitos = normalizarTelefone(termo);
     return clientes.filter(
       (c) =>
         c.nome.toLowerCase().includes(termo) ||
-        (digitos && c.telefone.replace(/\D/g, "").includes(digitos)) ||
+        (digitos && normalizarTelefone(c.telefone).includes(digitos)) ||
         c.observacoes?.toLowerCase().includes(termo)
     );
   }, [clientes, busca]);

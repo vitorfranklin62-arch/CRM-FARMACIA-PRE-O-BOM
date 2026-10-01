@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireDona } from "@/lib/auth";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
+import { chamarWebhookN8n } from "@/lib/n8n";
 
 /**
  * POST /api/campanhas/:id/disparar
@@ -39,27 +40,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   await logAudit(supabase, "campanha_disparada", "campanhas", id, undefined, usuario.id);
 
-  const service = createServiceClient();
-  const { data: config } = await service
-    .from("configuracoes")
-    .select("valor")
-    .eq("chave", "integracao_n8n_campanha_webhook_url")
-    .maybeSingle();
-
-  const webhookUrl = config?.valor;
-  const secret = process.env.N8N_WEBHOOK_SECRET;
-
-  if (webhookUrl && secret) {
-    try {
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
-        body: JSON.stringify({ campanha_id: id }),
-      });
-    } catch {
-      // Best-effort — se o N8N não responder agora, o schedule trigger dele pega a campanha depois
-    }
-  }
+  // Best-effort — se o N8N não responder agora, o schedule trigger dele pega a campanha depois
+  await chamarWebhookN8n("integracao_n8n_campanha_webhook_url", { campanha_id: id });
 
   return NextResponse.json({ ok: true });
 }

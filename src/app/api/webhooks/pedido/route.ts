@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authorizeWebhook } from "@/lib/webhook-auth";
 import { pedidoWebhookSchema } from "@/lib/validation";
-import { normalizarTelefone } from "@/lib/telefone";
+import { lerCorpo } from "@/lib/api";
+import { registrarClienteWebhook } from "@/lib/clientes-webhook";
 
 /**
  * POST /api/webhooks/pedido
@@ -13,66 +14,19 @@ export async function POST(request: Request) {
   const unauthorized = authorizeWebhook(request);
   if (unauthorized) return unauthorized;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
-  }
-
-  const parsed = pedidoWebhookSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Payload inválido.", detalhes: parsed.error.flatten() }, { status: 400 });
-  }
+  const corpo = await lerCorpo(request, pedidoWebhookSchema, { comDetalhes: true });
+  if (corpo.resposta) return corpo.resposta;
+  const dados = corpo.dados;
 
   const { cliente, itens, endereco_entrega, telefone_confirmacao, pagamento_status, forma_pagamento, taxa_entrega } =
-    parsed.data;
+    dados;
   const supabase = createServiceClient();
   const now = new Date().toISOString();
-  const telefoneNormalizado = normalizarTelefone(cliente.telefone);
 
   // 1. Resolver cliente (por id explícito, ou upsert atômico por telefone)
-  let clienteId: string;
-
-  if (cliente.id) {
-    // Chamador já sabe o id — atualiza direto, sem tocar em telefone.
-    await supabase
-      .from("clientes")
-      .update({
-        nome: cliente.nome,
-        origem_chat: cliente.origem_chat ?? null,
-        ultima_interacao: now,
-        ...(cliente.foto_url ? { foto_url: cliente.foto_url } : {}),
-      })
-      .eq("id", cliente.id);
-    clienteId = cliente.id;
-  } else {
-    // Upsert atômico por telefone (trava `clientes_telefone_key` no banco)
-    // — evita a corrida onde duas chamadas quase simultâneas do mesmo
-    // número cada uma achava "cliente não existe" e criava um duplicado.
-    const { data: novoCliente, error: clienteError } = await supabase
-      .from("clientes")
-      .upsert(
-        {
-          telefone: telefoneNormalizado,
-          nome: cliente.nome,
-          origem_chat: cliente.origem_chat ?? null,
-          ultima_interacao: now,
-          ...(cliente.foto_url ? { foto_url: cliente.foto_url } : {}),
-        },
-        { onConflict: "telefone" }
-      )
-      .select("id")
-      .single();
-
-    if (clienteError || !novoCliente) {
-      return NextResponse.json(
-        { error: "Não foi possível registrar o cliente.", detalhe: clienteError?.message ?? null },
-        { status: 500 }
-      );
-    }
-    clienteId = novoCliente.id;
-  }
+  const resultadoCliente = await registrarClienteWebhook(supabase, cliente, now);
+  if (resultadoCliente.resposta) return resultadoCliente.resposta;
+  const clienteId = resultadoCliente.clienteId;
 
   // 2. Resolver produtos de cada item (por id, sku, nome, ou criar um registro básico)
   const itensResolvidos: { produto_id: string; quantidade: number; preco_unitario: number }[] = [];
@@ -112,7 +66,7 @@ export async function POST(request: Request) {
   // Sem `total` explícito, soma os itens + a taxa de entrega (se veio) —
   // assim o valor cobrado do cliente já reflete a entrega calculada.
   const total =
-    parsed.data.total ??
+    dados.total ??
     itensResolvidos.reduce((acc, i) => acc + i.quantidade * i.preco_unitario, 0) + (taxa_entrega ?? 0);
 
   // Trava contra duplicata: se o N8N reenviar o mesmo webhook (retry por

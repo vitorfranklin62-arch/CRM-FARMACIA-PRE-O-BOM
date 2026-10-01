@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useRealtimeRefresh } from "@/lib/supabase/use-realtime-refresh";
 import { logAudit } from "@/lib/audit";
 import { ehHoje, formatCurrency } from "@/lib/utils";
 import { ColunaKanban } from "@/components/kanban/ColunaKanban";
@@ -27,19 +28,7 @@ export function PedidosBoard({ initialPedidos }: { initialPedidos: PedidoComplet
 
   useEffect(() => setPedidos(initialPedidos), [initialPedidos]);
 
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel("pedidos-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, () => {
-        router.refresh();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [router]);
+  useRealtimeRefresh("pedidos");
 
   const handleUpdateStatus = useCallback(
     async (id: string, status: PedidoStatus) => {

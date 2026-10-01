@@ -1,7 +1,7 @@
 import { PALETAS, type PaletaEtapa } from "@/components/kanban/paletas";
 import type { EncomendaStatus } from "@/types/database";
 
-export type EtapaEncomenda = PaletaEtapa & { rotulo: string; descricao: string };
+type EtapaEncomenda = PaletaEtapa & { rotulo: string; descricao: string };
 
 /**
  * Identidade de cada etapa do quadro de encomendas.

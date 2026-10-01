@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authorizeWebhook } from "@/lib/webhook-auth";
 import { mensagemWebhookSchema } from "@/lib/validation";
-import { normalizarTelefone } from "@/lib/telefone";
+import { lerCorpo } from "@/lib/api";
+import { registrarClienteWebhook } from "@/lib/clientes-webhook";
+import { buscarConversaRecente } from "@/lib/conversas";
 import { baixarEArmazenarMidia } from "@/lib/chat-midia";
 
 /**
@@ -15,78 +17,23 @@ export async function POST(request: Request) {
   const unauthorized = authorizeWebhook(request, { limit: 240, windowMs: 60_000 });
   if (unauthorized) return unauthorized;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
-  }
+  const corpo = await lerCorpo(request, mensagemWebhookSchema, { comDetalhes: true });
+  if (corpo.resposta) return corpo.resposta;
+  const dados = corpo.dados;
 
-  const parsed = mensagemWebhookSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Payload inválido.", detalhes: parsed.error.flatten() }, { status: 400 });
-  }
-
-  const { cliente, remetente, conteudo, conversa_status, tipo, midia_url_temporaria, midia_nome, midia_mime } = parsed.data;
+  const { cliente, remetente, conteudo, conversa_status, tipo, midia_url_temporaria, midia_nome, midia_mime } = dados;
   const supabase = createServiceClient();
   const now = new Date().toISOString();
-  const telefoneNormalizado = normalizarTelefone(cliente.telefone);
 
   // 1. Resolver cliente (por id explícito, ou upsert atômico por telefone)
-  let clienteId: string;
-
-  if (cliente.id) {
-    // Chamador já sabe o id — atualiza direto, sem tocar em telefone.
-    await supabase
-      .from("clientes")
-      .update({
-        nome: cliente.nome,
-        origem_chat: cliente.origem_chat ?? null,
-        ultima_interacao: now,
-        ...(cliente.foto_url ? { foto_url: cliente.foto_url } : {}),
-      })
-      .eq("id", cliente.id);
-    clienteId = cliente.id;
-  } else {
-    // Upsert atômico por telefone (trava `clientes_telefone_key` no banco)
-    // — evita a corrida onde duas mensagens quase simultâneas do mesmo
-    // número cada uma achava "cliente não existe" e criava um duplicado.
-    const { data: novoCliente, error: clienteError } = await supabase
-      .from("clientes")
-      .upsert(
-        {
-          telefone: telefoneNormalizado,
-          nome: cliente.nome,
-          origem_chat: cliente.origem_chat ?? null,
-          ultima_interacao: now,
-          ...(cliente.foto_url ? { foto_url: cliente.foto_url } : {}),
-        },
-        { onConflict: "telefone" }
-      )
-      .select("id")
-      .single();
-
-    if (clienteError || !novoCliente) {
-      return NextResponse.json(
-        { error: "Não foi possível registrar o cliente.", detalhe: clienteError?.message ?? null },
-        { status: 500 }
-      );
-    }
-    clienteId = novoCliente.id;
-  }
+  const resultadoCliente = await registrarClienteWebhook(supabase, cliente, now);
+  if (resultadoCliente.resposta) return resultadoCliente.resposta;
+  const clienteId = resultadoCliente.clienteId;
 
   // 2. Resolver a conversa do cliente — sempre reaproveita a mais recente,
   // mesmo que esteja "fechada" (só reabre), pra não empilhar uma conversa
   // nova a cada novo atendimento do mesmo número.
-  const { data: conversaRecente } = await supabase
-    .from("conversas")
-    .select("id")
-    .eq("cliente_id", clienteId)
-    .order("criado_em", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let conversaId = conversaRecente?.id ?? null;
+  let conversaId = await buscarConversaRecente(supabase, clienteId);
 
   if (!conversaId) {
     const { data: novaConversa, error: conversaError } = await supabase

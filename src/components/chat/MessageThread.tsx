@@ -46,6 +46,7 @@ function MensagemMidia({ msg }: { msg: MensagemComUsuario }) {
   if (msg.tipo === "imagem") {
     return (
       <a href={msg.midia_url} target="_blank" rel="noopener noreferrer" className="mb-1.5 block">
+        {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária do Storage, next/image não otimiza */}
         <img
           src={msg.midia_url}
           alt={msg.midia_nome ?? "Imagem enviada pelo cliente"}

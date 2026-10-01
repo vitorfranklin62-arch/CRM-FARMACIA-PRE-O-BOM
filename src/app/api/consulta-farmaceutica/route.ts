@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { consultaFarmaceuticaSchema } from "@/lib/validation";
+import { lerCorpo } from "@/lib/api";
 import { perguntarClaude, ConsultaFarmaceuticaError } from "@/lib/claude";
 
 /**
@@ -15,17 +16,11 @@ import { perguntarClaude, ConsultaFarmaceuticaError } from "@/lib/claude";
 export async function POST(request: Request) {
   const usuario = await requireUser();
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
-  }
-
-  const parsed = consultaFarmaceuticaSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Escreva uma pergunta de 3 a 500 caracteres." }, { status: 400 });
-  }
+  const corpo = await lerCorpo(request, consultaFarmaceuticaSchema, {
+    erro: "Escreva uma pergunta de 3 a 500 caracteres.",
+  });
+  if (corpo.resposta) return corpo.resposta;
+  const { pergunta } = corpo.dados;
 
   try {
     const supabase = await createClient();
@@ -37,11 +32,11 @@ export async function POST(request: Request) {
       .eq("chave", "vitoria_ia_prompt")
       .maybeSingle();
 
-    const resposta = await perguntarClaude(parsed.data.pergunta, configPrompt?.valor);
+    const resposta = await perguntarClaude(pergunta, configPrompt?.valor);
 
     const { data: registro } = await supabase
       .from("consultas_farmaceuticas")
-      .insert({ usuario_id: usuario.id, pergunta: parsed.data.pergunta, resposta })
+      .insert({ usuario_id: usuario.id, pergunta, resposta })
       .select("id, criado_em")
       .single();
 

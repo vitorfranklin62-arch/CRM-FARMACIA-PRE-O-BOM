@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireDona } from "@/lib/auth";
+import { erroInesperado } from "@/lib/api";
 import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
 import { normalizarTelefone } from "@/lib/telefone";
@@ -67,10 +68,7 @@ export async function GET() {
       })),
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: `Erro inesperado: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 500 }
-    );
+    return erroInesperado(err);
   }
 }
 
@@ -157,9 +155,6 @@ export async function POST() {
       primeiroErro,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: `Erro inesperado: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 500 }
-    );
+    return erroInesperado(err);
   }
 }
