@@ -1,27 +1,8 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import type { TipoMensagem } from "@/types/database";
+import { LIMITES_BYTES, extensaoPorMime, mimeBase, type TipoMidia } from "@/lib/chat-midia-tipos";
 import type { MensagemComUsuario } from "@/types/relations";
 
 const BUCKET = "chat-midia";
-
-// Cada tipo tem um limite diferente porque foto/PDF de receita costuma ser
-// bem menor que um áudio de vários minutos.
-const LIMITES_BYTES: Record<Exclude<TipoMensagem, "texto">, number> = {
-  imagem: 10 * 1024 * 1024,
-  audio: 20 * 1024 * 1024,
-  documento: 15 * 1024 * 1024,
-};
-
-const EXTENSAO_POR_MIME: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "audio/ogg": "ogg",
-  "audio/mpeg": "mp3",
-  "audio/mp4": "m4a",
-  "audio/wav": "wav",
-  "application/pdf": "pdf",
-};
 
 /**
  * Baixa o arquivo do link temporário que a uazapi devolve (o mesmo link que o
@@ -32,7 +13,7 @@ const EXTENSAO_POR_MIME: Record<string, string> = {
  */
 export async function baixarEArmazenarMidia(params: {
   conversaId: string;
-  tipo: Exclude<TipoMensagem, "texto">;
+  tipo: TipoMidia;
   urlTemporaria: string;
   mimeInformado: string | null;
 }): Promise<{ midia_path: string; midia_mime: string } | null> {
@@ -44,7 +25,7 @@ export async function baixarEArmazenarMidia(params: {
     const bytes = await resposta.arrayBuffer();
     if (bytes.byteLength === 0 || bytes.byteLength > LIMITES_BYTES[params.tipo]) return null;
 
-    const extensao = EXTENSAO_POR_MIME[mime] ?? (params.tipo === "documento" ? "pdf" : "bin");
+    const extensao = extensaoPorMime(mime) ?? (params.tipo === "documento" ? "pdf" : "bin");
     const caminho = `${params.conversaId}/${Date.now()}-${crypto.randomUUID()}.${extensao}`;
 
     const supabase = createServiceClient();
@@ -74,4 +55,34 @@ export async function anexarUrlsAssinadas(mensagens: MensagemComUsuario[]): Prom
 
   const urlPorCaminho = new Map(data.map((item) => [item.path, item.signedUrl]));
   return mensagens.map((m) => (m.midia_path ? { ...m, midia_url: urlPorCaminho.get(m.midia_path) ?? null } : m));
+}
+
+/**
+ * Guarda no bucket privado o arquivo que a equipe anexou no painel (o inverso
+ * de `baixarEArmazenarMidia`, que guarda o que o cliente mandou). Devolve o
+ * caminho interno ou o motivo da falha — aqui a equipe precisa saber por que
+ * o anexo não foi, diferente do webhook, que pode seguir só com o texto.
+ */
+export async function armazenarMidiaEnviada(params: {
+  conversaId: string;
+  bytes: ArrayBuffer;
+  mime: string;
+}): Promise<{ path: string } | { erro: string }> {
+  const mime = mimeBase(params.mime);
+  const extensao = extensaoPorMime(mime) ?? "bin";
+  const caminho = `${params.conversaId}/saida-${Date.now()}-${crypto.randomUUID()}.${extensao}`;
+
+  const { error } = await createServiceClient()
+    .storage.from(BUCKET)
+    .upload(caminho, params.bytes, { contentType: mime, upsert: false });
+
+  if (error) return { erro: error.message };
+  return { path: caminho };
+}
+
+/** Link assinado de um arquivo do bucket — é ele que o N8N passa pra uazapi baixar e entregar no WhatsApp. */
+export async function urlAssinadaDaMidia(caminho: string, segundos = 60 * 60): Promise<string | null> {
+  const { data, error } = await createServiceClient().storage.from(BUCKET).createSignedUrl(caminho, segundos);
+  if (error || !data) return null;
+  return data.signedUrl;
 }

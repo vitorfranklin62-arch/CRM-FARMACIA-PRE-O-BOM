@@ -64,6 +64,12 @@ export const mensagemCreateSchema = z.object({
   conteudo: z.string().trim().min(1).max(4000),
 });
 
+/** Campos de texto do envio de anexo (o arquivo em si vem à parte, no multipart). */
+export const anexoCreateSchema = z.object({
+  conversa_id: z.string().uuid(),
+  legenda: z.string().trim().max(1000).optional(),
+});
+
 export const mensagemWebhookSchema = z.object({
   cliente: clienteComIdWebhookSchema,
   remetente: z.enum(["ia", "cliente", "funcionaria"]),

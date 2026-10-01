@@ -146,3 +146,26 @@ que é pior do que não prometer. É preciso, no fluxo de mensagem recebida
 (ou no `/api/webhooks/mensagem` do CRM): ao receber "SAIR"/"PARAR"/
 "DESCADASTRAR", gravar `aceita_campanhas = false` e `optout_em = now()` no
 cliente, e responder confirmando.
+
+---
+
+# Fluxo de atendimento (receber/enviar) — envio de foto, PDF e áudio
+
+O CRM manda as respostas da equipe para o webhook **ENVIARMENSAGEMCRM-FARMACIA**
+(URL em Configurações → Integrações). Além do texto, o corpo agora traz:
+
+| Campo | Conteúdo |
+|---|---|
+| `tipo` | `texto` (padrão), `imagem`, `documento` ou `audio` |
+| `legenda` | texto que acompanha a foto/PDF (áudio não leva legenda) |
+| `midia_url` | link assinado (1 h) do arquivo no Storage do CRM |
+| `midia_nome` / `midia_mime` | nome e tipo do arquivo |
+
+O nó **uazapi enviar** escolhe sozinho: sem `midia_url` usa `/send/text`; com
+`midia_url` usa `/send/media` (`image`, `document` + `docName`, ou `ptt` — mensagem
+de voz). Requisitos no CRM: migração `20260926_midia_mensagens.sql` aplicada
+(colunas de mídia + bucket privado `chat-midia`).
+
+O fluxo de recebimento ignora mensagens de grupo e o "eco" das mensagens que o
+próprio fluxo enviou pela API (`fromMe` + `wasSentByApi`); só mensagens
+`fromMe` feitas pelo celular contam como "humano assumiu".

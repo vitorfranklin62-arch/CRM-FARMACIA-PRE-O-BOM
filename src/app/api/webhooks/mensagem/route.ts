@@ -33,7 +33,8 @@ export async function POST(request: Request) {
   // 2. Resolver a conversa do cliente — sempre reaproveita a mais recente,
   // mesmo que esteja "fechada" (só reabre), pra não empilhar uma conversa
   // nova a cada novo atendimento do mesmo número.
-  let conversaId = await buscarConversaRecente(supabase, clienteId);
+  const conversaRecente = await buscarConversaRecente(supabase, clienteId);
+  let conversaId = conversaRecente?.id ?? null;
 
   if (!conversaId) {
     const { data: novaConversa, error: conversaError } = await supabase
@@ -50,7 +51,12 @@ export async function POST(request: Request) {
     }
     conversaId = novaConversa.id;
   } else {
-    await supabase.from("conversas").update({ status: conversa_status ?? "aberta" }).eq("id", conversaId);
+    // Só mexe no status quando o chamador pede (ex.: "aguardando_humano") ou
+    // pra reabrir conversa fechada. Antes tudo voltava pra "aberta", o que
+    // desfazia a transferência pra atendente assim que a IA registrava a
+    // própria resposta, e a trava de quem assumiu o chat no meio dela.
+    const novoStatus = conversa_status ?? (conversaRecente?.status === "fechada" ? "aberta" : null);
+    if (novoStatus) await supabase.from("conversas").update({ status: novoStatus }).eq("id", conversaId);
   }
 
   // 3. Baixar a mídia (se tiver) e guardar uma cópia permanente no Storage do

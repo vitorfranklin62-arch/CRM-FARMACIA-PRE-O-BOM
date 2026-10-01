@@ -91,7 +91,7 @@ async function avisarClienteEncomendaChegou(
 
   // Reaproveita a conversa mais recente do cliente (mesmo critério do
   // webhook de mensagens), só cria uma nova se ele nunca teve conversa.
-  let conversaId = await buscarConversaRecente(supabase, clienteId);
+  let conversaId = (await buscarConversaRecente(supabase, clienteId))?.id ?? null;
 
   if (!conversaId) {
     const { data: novaConversa } = await supabase

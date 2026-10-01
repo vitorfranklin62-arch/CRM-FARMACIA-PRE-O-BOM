@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import type { TipoMidia } from "@/lib/chat-midia-tipos";
 
 /**
  * Chama um webhook do N8N cuja URL a dona cadastrou em Configurações →
@@ -31,17 +32,28 @@ export async function chamarWebhookN8n(chave: string, payload: unknown): Promise
   }
 }
 
-/** Entrega uma mensagem do Chat pelo N8N (que envia via UAIZAP/WhatsApp). */
+/**
+ * Entrega uma mensagem do Chat pelo N8N (que envia via UAIZAP/WhatsApp).
+ * Sem `midia` vai só o texto. Com `midia`, o N8N baixa o arquivo pelo link
+ * assinado e manda como foto, PDF ou mensagem de voz — a `legenda` é o texto
+ * que acompanha a foto/PDF (o áudio não aceita legenda no WhatsApp).
+ */
 export function notificarMensagemChat(dados: {
   conversaId: string;
   mensagemId: string;
   conteudo: string;
   cliente: { nome: string | null; telefone: string | null };
+  midia?: { tipo: TipoMidia; url: string; nome: string | null; mime: string; legenda: string };
 }): Promise<void> {
   return chamarWebhookN8n("integracao_n8n_chat_webhook_url", {
     conversa_id: dados.conversaId,
     mensagem_id: dados.mensagemId,
     conteudo: dados.conteudo,
     cliente: dados.cliente,
+    tipo: dados.midia?.tipo ?? "texto",
+    legenda: dados.midia?.legenda ?? "",
+    midia_url: dados.midia?.url ?? "",
+    midia_nome: dados.midia?.nome ?? "",
+    midia_mime: dados.midia?.mime ?? "",
   });
 }

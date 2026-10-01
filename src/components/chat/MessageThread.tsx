@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Bot, User, Headset, FileText, Camera, MessageSquare, Lock, Unlock, Ban, ShieldCheck, Tag as TagIcon } from "lucide-react";
+import { Send, Bot, User, Headset, FileText, Camera, MessageSquare, Lock, Unlock, Ban, ShieldCheck, Tag as TagIcon, Paperclip, Mic, Square, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn, formatDateTime, maskPhone } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
@@ -10,6 +10,16 @@ import { Avatar } from "@/components/ui/Avatar";
 import { TagPills } from "@/components/clientes/TagPills";
 import { TagsManagerModal } from "@/components/clientes/TagsManagerModal";
 import { TemplatePicker } from "./TemplatePicker";
+import {
+  ACCEPT_ANEXO,
+  LIMITES_BYTES,
+  MENSAGEM_FORMATO_INVALIDO,
+  extensaoPorMime,
+  mensagemLimite,
+  mimeBase,
+  textoPadraoMidia,
+  tipoPorMime,
+} from "@/lib/chat-midia-tipos";
 import type { ConversaCompleta, MensagemComUsuario } from "@/types/relations";
 import type { Tag, TemplateMensagem } from "@/types/database";
 
@@ -99,6 +109,14 @@ export function MessageThread({
   const [travando, setTravando] = useState(false);
   const [bloqueando, setBloqueando] = useState(false);
   const [gerenciandoTags, setGerenciandoTags] = useState(false);
+  const [anexo, setAnexo] = useState<{ file: File; previewUrl: string } | null>(null);
+  const [gravando, setGravando] = useState(false);
+  const [segundos, setSegundos] = useState(0);
+  const [erroEnvio, setErroEnvio] = useState<string | null>(null);
+  const inputArquivoRef = useRef<HTMLInputElement>(null);
+  const gravadorRef = useRef<MediaRecorder | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const descartarGravacaoRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -169,23 +187,126 @@ export function MessageThread({
     };
   }, [conversa.id, router]);
 
-  async function sendMessage(conteudo: string) {
-    const trimmed = conteudo.trim();
-    if (!trimmed || sending) return;
+  // Troca o anexo escolhido (liberando a prévia anterior da memória).
+  function definirAnexo(file: File | null) {
+    setAnexo((anterior) => {
+      if (anterior) URL.revokeObjectURL(anterior.previewUrl);
+      return file ? { file, previewUrl: URL.createObjectURL(file) } : null;
+    });
+  }
+
+  function aoEscolherArquivo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    const tipo = tipoPorMime(file.type);
+    if (!tipo) return setErroEnvio(MENSAGEM_FORMATO_INVALIDO);
+    if (file.size > LIMITES_BYTES[tipo]) return setErroEnvio(mensagemLimite(tipo));
+
+    setErroEnvio(null);
+    definirAnexo(file);
+  }
+
+  async function iniciarGravacao() {
+    if (gravando) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setErroEnvio("Este navegador não permite gravar áudio.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimePreferido = ["audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) =>
+        MediaRecorder.isTypeSupported(m)
+      );
+      const gravador = new MediaRecorder(stream, mimePreferido ? { mimeType: mimePreferido } : undefined);
+      const pedacos: Blob[] = [];
+      descartarGravacaoRef.current = false;
+
+      gravador.ondataavailable = (ev) => {
+        if (ev.data.size > 0) pedacos.push(ev.data);
+      };
+      gravador.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (timerRef.current) clearInterval(timerRef.current);
+        setGravando(false);
+        if (descartarGravacaoRef.current || pedacos.length === 0) return;
+
+        const mime = mimeBase(gravador.mimeType || mimePreferido || "audio/webm");
+        const arquivo = new File([new Blob(pedacos, { type: mime })], `audio-${Date.now()}.${extensaoPorMime(mime) ?? "webm"}`, {
+          type: mime,
+        });
+        if (arquivo.size > LIMITES_BYTES.audio) return setErroEnvio(mensagemLimite("audio"));
+        definirAnexo(arquivo);
+      };
+
+      gravadorRef.current = gravador;
+      gravador.start();
+      setSegundos(0);
+      setGravando(true);
+      setErroEnvio(null);
+      timerRef.current = setInterval(() => setSegundos((s) => s + 1), 1000);
+    } catch {
+      setErroEnvio("Não consegui usar o microfone. Libere a permissão do microfone no navegador e tente de novo.");
+    }
+  }
+
+  function pararGravacao(descartar = false) {
+    descartarGravacaoRef.current = descartar;
+    gravadorRef.current?.stop();
+  }
+
+  // Ao sair da conversa no meio de uma gravação, solta o microfone e a prévia.
+  useEffect(() => {
+    return () => {
+      descartarGravacaoRef.current = true;
+      if (gravadorRef.current?.state === "recording") gravadorRef.current.stop();
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  async function enviar() {
+    const tipoAnexo = anexo ? tipoPorMime(anexo.file.type) : null;
+    // Áudio de voz não leva legenda no WhatsApp — só foto e PDF.
+    const legenda = tipoAnexo === "audio" ? "" : texto.trim();
+    if ((!legenda && !anexo) || sending || gravando) return;
 
     setSending(true);
-    const res = await fetch("/api/chat/enviar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversa_id: conversa.id, conteudo: trimmed }),
-    });
+    setErroEnvio(null);
+    try {
+      let res: Response;
+      if (anexo) {
+        const form = new FormData();
+        form.append("conversa_id", conversa.id);
+        form.append("file", anexo.file);
+        if (legenda) form.append("legenda", legenda);
+        res = await fetch("/api/chat/enviar", { method: "POST", body: form });
+      } else {
+        res = await fetch("/api/chat/enviar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ conversa_id: conversa.id, conteudo: legenda }),
+        });
+      }
 
-    if (res.ok) {
-      setTexto("");
-      router.refresh();
+      const dados = await res.json().catch(() => null);
+      if (res.ok) {
+        setTexto("");
+        definirAnexo(null);
+        if (dados?.aviso) setErroEnvio(dados.aviso);
+        router.refresh();
+      } else {
+        setErroEnvio(dados?.error ?? "Não foi possível enviar a mensagem.");
+      }
+    } catch {
+      setErroEnvio("Sem conexão. Tente de novo.");
     }
     setSending(false);
   }
+
+  const tipoAnexoAtual = anexo ? tipoPorMime(anexo.file.type) : null;
+  const podeEnviar = !sending && !gravando && (!!texto.trim() || !!anexo);
 
   return (
     <div className="flex h-full flex-col">
@@ -294,7 +415,9 @@ export function MessageThread({
                   {msg.remetente === "funcionaria" && msg.usuarios ? msg.usuarios.nome : style.label}
                 </div>
                 <MensagemMidia msg={msg} />
-                <p className="whitespace-pre-wrap text-sm">{msg.conteudo}</p>
+                {!(msg.tipo !== "texto" && msg.conteudo === textoPadraoMidia(msg.tipo, msg.midia_nome)) && (
+                  <p className="whitespace-pre-wrap text-sm">{msg.conteudo}</p>
+                )}
                 <p className="mt-1 text-[10px] opacity-60">{formatDateTime(msg.criado_em)}</p>
               </div>
             </div>
@@ -314,13 +437,71 @@ export function MessageThread({
             onClose={() => setShowTemplates(false)}
           />
         )}
+        {erroEnvio && (
+          <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700 dark:bg-red-500/10 dark:text-red-300">
+            {erroEnvio}
+          </p>
+        )}
+        {gravando && (
+          <div className="mb-2 flex items-center gap-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:bg-red-500/10 dark:text-red-300">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
+            <span className="flex-1">
+              Gravando… {String(Math.floor(segundos / 60)).padStart(2, "0")}:{String(segundos % 60).padStart(2, "0")}
+            </span>
+            <button
+              type="button"
+              onClick={() => pararGravacao(true)}
+              title="Descartar gravação"
+              className="rounded-lg p-1.5 hover:bg-red-100 dark:hover:bg-red-500/20"
+            >
+              <X size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => pararGravacao(false)}
+              title="Parar e anexar"
+              className="rounded-lg bg-red-500 p-1.5 text-white hover:bg-red-600"
+            >
+              <Square size={14} />
+            </button>
+          </div>
+        )}
+        {anexo && !gravando && (
+          <div className="mb-2 flex items-center gap-3 rounded-xl border border-brand-200/80 bg-white p-2 dark:border-white/10 dark:bg-white/5">
+            {tipoAnexoAtual === "imagem" && (
+              // eslint-disable-next-line @next/next/no-img-element -- prévia local (blob) do arquivo escolhido
+              <img src={anexo.previewUrl} alt="Prévia do anexo" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+            )}
+            {tipoAnexoAtual === "audio" && (
+              <audio controls src={anexo.previewUrl} className="h-9 min-w-0 flex-1" />
+            )}
+            {tipoAnexoAtual === "documento" && (
+              <span className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium text-gray-800 dark:text-gray-100">
+                <FileText size={18} className="shrink-0 text-brand-500" />
+                <span className="truncate">{anexo.file.name}</span>
+              </span>
+            )}
+            {tipoAnexoAtual === "imagem" && (
+              <span className="min-w-0 flex-1 truncate text-sm text-gray-600 dark:text-gray-300">{anexo.file.name}</span>
+            )}
+            <button
+              type="button"
+              onClick={() => definirAnexo(null)}
+              title="Remover anexo"
+              className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-white/10"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            sendMessage(texto);
+            enviar();
           }}
           className="flex items-end gap-2"
         >
+          <input ref={inputArquivoRef} type="file" accept={ACCEPT_ANEXO} onChange={aoEscolherArquivo} className="hidden" />
           <button
             type="button"
             onClick={() => setShowTemplates((v) => !v)}
@@ -329,22 +510,47 @@ export function MessageThread({
           >
             <FileText size={18} />
           </button>
+          <button
+            type="button"
+            onClick={() => inputArquivoRef.current?.click()}
+            disabled={gravando}
+            title="Anexar foto, PDF ou áudio"
+            className="rounded-xl p-2.5 text-brand-500 transition hover:bg-brand-100 hover:text-brand-700 disabled:opacity-50 dark:text-brand-300 dark:hover:bg-white/10"
+          >
+            <Paperclip size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={iniciarGravacao}
+            disabled={gravando || !!anexo}
+            title="Gravar áudio"
+            className="rounded-xl p-2.5 text-brand-500 transition hover:bg-brand-100 hover:text-brand-700 disabled:opacity-50 dark:text-brand-300 dark:hover:bg-white/10"
+          >
+            <Mic size={18} />
+          </button>
           <textarea
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                sendMessage(texto);
+                enviar();
               }
             }}
             rows={1}
-            placeholder="Digite uma mensagem..."
-            className="flex-1 resize-none rounded-xl border border-brand-200/80 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:ring-brand-500/25"
+            disabled={tipoAnexoAtual === "audio"}
+            placeholder={
+              tipoAnexoAtual === "audio"
+                ? "Áudio vai sem legenda"
+                : anexo
+                  ? "Legenda (opcional)..."
+                  : "Digite uma mensagem..."
+            }
+            className="flex-1 resize-none rounded-xl border border-brand-200/80 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200 disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:ring-brand-500/25"
           />
           <button
             type="submit"
-            disabled={sending || !texto.trim()}
+            disabled={!podeEnviar}
             className="rounded-xl bg-gradiente-acento p-2.5 text-white shadow-brilho-acento transition hover:brightness-110 disabled:bg-none disabled:bg-accent-200 disabled:shadow-none"
           >
             <Send size={18} />
