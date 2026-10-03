@@ -16,7 +16,10 @@ const EXTENSAO_POR_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
+  "image/gif": "gif",
   "audio/ogg": "ogg",
+  "audio/aac": "aac",
+  "audio/webm": "webm",
   "audio/mpeg": "mp3",
   "audio/mp4": "m4a",
   "audio/wav": "wav",
@@ -44,7 +47,10 @@ export async function baixarEArmazenarMidia(params: {
     const bytes = await resposta.arrayBuffer();
     if (bytes.byteLength === 0 || bytes.byteLength > LIMITES_BYTES[params.tipo]) return null;
 
-    const extensao = EXTENSAO_POR_MIME[mime] ?? (params.tipo === "documento" ? "pdf" : "bin");
+    // Áudio de voz do WhatsApp vem como "audio/ogg; codecs=opus" — tira o
+    // sufixo só pra achar a extensão certa (o Content-Type guardado segue completo).
+    const mimeBase = mime.split(";")[0].trim().toLowerCase();
+    const extensao = EXTENSAO_POR_MIME[mimeBase] ?? (params.tipo === "documento" ? "pdf" : "bin");
     const caminho = `${params.conversaId}/${Date.now()}-${crypto.randomUUID()}.${extensao}`;
 
     const supabase = createServiceClient();

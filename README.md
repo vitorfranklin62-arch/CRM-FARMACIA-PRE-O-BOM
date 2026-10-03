@@ -77,7 +77,9 @@ Todas as rotas abaixo exigem o header `Authorization: Bearer <N8N_WEBHOOK_SECRET
 
 - `POST /api/webhooks/pedido` — cria pedido (e cliente/produtos se necessário) quando uma venda é confirmada pela IA
 - `POST /api/webhooks/cliente` — cria ou atualiza um cliente a partir de uma nova interação
-- `POST /api/webhooks/mensagem` — registra no Chat ao vivo cada mensagem trocada no WhatsApp/Instagram (do cliente ou da IA), criando cliente/conversa se necessário
+- `POST /api/webhooks/mensagem` — registra no Chat ao vivo cada mensagem trocada no WhatsApp/Instagram (do cliente, da IA ou da equipe respondendo direto pelo celular — `remetente: "funcionaria"`), criando cliente/conversa se necessário
+
+  Regras de status da conversa (`src/lib/conversa-status.ts`): resposta de `funcionaria` **trava** a conversa (`aguardando_humano`, a IA para de responder); mensagem do cliente ou da IA **nunca destrava** uma conversa travada — só o botão de destravar do Chat (ou um `conversa_status` explícito). O telefone é procurado com/sem `55` e com/sem o 9 do celular antes de criar um cliente novo, e `conteudo` acima de 4000 caracteres é cortado em vez de rejeitado. A função `deve_ia_responder` do banco usa a mesma regra de telefone (migração `20261003_deve_ia_responder_variantes_telefone.sql`).
 - `GET /api/templates` — lista os templates de mensagem cadastrados
 - `POST /api/campanhas/:id/status` — confirma o envio (ou outro status) de uma campanha
 

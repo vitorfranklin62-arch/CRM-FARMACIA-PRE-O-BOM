@@ -77,7 +77,14 @@ export const mensagemWebhookSchema = z.object({
     foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
   }),
   remetente: z.enum(["ia", "cliente", "funcionaria"]),
-  conteudo: z.string().trim().min(1).max(4000),
+  // Texto grande demais (ex.: descrição longa de imagem + texto de PDF somados)
+  // é cortado em vez de rejeitado — rejeitar derrubava o fluxo do N8N inteiro
+  // e a IA nem chegava a responder o cliente.
+  conteudo: z
+    .string()
+    .trim()
+    .min(1)
+    .transform((texto) => (texto.length > 4000 ? `${texto.slice(0, 3997)}...` : texto)),
   conversa_status: z.enum(["aberta", "aguardando_humano", "fechada"]).nullable().optional(),
   // Mídia opcional (foto/áudio/PDF que o cliente mandou pelo WhatsApp). O N8N
   // manda o link temporário de download da uazapi — esta rota baixa e guarda
