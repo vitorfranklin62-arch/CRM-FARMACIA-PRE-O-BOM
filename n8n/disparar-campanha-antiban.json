@@ -344,7 +344,8 @@
           "id": "SUPABASE_FARMACIA",
           "name": "Supabase Farmácia (service_role)"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "parameters": {
