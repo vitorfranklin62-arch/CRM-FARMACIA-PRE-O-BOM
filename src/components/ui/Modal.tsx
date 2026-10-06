@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
-const LARGURAS = { md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" } as const;
+const LARGURAS = { md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-5xl" } as const;
 
 export function Modal({
   open,
@@ -13,6 +13,7 @@ export function Modal({
   title,
   children,
   size = "md",
+  footer,
 }: {
   open: boolean;
   onClose: () => void;
@@ -20,6 +21,8 @@ export function Modal({
   children: React.ReactNode;
   /** Largura máxima: md (padrão), lg ou xl pra formulários grandes. */
   size?: keyof typeof LARGURAS;
+  /** Barra fixa no rodapé (fora da rolagem) — pra botões que nunca podem sumir. */
+  footer?: React.ReactNode;
 }) {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -55,6 +58,9 @@ export function Modal({
           </button>
         </div>
         <div className="rolagem-fina overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
+        {footer && (
+          <div className="shrink-0 border-t border-gray-100 px-5 py-3 dark:border-white/10 sm:px-6">{footer}</div>
+        )}
       </div>
     </div>,
     document.body

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Search } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Label, Input, Textarea, Select } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
@@ -183,8 +184,39 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
     );
 
   return (
-    <Modal open={open} onClose={onClose} title="Nova campanha" size="xl">
-      <form onSubmit={handleSubmit}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Nova campanha"
+      size="xl"
+      footer={
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p
+            className={cn(
+              "rounded-lg px-3 py-2 text-sm",
+              previa === 0 || (clientesAlvo === "por_filtro" && semCriterio)
+                ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                : "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+            )}
+          >
+            {clientesAlvo === "por_filtro" && semCriterio
+              ? "Escolha ao menos um critério de público."
+              : previa === null
+                ? "Calculando público…"
+                : `${previa} ${previa === 1 ? "cliente vai" : "clientes vão"} receber`}
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="submit" form="campanha-form" disabled={saving}>
+              {saving ? "Salvando..." : "Criar campanha"}
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <form id="campanha-form" onSubmit={handleSubmit}>
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-4">
             <div>
@@ -288,13 +320,20 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
                       </button>
                     )}
                   </div>
-                  <Input
-                    id="busca"
-                    value={busca}
-                    onChange={(e) => setBusca(e.target.value)}
-                    placeholder="Buscar por nome ou telefone"
-                  />
-                  <div className="mt-2 max-h-56 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-100 dark:divide-white/5 dark:border-white/10">
+                  <div className="relative">
+                    <Search
+                      size={15}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    />
+                    <Input
+                      id="busca"
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                      placeholder="Buscar por nome ou telefone"
+                      className="pl-9"
+                    />
+                  </div>
+                  <div className="mt-2 max-h-64 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-100 dark:divide-white/5 dark:border-white/10">
                     {clientesVisiveis.length === 0 ? (
                       <p className="px-3 py-2 text-xs text-gray-400">
                         {clientes.length === 0 ? "Carregando…" : "Nenhum contato encontrado."}
@@ -324,34 +363,10 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
                 </div>
               </div>
             )}
-
-            <p
-              className={cn(
-                "rounded-lg px-3 py-2 text-sm",
-                previa === 0 || (clientesAlvo === "por_filtro" && semCriterio)
-                  ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
-                  : "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-              )}
-            >
-              {clientesAlvo === "por_filtro" && semCriterio
-                ? "Escolha ao menos um critério acima."
-                : previa === null
-                  ? "Calculando público…"
-                  : `${previa} ${previa === 1 ? "cliente vai" : "clientes vão"} receber. Quem pediu para sair das campanhas não entra na conta.`}
-            </p>
           </div>
         </div>
 
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
-
-        <div className="sticky bottom-0 -mx-5 -mb-5 mt-5 flex justify-end gap-2 border-t border-gray-100 bg-white px-5 py-3 dark:border-white/10 dark:bg-navy-800 sm:-mx-6 sm:-mb-5 sm:px-6">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="submit" disabled={saving}>
-            {saving ? "Salvando..." : "Criar campanha"}
-          </Button>
-        </div>
+        {error && <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
       </form>
     </Modal>
   );
