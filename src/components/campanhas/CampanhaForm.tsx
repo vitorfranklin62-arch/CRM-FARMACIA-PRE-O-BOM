@@ -14,15 +14,7 @@ import type { ClientesAlvo, FiltroCampanha, OrigemChat, Tag } from "@/types/data
 type ClienteOpcao = { id: string; nome: string; telefone: string };
 type Atividade = "" | "ativos" | "inativos";
 
-export function CampanhaForm({
-  open,
-  onClose,
-  userId,
-}: {
-  open: boolean;
-  onClose: () => void;
-  userId: string;
-}) {
+export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose: () => void; userId: string }) {
   const [titulo, setTitulo] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [clientesAlvo, setClientesAlvo] = useState<ClientesAlvo>("todos");
@@ -173,7 +165,9 @@ export function CampanhaForm({
       return;
     }
 
-    await logAudit(supabase, "campanha_criada", "campanhas", data?.id, { titulo: parsed.data.titulo });
+    await logAudit(supabase, "campanha_criada", "campanhas", data?.id, {
+      titulo: parsed.data.titulo,
+    });
 
     reset();
     onClose();
@@ -189,162 +183,168 @@ export function CampanhaForm({
     );
 
   return (
-    <Modal open={open} onClose={onClose} title="Nova campanha">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <Label htmlFor="titulo">Título</Label>
-          <Input id="titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)} required maxLength={200} />
-        </div>
+    <Modal open={open} onClose={onClose} title="Nova campanha" size="xl">
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="titulo">Título</Label>
+              <Input id="titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)} required maxLength={200} />
+            </div>
 
-        <div>
-          <Label htmlFor="mensagem">Mensagem</Label>
-          <Textarea
-            id="mensagem"
-            rows={4}
-            value={mensagem}
-            onChange={(e) => setMensagem(e.target.value)}
-            required
-            maxLength={2000}
-          />
-        </div>
+            <div>
+              <Label htmlFor="mensagem">Mensagem</Label>
+              <Textarea
+                id="mensagem"
+                rows={9}
+                value={mensagem}
+                onChange={(e) => setMensagem(e.target.value)}
+                required
+                maxLength={2000}
+              />
+            </div>
 
-        <div className="space-y-3">
-          <Label>Público</Label>
-          <Select value={clientesAlvo} onChange={(e) => setClientesAlvo(e.target.value as ClientesAlvo)}>
-            <option value="todos">Todos os clientes</option>
-            <option value="por_filtro">Filtrar quem vai receber</option>
-          </Select>
+            <div>
+              <Label htmlFor="agendada_para">Agendar envio (opcional)</Label>
+              <Input
+                id="agendada_para"
+                type="datetime-local"
+                value={agendadaPara}
+                onChange={(e) => setAgendadaPara(e.target.value)}
+              />
+            </div>
+          </div>
 
-          {clientesAlvo === "por_filtro" && (
-            <div className="space-y-4 rounded-xl border border-gray-100 p-3 dark:border-white/10">
-              <div>
-                <Label htmlFor="origem">Origem do contato</Label>
-                <Select id="origem" value={origem} onChange={(e) => setOrigem(e.target.value as "" | OrigemChat)}>
-                  <option value="">Qualquer</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="instagram">Instagram</option>
-                </Select>
-              </div>
+          <div className="space-y-3">
+            <Label>Público</Label>
+            <Select value={clientesAlvo} onChange={(e) => setClientesAlvo(e.target.value as ClientesAlvo)}>
+              <option value="todos">Todos os clientes</option>
+              <option value="por_filtro">Filtrar quem vai receber</option>
+            </Select>
 
-              <div>
-                <Label>Última conversa com a farmácia</Label>
-                <div className="flex gap-2">
-                  <Select value={atividade} onChange={(e) => setAtividade(e.target.value as Atividade)}>
-                    <option value="">Qualquer</option>
-                    <option value="ativos">Falaram comigo nos últimos…</option>
-                    <option value="inativos">Sem falar comigo há mais de…</option>
-                  </Select>
-                  {atividade !== "" && (
-                    <div className="flex w-32 shrink-0 items-center gap-1.5">
-                      <Input
-                        type="number"
-                        min={1}
-                        max={3650}
-                        value={dias}
-                        onChange={(e) => setDias(e.target.value)}
-                        aria-label="Quantidade de dias"
-                      />
-                      <span className="text-sm text-gray-500">dias</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {tags.length > 0 && (
+            {clientesAlvo === "por_filtro" && (
+              <div className="space-y-4 rounded-xl border border-gray-100 p-3 dark:border-white/10">
                 <div>
-                  <Label>Tags (quem tem qualquer uma)</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {tags.map((t) => (
-                      <button
-                        key={t.id}
-                        type="button"
-                        onClick={() => alternar(tagIds, t.id, setTagIds)}
-                        className={chip(tagIds.includes(t.id))}
-                      >
-                        {t.nome}
-                      </button>
-                    ))}
+                  <Label htmlFor="origem">Origem do contato</Label>
+                  <Select id="origem" value={origem} onChange={(e) => setOrigem(e.target.value as "" | OrigemChat)}>
+                    <option value="">Qualquer</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="instagram">Instagram</option>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label>Última conversa com a farmácia</Label>
+                  <div className="flex gap-2">
+                    <Select value={atividade} onChange={(e) => setAtividade(e.target.value as Atividade)}>
+                      <option value="">Qualquer</option>
+                      <option value="ativos">Falaram comigo nos últimos…</option>
+                      <option value="inativos">Sem falar comigo há mais de…</option>
+                    </Select>
+                    {atividade !== "" && (
+                      <div className="flex w-32 shrink-0 items-center gap-1.5">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={3650}
+                          value={dias}
+                          onChange={(e) => setDias(e.target.value)}
+                          aria-label="Quantidade de dias"
+                        />
+                        <span className="text-sm text-gray-500">dias</span>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
 
-              <div>
-                <div className="mb-1.5 flex items-center justify-between">
-                  <Label htmlFor="busca">Escolher contatos específicos</Label>
-                  {contatoIds.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setContatoIds([])}
-                      className="text-xs font-medium text-brand-600 hover:underline"
-                    >
-                      Limpar ({contatoIds.length})
-                    </button>
-                  )}
-                </div>
-                <Input
-                  id="busca"
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Buscar por nome ou telefone"
-                />
-                <div className="mt-2 max-h-40 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-100 dark:divide-white/5 dark:border-white/10">
-                  {clientesVisiveis.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-gray-400">
-                      {clientes.length === 0 ? "Carregando…" : "Nenhum contato encontrado."}
-                    </p>
-                  ) : (
-                    clientesVisiveis.map((c) => (
-                      <label
-                        key={c.id}
-                        className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={contatoIds.includes(c.id)}
-                          onChange={() => alternar(contatoIds, c.id, setContatoIds)}
-                        />
-                        <span className="truncate text-gray-800 dark:text-gray-100">{c.nome}</span>
-                        <span className="ml-auto shrink-0 text-xs text-gray-400">{c.telefone}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {!busca && clientes.length > 100 && (
-                  <p className="mt-1 text-xs text-gray-400">Mostrando os 100 primeiros — use a busca para achar os outros.</p>
+                {tags.length > 0 && (
+                  <div>
+                    <Label>Tags (quem tem qualquer uma)</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {tags.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => alternar(tagIds, t.id, setTagIds)}
+                          className={chip(tagIds.includes(t.id))}
+                        >
+                          {t.nome}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
+
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <Label htmlFor="busca">Escolher contatos específicos</Label>
+                    {contatoIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setContatoIds([])}
+                        className="text-xs font-medium text-brand-600 hover:underline"
+                      >
+                        Limpar ({contatoIds.length})
+                      </button>
+                    )}
+                  </div>
+                  <Input
+                    id="busca"
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                    placeholder="Buscar por nome ou telefone"
+                  />
+                  <div className="mt-2 max-h-56 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-100 dark:divide-white/5 dark:border-white/10">
+                    {clientesVisiveis.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-gray-400">
+                        {clientes.length === 0 ? "Carregando…" : "Nenhum contato encontrado."}
+                      </p>
+                    ) : (
+                      clientesVisiveis.map((c) => (
+                        <label
+                          key={c.id}
+                          className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-white/5"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={contatoIds.includes(c.id)}
+                            onChange={() => alternar(contatoIds, c.id, setContatoIds)}
+                          />
+                          <span className="truncate text-gray-800 dark:text-gray-100">{c.nome}</span>
+                          <span className="ml-auto shrink-0 text-xs text-gray-400">{c.telefone}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                  {!busca && clientes.length > 100 && (
+                    <p className="mt-1 text-xs text-gray-400">
+                      Mostrando os 100 primeiros — use a busca para achar os outros.
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
-
-          <p
-            className={cn(
-              "rounded-lg px-3 py-2 text-sm",
-              previa === 0 || (clientesAlvo === "por_filtro" && semCriterio)
-                ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
-                : "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
             )}
-          >
-            {clientesAlvo === "por_filtro" && semCriterio
-              ? "Escolha ao menos um critério acima."
-              : previa === null
-                ? "Calculando público…"
-                : `${previa} ${previa === 1 ? "cliente vai" : "clientes vão"} receber. Quem pediu para sair das campanhas não entra na conta.`}
-          </p>
-        </div>
 
-        <div>
-          <Label htmlFor="agendada_para">Agendar envio (opcional)</Label>
-          <Input
-            id="agendada_para"
-            type="datetime-local"
-            value={agendadaPara}
-            onChange={(e) => setAgendadaPara(e.target.value)}
-          />
+            <p
+              className={cn(
+                "rounded-lg px-3 py-2 text-sm",
+                previa === 0 || (clientesAlvo === "por_filtro" && semCriterio)
+                  ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                  : "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
+              )}
+            >
+              {clientesAlvo === "por_filtro" && semCriterio
+                ? "Escolha ao menos um critério acima."
+                : previa === null
+                  ? "Calculando público…"
+                  : `${previa} ${previa === 1 ? "cliente vai" : "clientes vão"} receber. Quem pediu para sair das campanhas não entra na conta.`}
+            </p>
+          </div>
         </div>
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
-        <div className="flex justify-end gap-2 pt-1">
+        <div className="sticky bottom-0 -mx-5 -mb-5 mt-5 flex justify-end gap-2 border-t border-gray-100 bg-white px-5 py-3 dark:border-white/10 dark:bg-navy-800 sm:-mx-6 sm:-mb-5 sm:px-6">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
