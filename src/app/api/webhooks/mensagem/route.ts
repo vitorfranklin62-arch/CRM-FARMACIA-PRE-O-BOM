@@ -31,6 +31,7 @@ export async function POST(request: Request) {
   const supabase = createServiceClient();
   const now = new Date().toISOString();
   const telefoneNormalizado = normalizarTelefone(cliente.telefone);
+  const nomeInformado = cliente.nome?.trim() || null;
 
   // 1. Resolver cliente (por id explícito, ou upsert atômico por telefone)
   let clienteId: string;
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
     await supabase
       .from("clientes")
       .update({
-        nome: cliente.nome,
+        ...(nomeInformado ? { nome: nomeInformado } : {}),
         origem_chat: cliente.origem_chat ?? null,
         ultima_interacao: now,
         ...(cliente.foto_url ? { foto_url: cliente.foto_url } : {}),
@@ -51,12 +52,20 @@ export async function POST(request: Request) {
     // Upsert atômico por telefone (trava `clientes_telefone_key` no banco)
     // — evita a corrida onde duas mensagens quase simultâneas do mesmo
     // número cada uma achava "cliente não existe" e criava um duplicado.
+    // Sem nome no payload, não sobrescreve o nome de um cliente que já existe
+    // (só usa o telefone como nome quando o cliente é novo).
+    const { data: existente } = await supabase
+      .from("clientes")
+      .select("id")
+      .eq("telefone", telefoneNormalizado)
+      .maybeSingle();
+
     const { data: novoCliente, error: clienteError } = await supabase
       .from("clientes")
       .upsert(
         {
           telefone: telefoneNormalizado,
-          nome: cliente.nome,
+          ...(nomeInformado || !existente ? { nome: nomeInformado || telefoneNormalizado } : {}),
           origem_chat: cliente.origem_chat ?? null,
           ultima_interacao: now,
           ...(cliente.foto_url ? { foto_url: cliente.foto_url } : {}),
@@ -103,7 +112,13 @@ export async function POST(request: Request) {
     }
     conversaId = novaConversa.id;
   } else {
-    await supabase.from("conversas").update({ status: conversa_status ?? "aberta" }).eq("id", conversaId);
+    // Só muda o status quando o chamador pede explicitamente. Sem isso, a
+    // mensagem do cliente (ou da IA) que chega logo depois de uma funcionária
+    // assumir a conversa rebaixava "aguardando_humano" pra "aberta" e a IA
+    // voltava a responder por cima do atendente. Conversa "fechada" reabre.
+    const { data: atual } = await supabase.from("conversas").select("status").eq("id", conversaId).single();
+    const novoStatus = conversa_status ?? (atual?.status === "aguardando_humano" ? "aguardando_humano" : "aberta");
+    await supabase.from("conversas").update({ status: novoStatus }).eq("id", conversaId);
   }
 
   // 3. Baixar a mídia (se tiver) e guardar uma cópia permanente no Storage do
