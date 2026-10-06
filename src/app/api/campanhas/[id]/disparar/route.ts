@@ -6,7 +6,8 @@ import { logAudit } from "@/lib/audit";
 /**
  * POST /api/campanhas/:id/disparar
  * Botão "Disparar agora" em Campanhas. Marca a campanha como agendada pra
- * agora e avisa o N8N, que busca os clientes e envia via UAIZAP/WhatsApp.
+ * agora (também serve pra RETOMAR uma campanha pausada — quem já recebeu não
+ * recebe de novo, o N8N pula quem está em campanha_envios) e avisa o N8N, que busca os clientes e envia via UAIZAP/WhatsApp.
  */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const usuario = await requireDona();
@@ -30,7 +31,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const now = new Date().toISOString();
   const { error: updateError } = await supabase
     .from("campanhas")
-    .update({ status: "agendada", agendada_para: now })
+    .update({ status: "agendada", agendada_para: now, motivo_pausa: null })
     .eq("id", id);
 
   if (updateError) {

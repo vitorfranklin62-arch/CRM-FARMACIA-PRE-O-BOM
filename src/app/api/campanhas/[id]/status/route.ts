@@ -29,7 +29,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const supabase = createServiceClient();
-  const update: { status: typeof parsed.data.status; enviada_em?: string } = { status: parsed.data.status };
+  const update: { status: typeof parsed.data.status; enviada_em?: string; motivo_pausa: string | null } = {
+    status: parsed.data.status,
+    // Só a pausa carrega motivo; qualquer outro status limpa o anterior.
+    motivo_pausa: parsed.data.status === "pausada" ? (parsed.data.motivo_pausa ?? null) : null,
+  };
   if (parsed.data.status === "enviada") update.enviada_em = new Date().toISOString();
 
   const { error } = await supabase.from("campanhas").update(update).eq("id", id);

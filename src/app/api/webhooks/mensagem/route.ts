@@ -4,6 +4,7 @@ import { authorizeWebhook } from "@/lib/webhook-auth";
 import { mensagemWebhookSchema } from "@/lib/validation";
 import { normalizarTelefone } from "@/lib/telefone";
 import { baixarEArmazenarMidia } from "@/lib/chat-midia";
+import { pedidoDeOptout, registrarOptout } from "@/lib/optout";
 
 /**
  * POST /api/webhooks/mensagem
@@ -160,5 +161,22 @@ export async function POST(request: Request) {
   // Garante que a conversa suba pro topo da lista (ordenada por atualização mais recente)
   await supabase.from("conversas").update({ atualizado_em: now }).eq("id", conversaId);
 
-  return NextResponse.json({ cliente_id: clienteId, conversa_id: conversaId, mensagem_id: mensagem.id }, { status: 201 });
+  // 5. Pedido de descadastro ("SAIR"): o rodapé das campanhas promete isso, então
+  // cumprimos aqui, no único ponto por onde toda mensagem do cliente passa.
+  // `optout: true` na resposta deixa o N8N pular a resposta da IA, que não
+  // deve tentar "atender" um SAIR.
+  let optout = false;
+  if (remetente === "cliente" && pedidoDeOptout(conteudo)) {
+    try {
+      await registrarOptout(clienteId, telefoneNormalizado);
+      optout = true;
+    } catch {
+      // A mensagem já foi registrada; se o descadastro falhar, o cliente repete o SAIR.
+    }
+  }
+
+  return NextResponse.json(
+    { cliente_id: clienteId, conversa_id: conversaId, mensagem_id: mensagem.id, optout },
+    { status: 201 }
+  );
 }

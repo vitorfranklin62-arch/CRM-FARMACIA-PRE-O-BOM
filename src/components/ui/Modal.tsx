@@ -2,17 +2,27 @@
 
 import { X } from "lucide-react";
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
+
+const LARGURAS = { md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-5xl" } as const;
 
 export function Modal({
   open,
   onClose,
   title,
   children,
+  size = "md",
+  footer,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  /** Largura máxima: md (padrão), lg ou xl pra formulários grandes. */
+  size?: keyof typeof LARGURAS;
+  /** Barra fixa no rodapé (fora da rolagem) — pra botões que nunca podem sumir. */
+  footer?: React.ReactNode;
 }) {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -22,15 +32,22 @@ export function Modal({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
-  return (
+  // Renderiza direto no <body>: dentro de um Card (backdrop-blur + overflow-hidden)
+  // o navegador prende o "fixed" ao cartão e o modal ficava cortado.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
       <div className="absolute inset-0" onClick={onClose} />
       {/* Em telas pequenas o modal vira uma folha que sobe do rodapé, com o
           próprio conteúdo rolando — assim um formulário grande nunca corta
           o botão de salvar fora da tela. */}
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl dark:bg-navy-800 dark:shadow-black/40 sm:max-h-[88vh] sm:rounded-2xl">
+      <div
+        className={cn(
+          "relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl dark:bg-navy-800 dark:shadow-black/40 sm:max-h-[88vh] sm:rounded-2xl",
+          LARGURAS[size]
+        )}
+      >
         <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-4 dark:border-white/10 sm:px-6">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">{title}</h3>
           <button
@@ -41,7 +58,11 @@ export function Modal({
           </button>
         </div>
         <div className="rolagem-fina overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
+        {footer && (
+          <div className="shrink-0 border-t border-gray-100 px-5 py-3 dark:border-white/10 sm:px-6">{footer}</div>
+        )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

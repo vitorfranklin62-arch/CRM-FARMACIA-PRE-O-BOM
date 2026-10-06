@@ -7,7 +7,7 @@ export type ConversaStatus = "aberta" | "aguardando_humano" | "fechada";
 export type Remetente = "ia" | "cliente" | "funcionaria";
 export type TemplateCategoria = "confirmacao" | "promocao" | "duvida" | "outro";
 export type ClientesAlvo = "todos" | "por_filtro";
-export type CampanhaStatus = "rascunho" | "agendada" | "enviada";
+export type CampanhaStatus = "rascunho" | "agendada" | "enviada" | "pausada";
 export type ConfiguracaoTipo = "string" | "number" | "boolean" | "json";
 export type TagCor = "blue" | "green" | "yellow" | "gray" | "red" | "purple";
 
@@ -32,6 +32,9 @@ export type Cliente = {
   /** true = a IA nunca responde automaticamente este número, em nenhuma conversa (bloqueio manual pelo CRM). */
   ia_bloqueada: boolean;
   ia_bloqueada_em: string | null;
+  /** false = pediu pra sair das campanhas (SAIR). O disparo filtra por isto. */
+  aceita_campanhas: boolean;
+  optout_em: string | null;
   criado_em: string;
 }
 
@@ -153,6 +156,15 @@ export type TemplateMensagem = {
   atualizado_em: string;
 }
 
+/** Filtro de público de uma campanha (campanhas.filtro_json). Tudo opcional; os campos se combinam com "E". */
+export type FiltroCampanha = {
+  origem_chat?: OrigemChat;
+  tag_ids?: string[];
+  cliente_ids?: string[];
+  interagiu_ultimos_dias?: number;
+  inativos_ha_dias?: number;
+}
+
 export type Campanha = {
   id: string;
   titulo: string;
@@ -162,8 +174,19 @@ export type Campanha = {
   agendada_para: string | null;
   status: CampanhaStatus;
   enviada_em: string | null;
+  motivo_pausa: string | null;
   criado_em: string;
   criado_por: string;
+}
+
+export type CampanhaEnvio = {
+  id: string;
+  campanha_id: string;
+  cliente_id: string | null;
+  telefone: string;
+  status: "enviado" | "falhou" | "sem_whatsapp" | "invalido";
+  erro: string | null;
+  enviado_em: string;
 }
 
 export type VendaLog = {
@@ -363,6 +386,7 @@ export interface Database {
           },
         ]
       >;
+      campanha_envios: TableDef<CampanhaEnvio>;
       vendas_log: TableDef<VendaLog>;
       bairros_entrega: TableDef<BairroEntrega>;
       vitrine_itens: TableDef<VitrineItem>;
@@ -414,7 +438,12 @@ export interface Database {
       >;
     };
     Views: Record<never, never>;
-    Functions: Record<never, never>;
+    Functions: {
+      filtrar_clientes_campanha: {
+        Args: { filtro: FiltroCampanha | null };
+        Returns: { id: string; nome: string; telefone: string; origem_chat: string | null }[];
+      };
+    };
     Enums: Record<never, never>;
     CompositeTypes: Record<never, never>;
   };
