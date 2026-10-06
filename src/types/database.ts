@@ -156,6 +156,15 @@ export type TemplateMensagem = {
   atualizado_em: string;
 }
 
+/** Filtro de público de uma campanha (campanhas.filtro_json). Tudo opcional; os campos se combinam com "E". */
+export type FiltroCampanha = {
+  origem_chat?: OrigemChat;
+  tag_ids?: string[];
+  cliente_ids?: string[];
+  interagiu_ultimos_dias?: number;
+  inativos_ha_dias?: number;
+}
+
 export type Campanha = {
   id: string;
   titulo: string;
@@ -429,7 +438,12 @@ export interface Database {
       >;
     };
     Views: Record<never, never>;
-    Functions: Record<never, never>;
+    Functions: {
+      filtrar_clientes_campanha: {
+        Args: { filtro: FiltroCampanha | null };
+        Returns: { id: string; nome: string; telefone: string; origem_chat: string | null }[];
+      };
+    };
     Enums: Record<never, never>;
     CompositeTypes: Record<never, never>;
   };

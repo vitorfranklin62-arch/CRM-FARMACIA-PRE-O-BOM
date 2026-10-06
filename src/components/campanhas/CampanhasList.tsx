@@ -9,10 +9,23 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { CampanhaForm } from "./CampanhaForm";
 import { formatDateTime } from "@/lib/utils";
-import type { Campanha } from "@/types/database";
+import type { Campanha, FiltroCampanha } from "@/types/database";
 
 const STATUS_VARIANT = { rascunho: "gray", agendada: "yellow", enviada: "green", pausada: "red" } as const;
 const STATUS_LABEL = { rascunho: "Rascunho", agendada: "Em andamento", enviada: "Enviada", pausada: "Pausada" } as const;
+
+/** Resume o filtro da campanha em texto legível (ex.: "WhatsApp · 3 tags · 5 contatos"). */
+function descreverPublico(c: Campanha): string {
+  if (c.clientes_alvo === "todos") return "Todos";
+  const f = (c.filtro_json ?? {}) as FiltroCampanha;
+  const partes: string[] = [];
+  if (f.origem_chat) partes.push(f.origem_chat === "whatsapp" ? "WhatsApp" : "Instagram");
+  if (f.cliente_ids?.length) partes.push(`${f.cliente_ids.length} ${f.cliente_ids.length === 1 ? "contato" : "contatos"}`);
+  if (f.tag_ids?.length) partes.push(`${f.tag_ids.length} ${f.tag_ids.length === 1 ? "tag" : "tags"}`);
+  if (f.interagiu_ultimos_dias) partes.push(`falaram nos últimos ${f.interagiu_ultimos_dias} dias`);
+  if (f.inativos_ha_dias) partes.push(`sem falar há ${f.inativos_ha_dias}+ dias`);
+  return partes.length > 0 ? partes.join(" · ") : "Filtro";
+}
 
 export type ResumoEnvio = { enviado: number; falhou: number; sem_whatsapp: number; invalido: number };
 
@@ -59,7 +72,7 @@ export function CampanhasList({
       header: "Público",
       accessor: (c) => (
         <span className="text-gray-500 dark:text-gray-400">
-          {c.clientes_alvo === "todos" ? "Todos" : `Filtro: ${JSON.stringify(c.filtro_json ?? {})}`}
+          {descreverPublico(c)}
         </span>
       ),
     },

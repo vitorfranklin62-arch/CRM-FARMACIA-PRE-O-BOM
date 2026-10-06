@@ -273,10 +273,23 @@
     },
     {
       "parameters": {
-        "url": "=https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/clientes?select=id,nome,telefone,origem_chat&aceita_campanhas=eq.true&limit=5000{{ $json.filtro_json && $json.filtro_json.origem_chat ? '&origem_chat=eq.' + $json.filtro_json.origem_chat : '' }}",
-        "options": {},
+        "method": "POST",
+        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/rpc/filtrar_clientes_campanha",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpCustomAuth"
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ filtro: $json.clientes_alvo === 'por_filtro' ? ($json.filtro_json || null) : null }) }}",
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -291,7 +304,8 @@
           "id": "SUPABASE_FARMACIA",
           "name": "Supabase Farmácia (service_role)"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "parameters": {

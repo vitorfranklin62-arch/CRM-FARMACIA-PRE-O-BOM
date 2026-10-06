@@ -46,11 +46,19 @@ export const campanhaStatusWebhookSchema = z.object({
   motivo_pausa: z.string().trim().max(500).nullable().optional(),
 });
 
+export const filtroCampanhaSchema = z.object({
+  origem_chat: z.enum(["whatsapp", "instagram"]).optional(),
+  tag_ids: z.array(z.string().uuid()).max(100).optional(),
+  cliente_ids: z.array(z.string().uuid()).max(5000).optional(),
+  interagiu_ultimos_dias: z.number().int().min(1).max(3650).optional(),
+  inativos_ha_dias: z.number().int().min(1).max(3650).optional(),
+});
+
 export const campanhaCreateSchema = z.object({
   titulo: z.string().trim().min(1).max(200),
   mensagem: z.string().trim().min(1).max(2000),
   clientes_alvo: z.enum(["todos", "por_filtro"]),
-  filtro_json: z.record(z.string(), z.unknown()).nullable().optional(),
+  filtro_json: filtroCampanhaSchema.nullable().optional(),
   agendada_para: z.string().datetime().nullable().optional(),
 });
 

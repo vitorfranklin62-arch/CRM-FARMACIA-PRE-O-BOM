@@ -143,6 +143,19 @@ O rodapé de descadastro é acrescentado sozinho, uma vez só.
    há tempo aguenta bem menos que número movimentado. Se aparecer bloqueio
    temporário, volte pro patamar anterior e fique nele.
 
+## Filtro de público
+
+Ao criar a campanha, "Filtrar quem vai receber" combina (com **E**): origem
+(WhatsApp/Instagram), última conversa (últimos N dias ou sem falar há N dias),
+tags (qualquer uma) e contatos escolhidos à mão. A tela mostra na hora quantos
+vão receber.
+
+Quem decide é a função SQL `filtrar_clientes_campanha(filtro)`
+(`supabase/migrations/20261006_filtro_publico_campanha.sql`): o CRM usa pra
+prévia e o nó "Buscar clientes da campanha" usa pro disparo, então o número da
+tela é o que sai. Quem pediu SAIR nunca entra. **Rode essa migração antes de
+publicar o fluxo atualizado.**
+
 ## Descadastro (SAIR) — já tratado no CRM
 
 Quando o cliente responde **SAIR / PARAR / PARE / DESCADASTRAR / STOP** (a
