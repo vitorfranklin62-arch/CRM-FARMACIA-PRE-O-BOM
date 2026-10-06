@@ -71,7 +71,8 @@ export const mensagemCreateSchema = z.object({
 export const mensagemWebhookSchema = z.object({
   cliente: z.object({
     id: z.string().uuid().nullable().optional(),
-    nome: z.string().trim().min(1).max(200),
+    // Contato sem nome salvo chega vazio do WhatsApp — a rota usa o telefone como nome.
+    nome: z.string().trim().max(200).nullable().optional(),
     telefone: z.string().trim().min(8).max(30),
     origem_chat: z.enum(["whatsapp", "instagram"]).nullable().optional(),
     foto_url: z.string().trim().url("URL inválida").max(2000).nullable().optional(),

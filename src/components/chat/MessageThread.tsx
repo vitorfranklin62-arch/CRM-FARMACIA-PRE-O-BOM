@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { cn, formatDateTime, maskPhone } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
+import { Spinner } from "@/components/ui/Spinner";
 import { TagPills } from "@/components/clientes/TagPills";
 import { TagsManagerModal } from "@/components/clientes/TagsManagerModal";
 import { TemplatePicker } from "./TemplatePicker";
@@ -39,27 +40,70 @@ const REMETENTE_STYLE = {
 
 // Foto, áudio ou PDF que o cliente mandou pelo WhatsApp. Sem midia_url (link
 // assinado ainda não gerado, ou arquivo não baixou — ver src/lib/chat-midia.ts)
-// não mostra nada, e a legenda/transcrição em `conteudo` continua aparecendo normal.
+// não mostra nada, e a legenda/transcrição em `conteudo` aparece como reserva.
+function temMidiaVisivel(msg: MensagemComUsuario) {
+  return !!msg.midia_url && (msg.tipo === "imagem" || msg.tipo === "audio");
+}
+
 function MensagemMidia({ msg }: { msg: MensagemComUsuario }) {
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(false);
+
   if (!msg.midia_url) return null;
+
+  const aviso = erro ? (
+    <p className="mb-1.5 text-xs opacity-80">Não foi possível carregar a mídia.</p>
+  ) : null;
 
   if (msg.tipo === "imagem") {
     return (
-      <a href={msg.midia_url} target="_blank" rel="noopener noreferrer" className="mb-1.5 block">
-        <img
-          src={msg.midia_url}
-          alt={msg.midia_nome ?? "Imagem enviada pelo cliente"}
-          className="max-h-64 w-auto rounded-lg object-cover"
-        />
-      </a>
+      <div className="relative mb-1.5">
+        {carregando && !erro && (
+          <div className="flex h-40 w-56 items-center justify-center rounded-lg bg-black/10 dark:bg-white/10">
+            <Spinner size={28} className="text-white" />
+          </div>
+        )}
+        {aviso}
+        {!erro && (
+          <a href={msg.midia_url} target="_blank" rel="noopener noreferrer" className={carregando ? "hidden" : "block"}>
+            <img
+              src={msg.midia_url}
+              alt={msg.midia_nome ?? "Imagem enviada pelo cliente"}
+              onLoad={() => setCarregando(false)}
+              onError={() => {
+                setErro(true);
+                setCarregando(false);
+              }}
+              className="max-h-64 w-auto rounded-lg object-cover"
+            />
+          </a>
+        )}
+      </div>
     );
   }
 
   if (msg.tipo === "audio") {
     return (
-      <audio controls preload="none" src={msg.midia_url} className="mb-1.5 h-9 max-w-full">
-        Seu navegador não consegue tocar áudio.
-      </audio>
+      <div className="mb-1.5 flex items-center gap-2">
+        {carregando && !erro && <Spinner size={20} className="shrink-0 text-white" />}
+        {aviso}
+        {!erro && (
+          <audio
+            controls
+            preload="metadata"
+            src={msg.midia_url}
+            onLoadedMetadata={() => setCarregando(false)}
+            onCanPlay={() => setCarregando(false)}
+            onError={() => {
+              setErro(true);
+              setCarregando(false);
+            }}
+            className={cn("h-9 max-w-full", carregando && "opacity-60")}
+          >
+            Seu navegador não consegue tocar áudio.
+          </audio>
+        )}
+      </div>
     );
   }
 
@@ -293,7 +337,8 @@ export function MessageThread({
                   {msg.remetente === "funcionaria" && msg.usuarios ? msg.usuarios.nome : style.label}
                 </div>
                 <MensagemMidia msg={msg} />
-                <p className="whitespace-pre-wrap text-sm">{msg.conteudo}</p>
+                {/* Em foto/áudio o texto é só a descrição/transcrição que a IA usa — não aparece pra equipe */}
+                {!temMidiaVisivel(msg) && <p className="whitespace-pre-wrap text-sm">{msg.conteudo}</p>}
                 <p className="mt-1 text-[10px] opacity-60">{formatDateTime(msg.criado_em)}</p>
               </div>
             </div>
