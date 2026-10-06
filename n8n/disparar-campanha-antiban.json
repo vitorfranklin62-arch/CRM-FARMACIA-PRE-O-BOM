@@ -190,7 +190,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://empresarialconectfly.uazapi.com/instance/status",
+        "url": "https://flycontrol.uazapi.com/instance/status",
         "options": {},
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth"
@@ -214,7 +214,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\n// Duas perguntas antes de encostar no WhatsApp: a instância está de pé, e\n// estamos dentro do horário combinado? Se qualquer uma falhar, a campanha\n// fica como está e a próxima rodada tenta de novo — nada se perde.\nconst campanha = $('Loop Campanhas').item.json;\nconst cfg = campanha.cfg;\nconst resposta = $input.first().json || {};\n\n// A resposta de /instance/status varia de versão pra versão, então olhamos\n// os lugares conhecidos e caímos num texto único pra inspecionar.\nconst bruto = [\n  resposta.status,\n  resposta.instance && resposta.instance.status,\n  resposta.connectionStatus,\n  resposta.state,\n].filter(Boolean).join(' ').toLowerCase();\n\nlet instanciaOk;\nlet motivo = '';\n\nif (resposta.error) {\n  instanciaOk = false;\n  motivo = 'não deu pra consultar a instância';\n} else if (!bruto) {\n  // Formato desconhecido: seguimos em frente. Se estiver mesmo fora do ar,\n  // os envios falham e o disjuntor mais adiante interrompe.\n  instanciaOk = true;\n  motivo = 'status da instância não reconhecido — seguindo com cautela';\n} else {\n  instanciaOk = /connected|open|online/.test(bruto) && !/disconnect|close|offline/.test(bruto);\n  if (!instanciaOk) motivo = 'instância desconectada (' + bruto + ')';\n}\n\nconst agora = new Date(\n  new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })\n);\nconst hora = agora.getHours();\nconst dia = agora.getDay();\n\nconst horaOk = hora >= cfg.horaInicio && hora < cfg.horaFim;\nconst diaOk = cfg.diasPermitidos.includes(dia);\n\nif (instanciaOk && !horaOk) motivo = 'fora da janela de horário (' + hora + 'h)';\nif (instanciaOk && horaOk && !diaOk) motivo = 'dia da semana não liberado';\n\nreturn [{\n  json: {\n    ...campanha,\n    pode_disparar: instanciaOk && horaOk && diaOk,\n    motivo,\n  },\n}];\n"
+        "jsCode": "\n// Duas perguntas antes de encostar no WhatsApp: a instância está de pé, e\n// estamos dentro do horário combinado? Se qualquer uma falhar, a campanha\n// fica como está e a próxima rodada tenta de novo — nada se perde.\nconst campanha = $('Loop Campanhas').item.json;\nconst cfg = campanha.cfg;\nconst resposta = $input.first().json || {};\n\n// A resposta de /instance/status varia de versão pra versão, então olhamos\n// os lugares conhecidos e caímos num texto único pra inspecionar.\nconst objStatus = resposta.status && typeof resposta.status === 'object' ? resposta.status : null;\nconst bruto = [\n  typeof resposta.status === 'string' ? resposta.status : '',\n  resposta.instance && resposta.instance.status,\n  resposta.connectionStatus,\n  resposta.state,\n].filter(Boolean).join(' ').toLowerCase();\n\nlet instanciaOk;\nlet motivo = '';\n\nif (resposta.error) {\n  instanciaOk = false;\n  motivo = 'não deu pra consultar a instância';\n} else if (objStatus && typeof objStatus.connected === 'boolean') {\n  // Formato atual da uazapi: status: { connected, loggedIn }\n  instanciaOk = objStatus.connected && objStatus.loggedIn !== false;\n  if (!instanciaOk) motivo = 'instância desconectada';\n} else if (!bruto) {\n  // Formato desconhecido: seguimos em frente. Se estiver mesmo fora do ar,\n  // os envios falham e o disjuntor mais adiante interrompe.\n  instanciaOk = true;\n  motivo = 'status da instância não reconhecido — seguindo com cautela';\n} else {\n  instanciaOk = /connected|open|online/.test(bruto) && !/disconnect|close|offline/.test(bruto);\n  if (!instanciaOk) motivo = 'instância desconectada (' + bruto + ')';\n}\n\nconst agora = new Date(\n  new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })\n);\nconst hora = agora.getHours();\nconst dia = agora.getDay();\n\nconst horaOk = hora >= cfg.horaInicio && hora < cfg.horaFim;\nconst diaOk = cfg.diasPermitidos.includes(dia);\n\nif (instanciaOk && !horaOk) motivo = 'fora da janela de horário (' + hora + 'h)';\nif (instanciaOk && horaOk && !diaOk) motivo = 'dia da semana não liberado';\n\nreturn [{\n  json: {\n    ...campanha,\n    pode_disparar: instanciaOk && horaOk && diaOk,\n    motivo,\n  },\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -422,7 +422,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://empresarialconectfly.uazapi.com/chat/check",
+        "url": "https://flycontrol.uazapi.com/chat/check",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ numbers: $('Montar fila').all().map(i => i.json.numero).filter(i => i && i !== undefined) }) }}",
@@ -624,7 +624,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://empresarialconectfly.uazapi.com/send/text",
+        "url": "https://flycontrol.uazapi.com/send/text",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

@@ -33,7 +33,11 @@ function extrairConectado(dados: unknown): boolean | null {
   if (!dados || typeof dados !== "object") return null;
   const obj = dados as Record<string, unknown>;
   const instance = obj.instance as Record<string, unknown> | undefined;
-  const status = obj.status ?? instance?.status;
+  // A uazapi devolve `status` como objeto ({ connected, loggedIn }) e o texto
+  // ("connected") dentro de `instance.status` — por isso olha os dois formatos.
+  const statusObj = obj.status && typeof obj.status === "object" ? (obj.status as Record<string, unknown>) : null;
+  if (typeof statusObj?.connected === "boolean") return statusObj.connected && statusObj.loggedIn !== false;
+  const status = typeof obj.status === "string" ? obj.status : instance?.status;
   if (typeof status === "string") return ["connected", "open", "online"].includes(status.toLowerCase());
   if (typeof obj.connected === "boolean") return obj.connected;
   if (typeof obj.loggedIn === "boolean") return obj.loggedIn;
