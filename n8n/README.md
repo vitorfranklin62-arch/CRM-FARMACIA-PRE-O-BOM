@@ -16,9 +16,14 @@ O fluxo antigo tinha as chaves escritas dentro do JSON. Elas precisam ser
 
 O fluxo novo **não guarda segredo nenhum**. Ele usa credenciais do N8N.
 
-## 1. Rodar a migração
+## 1. Rodar as migrações (nesta ordem)
 
-`supabase/migrations/20260828_campanhas_antiban.sql` no SQL editor do Supabase.
+1. `supabase/migrations/20260828_campanhas_antiban.sql`
+2. `supabase/migrations/20261006_campanhas_pausa_e_optout.sql` — adiciona o status
+   `pausada` e a coluna `motivo_pausa`. **Rode antes de importar o fluxo atualizado**:
+   sem ela, o nó "Pausar campanha pra revisão" é rejeitado pelo banco.
+
+No SQL editor do Supabase.
 Ela só adiciona coisas (coluna de opt-out + tabela `campanha_envios`), não
 remove nem reescreve nada. **O fluxo não funciona sem ela** — as consultas
 filtram por `aceita_campanhas` e gravam em `campanha_envios`.
@@ -138,11 +143,27 @@ O rodapé de descadastro é acrescentado sozinho, uma vez só.
    há tempo aguenta bem menos que número movimentado. Se aparecer bloqueio
    temporário, volte pro patamar anterior e fique nele.
 
-## O que ainda falta (não está neste fluxo)
+## Descadastro (SAIR) — já tratado no CRM
 
-O rodapé promete "responda SAIR", mas **quem recebe o SAIR é o fluxo de
-mensagem recebida**, não este. Sem tratar isso, a promessa fica no vácuo —
-que é pior do que não prometer. É preciso, no fluxo de mensagem recebida
-(ou no `/api/webhooks/mensagem` do CRM): ao receber "SAIR"/"PARAR"/
-"DESCADASTRAR", gravar `aceita_campanhas = false` e `optout_em = now()` no
-cliente, e responder confirmando.
+Quando o cliente responde **SAIR / PARAR / PARE / DESCADASTRAR / STOP** (a
+mensagem inteira, não uma frase que contenha a palavra), o
+`/api/webhooks/mensagem` do CRM grava `aceita_campanhas = false` +
+`optout_em` e manda uma confirmação pela uazapi (usa `UAIZAP_BASE_URL` e
+`UAIZAP_API_KEY` do servidor). Isso funciona sem mexer no fluxo de mensagem
+recebida, porque ele já registra toda mensagem do cliente nessa rota.
+
+A resposta da rota ganha `"optout": true` nesse caso. **Passo manual
+recomendado** no fluxo "Receber Mensagem (WhatsApp/IA)": depois do nó
+*registrar mensagem do cliente*, um IF em `{{ $json.optout }}` que, se
+verdadeiro, encerra sem chamar a IA — senão a Vitória também tenta
+responder o "SAIR".
+
+Também existe `POST /api/webhooks/optout` (`{ "telefone": "..." }`, mesmo
+Bearer `N8N_WEBHOOK_SECRET`) pra descadastrar por outro fluxo.
+
+## Campanha pausada
+
+Se o disjuntor parar o disparo, a campanha vira **Pausada** no CRM, com o
+motivo, e o botão passa a ser **Retomar**. Retomar não reenvia pra quem já
+recebeu (índice único em `campanha_envios`). A tela de Campanhas mostra o
+relatório: enviadas, falhas, sem WhatsApp e inválidos.

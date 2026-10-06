@@ -763,7 +763,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ status: 'rascunho' }) }}",
+        "jsonBody": "={{ JSON.stringify({ status: 'pausada', motivo_pausa: $('Ritmo e proteção').item.json.falhas_seguidas + ' falhas seguidas no envio (último erro: ' + ($('Ritmo e proteção').item.json.erro || 'desconhecido') + '). Confira a conexão do WhatsApp e clique em Retomar.' }) }}",
         "options": {},
         "authentication": "genericCredentialType",
         "genericAuthType": "httpCustomAuth"

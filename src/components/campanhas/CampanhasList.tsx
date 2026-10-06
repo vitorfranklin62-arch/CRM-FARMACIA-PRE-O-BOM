@@ -11,16 +11,30 @@ import { CampanhaForm } from "./CampanhaForm";
 import { formatDateTime } from "@/lib/utils";
 import type { Campanha } from "@/types/database";
 
-const STATUS_VARIANT = { rascunho: "gray", agendada: "yellow", enviada: "green" } as const;
-const STATUS_LABEL = { rascunho: "Rascunho", agendada: "Agendada", enviada: "Enviada" } as const;
+const STATUS_VARIANT = { rascunho: "gray", agendada: "yellow", enviada: "green", pausada: "red" } as const;
+const STATUS_LABEL = { rascunho: "Rascunho", agendada: "Em andamento", enviada: "Enviada", pausada: "Pausada" } as const;
 
-export function CampanhasList({ campanhas, userId }: { campanhas: Campanha[]; userId: string }) {
+export type ResumoEnvio = { enviado: number; falhou: number; sem_whatsapp: number; invalido: number };
+
+export function CampanhasList({
+  campanhas,
+  userId,
+  resumo = {},
+}: {
+  campanhas: Campanha[];
+  userId: string;
+  resumo?: Record<string, ResumoEnvio>;
+}) {
   const [open, setOpen] = useState(false);
   const [disparando, setDisparando] = useState<string | null>(null);
   const router = useRouter();
 
   async function handleDisparar(c: Campanha) {
-    if (!confirm(`Disparar "${c.titulo}" agora pra todos os clientes do público selecionado?`)) return;
+    const pergunta =
+      c.status === "pausada"
+        ? `Retomar "${c.titulo}"? Quem já recebeu não recebe de novo.`
+        : `Disparar "${c.titulo}" agora? O envio é gradual (pausas entre mensagens, só em horário comercial), então pode levar horas.`;
+    if (!confirm(pergunta)) return;
     setDisparando(c.id);
     const res = await fetch(`/api/campanhas/${c.id}/disparar`, { method: "POST" });
     setDisparando(null);
@@ -55,7 +69,29 @@ export function CampanhasList({ campanhas, userId }: { campanhas: Campanha[]; us
     },
     {
       header: "Status",
-      accessor: (c) => <Badge variant={STATUS_VARIANT[c.status]}>{STATUS_LABEL[c.status]}</Badge>,
+      accessor: (c) => (
+        <div className="space-y-1">
+          <Badge variant={STATUS_VARIANT[c.status]}>{STATUS_LABEL[c.status]}</Badge>
+          {c.status === "pausada" && c.motivo_pausa && (
+            <p className="max-w-[16rem] text-xs text-red-500">{c.motivo_pausa}</p>
+          )}
+        </div>
+      ),
+    },
+    {
+      header: "Envios",
+      accessor: (c) => {
+        const r = resumo[c.id];
+        if (!r) return <span className="text-xs text-gray-400">—</span>;
+        return (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="font-medium text-green-600">{r.enviado} enviadas</span>
+            {r.falhou > 0 && <span className="text-red-500"> · {r.falhou} falhas</span>}
+            {r.sem_whatsapp > 0 && <span> · {r.sem_whatsapp} sem WhatsApp</span>}
+            {r.invalido > 0 && <span> · {r.invalido} inválidos</span>}
+          </p>
+        );
+      },
     },
     {
       header: "",
@@ -66,7 +102,7 @@ export function CampanhasList({ campanhas, userId }: { campanhas: Campanha[]; us
             disabled={disparando === c.id}
             className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 disabled:opacity-50"
           >
-            <Send size={13} /> {disparando === c.id ? "Disparando..." : "Disparar agora"}
+            <Send size={13} /> {disparando === c.id ? "Disparando..." : c.status === "pausada" ? "Retomar" : "Disparar agora"}
           </button>
         ),
       className: "text-right",

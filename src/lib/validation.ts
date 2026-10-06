@@ -42,7 +42,8 @@ export const clienteWebhookSchema = z.object({
 });
 
 export const campanhaStatusWebhookSchema = z.object({
-  status: z.enum(["rascunho", "agendada", "enviada"]),
+  status: z.enum(["rascunho", "agendada", "enviada", "pausada"]),
+  motivo_pausa: z.string().trim().max(500).nullable().optional(),
 });
 
 export const campanhaCreateSchema = z.object({
