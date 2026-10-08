@@ -150,7 +150,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\n// ===========================================================================\n// PAINEL DE CONTROLE — é aqui que se mexe pra afrouxar ou apertar o disparo.\n// ===========================================================================\nconst cfg = {\n  // --- Ritmo entre uma mensagem e a próxima (segundos, sorteado no intervalo)\n  // Intervalo fixo é assinatura de robô; o sorteio quebra o padrão.\n  pausaMinSeg: 25,\n  pausaMaxSeg: 75,\n\n  // --- A cada N mensagens, uma parada longa (minutos, também sorteada).\n  // Imita gente: manda um punhado, larga o celular, volta depois.\n  loteTamanho: 20,\n  pausaLongaMinMin: 4,\n  pausaLongaMaxMin: 9,\n\n  // --- Tetos de volume\n  limiteDia: 250,        // total no dia, somando TODAS as campanhas\n  limitePorExecucao: 60, // máximo que uma rodada tenta enviar\n\n  // --- Janela de horário (hora local de São Paulo) e dias da semana.\n  // 0 = domingo. Mensagem de madrugada é o que mais rende denúncia.\n  horaInicio: 8,\n  horaFim: 20,\n  diasPermitidos: [1, 2, 3, 4, 5, 6],\n\n  // --- Disjuntor: N falhas seguidas param tudo e a campanha volta pra\n  // rascunho, esperando alguém olhar. Falha em série normalmente quer dizer\n  // que a instância caiu ou que o número já está limitado.\n  falhasSeguidasParaAbortar: 5,\n\n  // --- Rodapé de descadastro. Dar uma saída fácil é o que evita o cliente\n  // usar a única outra saída que ele tem: denunciar como spam.\n  rodapeOptout: '\\n\\nPara não receber mais, responda SAIR.',\n\n  // --- Saudações. A primeira lista entra no lugar de {{saudacao}} e precisa\n  // combinar com o nome logo depois (\"Oi, Maria!\"). A segunda só é usada\n  // quando o cliente não tem nome no cadastro, aí a frase inteira é trocada.\n  saudacoes: ['Oi', 'Olá'],\n  saudacoesSemNome: ['Oi, tudo bem?', 'Olá, tudo bem?', 'Oi!', 'Olá!'],\n};\n\n// Webhook e agendamento podem trazer a mesma campanha na mesma rodada.\nconst vistas = new Set();\nconst saida = [];\n\nfor (const item of $input.all()) {\n  const c = item.json;\n  if (!c || !c.id || vistas.has(c.id)) continue;\n  vistas.add(c.id);\n  saida.push({ json: { ...c, cfg } });\n}\n\nreturn saida;\n"
+        "jsCode": "\n// ===========================================================================\n// PAINEL DE CONTROLE — é aqui que se mexe pra afrouxar ou apertar o disparo.\n// ===========================================================================\nconst cfg = {\n  // --- Ritmo entre uma mensagem e a próxima (segundos, sorteado no intervalo)\n  // Intervalo fixo é assinatura de robô; o sorteio quebra o padrão.\n  pausaMinSeg: 25,\n  pausaMaxSeg: 75,\n\n  // --- A cada N mensagens, uma parada longa (minutos, também sorteada).\n  // Imita gente: manda um punhado, larga o celular, volta depois.\n  loteTamanho: 20,\n  pausaLongaMinMin: 4,\n  pausaLongaMaxMin: 9,\n\n  // --- Tetos de volume\n  limiteDia: 250,        // total no dia, somando TODAS as campanhas\n  limitePorExecucao: 5,  // máximo que uma rodada envia (a reserva no banco impede repetição se duas rodadas se sobrepuserem)\n\n  // --- Janela de horário (hora local de São Paulo) e dias da semana.\n  // 0 = domingo. Mensagem de madrugada é o que mais rende denúncia.\n  horaInicio: 8,\n  horaFim: 20,\n  diasPermitidos: [1, 2, 3, 4, 5, 6],\n\n  // --- Disjuntor: N falhas seguidas param tudo e a campanha volta pra\n  // rascunho, esperando alguém olhar. Falha em série normalmente quer dizer\n  // que a instância caiu ou que o número já está limitado.\n  falhasSeguidasParaAbortar: 5,\n\n  // --- Rodapé de descadastro. Dar uma saída fácil é o que evita o cliente\n  // usar a única outra saída que ele tem: denunciar como spam.\n  rodapeOptout: '\\n\\nPara não receber mais, responda SAIR.',\n\n  // --- Saudações. A primeira lista entra no lugar de {{saudacao}} e precisa\n  // combinar com o nome logo depois (\"Oi, Maria!\"). A segunda só é usada\n  // quando o cliente não tem nome no cadastro, aí a frase inteira é trocada.\n  saudacoes: ['Oi', 'Olá'],\n  saudacoesSemNome: ['Oi, tudo bem?', 'Olá, tudo bem?', 'Oi!', 'Olá!'],\n};\n\n// Webhook e agendamento podem trazer a mesma campanha na mesma rodada.\nconst vistas = new Set();\nconst saida = [];\n\nfor (const item of $input.all()) {\n  const c = item.json;\n  if (!c || !c.id || vistas.has(c.id)) continue;\n  vistas.add(c.id);\n  saida.push({ json: { ...c, cfg } });\n}\n\nreturn saida;\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -318,8 +318,8 @@
               "value": "telefone"
             },
             {
-              "name": "campanha_id",
-              "value": "=eq.{{ $('Loop Campanhas').item.json.id }}"
+              "name": "or",
+              "value": "=(campanha_id.eq.{{ $('Loop Campanhas').item.json.id }},enviado_em.gte.{{ $now.setZone('America/Sao_Paulo').startOf('day').toISO() }})"
             },
             {
               "name": "limit",
@@ -409,7 +409,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\n// Monta a lista de quem vai receber AGORA, já limpa: sem telefone inválido,\n// sem repetido, sem quem já recebeu esta campanha e dentro dos tetos do dia.\nconst campanha = $('Loop Campanhas').item.json;\nconst cfg = campanha.cfg;\n\nconst clientes = $('Buscar clientes da campanha').all().map(i => i.json);\n\n// Chave de comparação: DDD + últimos 8 dígitos. Assim o mesmo celular com e\n// sem o 9º dígito conta como UMA pessoa e ninguém recebe duas vezes.\nfunction chave(numero) {\n  const l = String(numero || '').replace(/\\D/g, '').replace(/^55/, '');\n  return l.slice(0, 2) + l.slice(-8);\n}\n\nconst jaEnviados = new Set(\n  $('Buscar já enviados').all()\n    .map(i => i.json.telefone)\n    .filter(Boolean)\n    .map(chave)\n);\n\n// A contagem do dia vem no cabeçalho Content-Range, formato \"0-0/123\".\nlet enviadosHoje = 0;\ntry {\n  const cabecalhos = $('Cota do dia').first().json.headers || {};\n  const faixa = String(cabecalhos['content-range'] || '');\n  enviadosHoje = Number(faixa.split('/')[1]) || 0;\n} catch (e) {\n  // Sem a contagem, o teto por execução ainda protege.\n  enviadosHoje = 0;\n}\n\nconst restanteDia = Math.max(0, cfg.limiteDia - enviadosHoje);\nlet vagas = Math.min(cfg.limitePorExecucao, restanteDia);\n\n// DDDs que existem de fato no Brasil. Sem esta conferência, um número\n// estrangeiro de 11 dígitos ganha o 55 na frente e vira um \"brasileiro\"\n// inventado — envio que nunca entrega e ainda conta como tentativa suspeita.\nconst DDDS = new Set([\n  11, 12, 13, 14, 15, 16, 17, 18, 19,\n  21, 22, 24, 27, 28,\n  31, 32, 33, 34, 35, 37, 38,\n  41, 42, 43, 44, 45, 46, 47, 48, 49,\n  51, 53, 54, 55,\n  61, 62, 63, 64, 65, 66, 67, 68, 69,\n  71, 73, 74, 75, 77, 79,\n  81, 82, 83, 84, 85, 86, 87, 88, 89,\n  91, 92, 93, 94, 95, 96, 97, 98, 99,\n]);\n\nfunction normalizar(bruto) {\n  let d = String(bruto || '').replace(/\\D/g, '');\n  if (!d) return null;\n  d = d.replace(/^0+/, '');  // 0 de operadora / DDI mal colado\n\n  // Se já veio com o DDI do Brasil, tira pra validar o miolo.\n  if ((d.length === 12 || d.length === 13) && d.startsWith('55')) {\n    d = d.slice(2);\n  }\n\n  // Daqui pra frente tem que ser um número local brasileiro.\n  if (d.length !== 10 && d.length !== 11) return null;\n  if (!DDDS.has(Number(d.slice(0, 2)))) return null;\n\n  const resto = d.slice(2);\n  const celular = resto.length === 9 && resto[0] === '9';\n  // Celular antigo, sem o 9º dígito (6-9 + 7 dígitos). É assim que o WhatsApp\n  // guarda muita conta brasileira, e é como o CRM recebe o número (vem do\n  // próprio WhatsApp). Mandamos como está; a checagem de WhatsApp confirma.\n  const celularAntigo = resto.length === 8 && /^[6-9]/.test(resto);\n  const fixo = resto.length === 8 && /^[2-5]/.test(resto);\n  if (!celular && !celularAntigo && !fixo) return null;\n\n  return '55' + d;\n}\n\nfunction sortear(lista) {\n  return lista[Math.floor(Math.random() * lista.length)];\n}\n\nconst vistos = new Set();\nconst fila = [];\nlet descartadosInvalidos = 0;\n\nfor (const c of clientes) {\n  if (vagas <= 0) break;\n\n  const numero = normalizar(c.telefone);\n  // Número torto é o pior tipo de envio: não entrega e ainda conta como\n  // tentativa suspeita. Melhor nem tentar.\n  if (!numero) { descartadosInvalidos++; continue; }\n  const k = chave(numero);\n  if (vistos.has(k)) continue;\n  vistos.add(k);\n  if (jaEnviados.has(k)) continue;\n\n  const primeiro = String(c.nome || '').trim().split(/\\s+/)[0] || '';\n  let texto = String(campanha.mensagem || '');\n\n  texto = texto.replace(/\\{\\{\\s*saudacao\\s*\\}\\}/gi, sortear(cfg.saudacoes));\n\n  if (primeiro) {\n    texto = texto.replace(/\\{\\{\\s*nome\\s*\\}\\}/gi, primeiro);\n  } else {\n    // Sem nome no cadastro, \"Oi, !\" fica ridículo — troca a frase inteira.\n    texto = texto.replace(/(oi|olá|ola)[,\\s]*\\{\\{\\s*nome\\s*\\}\\}\\s*!?/gi, sortear(cfg.saudacoesSemNome));\n    texto = texto.replace(/\\{\\{\\s*nome\\s*\\}\\}/gi, '');\n  }\n\n  texto = texto.replace(/[ \\t]{2,}/g, ' ').trim();\n\n  if (cfg.rodapeOptout && !/responda\\s+sair/i.test(texto)) {\n    texto += cfg.rodapeOptout;\n  }\n\n  fila.push({\n    campanha_id: campanha.id,\n    cliente_id: c.id,\n    nome: c.nome,\n    numero,\n    texto,\n    cfg,\n  });\n  vagas--;\n}\n\nif (fila.length === 0) {\n  // Ninguém elegível: devolve um item de controle pra campanha poder ser\n  // fechada em vez de ficar sendo tentada de 5 em 5 minutos pra sempre.\n  return [{ json: {\n    nada_a_enviar: true,\n    campanha_id: campanha.id,\n    cfg,\n    diagnostico: {\n      clientes_lidos: clientes.length,\n      ja_receberam: jaEnviados.size,\n      telefones_invalidos: descartadosInvalidos,\n      enviados_hoje: enviadosHoje,\n      teto_dia: cfg.limiteDia,\n    },\n  }}];\n}\n\nreturn fila.map(f => ({ json: f }));\n"
+        "jsCode": "\n// Monta a lista de quem vai receber AGORA, já limpa: sem telefone inválido,\n// sem repetido, sem quem já recebeu esta campanha e dentro dos tetos do dia.\nconst campanha = $('Loop Campanhas').item.json;\nconst cfg = campanha.cfg;\n\nconst clientes = $('Buscar clientes da campanha').all().map(i => i.json);\n\n// Chave de comparação: DDD + últimos 8 dígitos. Assim o mesmo celular com e\n// sem o 9º dígito conta como UMA pessoa e ninguém recebe duas vezes.\nfunction chave(numero) {\n  const l = String(numero || '').replace(/\\D/g, '').replace(/^55/, '');\n  return l.slice(0, 2) + l.slice(-8);\n}\n\nconst jaEnviados = new Set(\n  $('Buscar já enviados').all()\n    .map(i => i.json.telefone)\n    .filter(Boolean)\n    .map(chave)\n);\n\n// A contagem do dia vem no cabeçalho Content-Range, formato \"0-0/123\".\nlet enviadosHoje = 0;\ntry {\n  const cabecalhos = $('Cota do dia').first().json.headers || {};\n  const faixa = String(cabecalhos['content-range'] || '');\n  enviadosHoje = Number(faixa.split('/')[1]) || 0;\n} catch (e) {\n  // Sem a contagem, o teto por execução ainda protege.\n  enviadosHoje = 0;\n}\n\nconst restanteDia = Math.max(0, cfg.limiteDia - enviadosHoje);\nlet vagas = Math.min(cfg.limitePorExecucao, restanteDia);\n\n// Cota do dia esgotada: NÃO é \"acabou a lista\". Devolve vazio pra execução parar aqui\n// sem fechar a campanha — ela segue de onde parou no próximo dia útil.\nif (vagas <= 0) return [];\n\n// DDDs que existem de fato no Brasil. Sem esta conferência, um número\n// estrangeiro de 11 dígitos ganha o 55 na frente e vira um \"brasileiro\"\n// inventado — envio que nunca entrega e ainda conta como tentativa suspeita.\nconst DDDS = new Set([\n  11, 12, 13, 14, 15, 16, 17, 18, 19,\n  21, 22, 24, 27, 28,\n  31, 32, 33, 34, 35, 37, 38,\n  41, 42, 43, 44, 45, 46, 47, 48, 49,\n  51, 53, 54, 55,\n  61, 62, 63, 64, 65, 66, 67, 68, 69,\n  71, 73, 74, 75, 77, 79,\n  81, 82, 83, 84, 85, 86, 87, 88, 89,\n  91, 92, 93, 94, 95, 96, 97, 98, 99,\n]);\n\nfunction normalizar(bruto) {\n  let d = String(bruto || '').replace(/\\D/g, '');\n  if (!d) return null;\n  d = d.replace(/^0+/, '');  // 0 de operadora / DDI mal colado\n\n  // Se já veio com o DDI do Brasil, tira pra validar o miolo.\n  if ((d.length === 12 || d.length === 13) && d.startsWith('55')) {\n    d = d.slice(2);\n  }\n\n  // Daqui pra frente tem que ser um número local brasileiro.\n  if (d.length !== 10 && d.length !== 11) return null;\n  if (!DDDS.has(Number(d.slice(0, 2)))) return null;\n\n  const resto = d.slice(2);\n  const celular = resto.length === 9 && resto[0] === '9';\n  // Celular antigo, sem o 9º dígito (6-9 + 7 dígitos). É assim que o WhatsApp\n  // guarda muita conta brasileira, e é como o CRM recebe o número (vem do\n  // próprio WhatsApp). Mandamos como está; a checagem de WhatsApp confirma.\n  const celularAntigo = resto.length === 8 && /^[6-9]/.test(resto);\n  const fixo = resto.length === 8 && /^[2-5]/.test(resto);\n  if (!celular && !celularAntigo && !fixo) return null;\n\n  return '55' + d;\n}\n\nfunction sortear(lista) {\n  return lista[Math.floor(Math.random() * lista.length)];\n}\n\nconst vistos = new Set();\nconst fila = [];\nlet descartadosInvalidos = 0;\n\nfor (const c of clientes) {\n  if (vagas <= 0) break;\n\n  const numero = normalizar(c.telefone);\n  // Número torto é o pior tipo de envio: não entrega e ainda conta como\n  // tentativa suspeita. Melhor nem tentar.\n  if (!numero) { descartadosInvalidos++; continue; }\n  const k = chave(numero);\n  if (vistos.has(k)) continue;\n  vistos.add(k);\n  if (jaEnviados.has(k)) continue;\n\n  // Primeiro nome limpo: tira emoji/pontuação das pontas (\"-🇧🇷-Rodrigo\" → \"Rodrigo\") e\n  // descarta nome sem nenhuma letra (\".\" → sem nome, o texto vira \"Oi, tudo bem?\").\n  let primeiro = String(c.nome || '').trim().split(/\\s+/)[0] || '';\n  primeiro = primeiro.replace(/^[^\\p{L}]+|[^\\p{L}\\p{N}]+$/gu, '');\n  if (!/\\p{L}/u.test(primeiro)) primeiro = '';\n  // \"FRANKLIN\"/\"franklin\" → \"Franklin\"\n  if (primeiro && (primeiro === primeiro.toUpperCase() || primeiro === primeiro.toLowerCase())) {\n    primeiro = primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase();\n  }\n  let texto = String(campanha.mensagem || '');\n\n  texto = texto.replace(/\\{\\{\\s*saudacao\\s*\\}\\}/gi, sortear(cfg.saudacoes));\n\n  if (primeiro) {\n    texto = texto.replace(/\\{\\{\\s*nome\\s*\\}\\}/gi, primeiro);\n  } else {\n    // Sem nome no cadastro, \"Oi, !\" fica ridículo — troca a frase inteira.\n    texto = texto.replace(/(oi|olá|ola)[,\\s]*\\{\\{\\s*nome\\s*\\}\\}\\s*!?/gi, sortear(cfg.saudacoesSemNome));\n    texto = texto.replace(/\\{\\{\\s*nome\\s*\\}\\}/gi, '');\n  }\n\n  texto = texto.replace(/[ \\t]{2,}/g, ' ').trim();\n\n  if (cfg.rodapeOptout && !/responda\\s+sair/i.test(texto)) {\n    texto += cfg.rodapeOptout;\n  }\n\n  fila.push({\n    campanha_id: campanha.id,\n    cliente_id: c.id,\n    nome: c.nome,\n    numero,\n    texto,\n    cfg,\n  });\n  vagas--;\n}\n\nif (fila.length === 0) {\n  // Ninguém elegível: devolve um item de controle pra campanha poder ser\n  // fechada em vez de ficar sendo tentada de 5 em 5 minutos pra sempre.\n  return [{ json: {\n    nada_a_enviar: true,\n    campanha_id: campanha.id,\n    cfg,\n    diagnostico: {\n      clientes_lidos: clientes.length,\n      ja_receberam: jaEnviados.size,\n      telefones_invalidos: descartadosInvalidos,\n      enviados_hoje: enviadosHoje,\n      teto_dia: cfg.limiteDia,\n    },\n  }}];\n}\n\nreturn fila.map(f => ({ json: f }));\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -451,7 +451,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\n// Mandar pra número que não tem WhatsApp é um dos sinais que mais pesam\n// contra o remetente. Conferimos a lista inteira numa chamada só e\n// separamos quem fica de quem sai.\nconst fila = $('Montar fila').all().map(i => i.json);\n\nif (fila.length === 1 && fila[0].nada_a_enviar) {\n  return [{ json: fila[0] }];\n}\n\nconst cfg = fila[0].cfg;\n\n// A resposta de /chat/check muda de formato conforme a versão; juntamos\n// tudo que parecer uma lista de resultados e indexamos pelos dígitos.\nconst respostas = $input.all().map(i => i.json);\nconst registros = [];\nfor (const r of respostas) {\n  if (!r || r.error) continue;\n  const possiveis = Array.isArray(r) ? r\n    : Array.isArray(r.numbers) ? r.numbers\n    : Array.isArray(r.result) ? r.result\n    : Array.isArray(r.data) ? r.data\n    : Array.isArray(r.chats) ? r.chats\n    : [r];\n  registros.push(...possiveis.filter(Boolean));\n}\n\nconst mapa = new Map();\nfor (const reg of registros) {\n  const chave = String(\n    reg.query || reg.number || reg.jid || reg.phone || reg.wa_id || ''\n  ).replace(/\\D/g, '');\n  if (!chave) continue;\n  // Só tratamos como \"não tem\" quando a API diz isso com todas as letras.\n  // Na dúvida, manda: barrar por causa de uma resposta que não entendemos\n  // pararia a campanha inteira à toa.\n  const naoTem = reg.exists === false || reg.exists === 'false' || reg.isInWhatsapp === false;\n  mapa.set(chave, !naoTem);\n}\n\nconst houveResposta = mapa.size > 0;\n\nconst saida = fila.map(f => {\n  // Sem resposta utilizável da checagem, seguimos com o envio: barrar todo\n  // mundo por causa de uma API fora do ar seria pior que o problema.\n  const temWhatsapp = houveResposta ? (mapa.get(f.numero) ?? true) : true;\n  return { json: { ...f, tem_whatsapp: temWhatsapp, descartar: !temWhatsapp } };\n});\n\nconst aptos = saida.filter(s => s.json.tem_whatsapp);\n\nif (aptos.length === 0) {\n  return [{ json: {\n    nada_a_enviar: true,\n    campanha_id: fila[0].campanha_id,\n    cfg,\n    descartados: saida.map(s => s.json),\n    diagnostico: { motivo: 'nenhum número da fila tem WhatsApp' },\n  }}];\n}\n\nreturn saida;\n"
+        "jsCode": "\n// Mandar pra número que não tem WhatsApp é um dos sinais que mais pesam\n// contra o remetente. Conferimos a lista inteira numa chamada só e\n// separamos quem fica de quem sai.\nconst fila = $('Montar fila').all().map(i => i.json);\n\nif (fila.length === 1 && fila[0].nada_a_enviar) {\n  return [{ json: fila[0] }];\n}\n\nconst cfg = fila[0].cfg;\n\n// A resposta de /chat/check muda de formato conforme a versão; juntamos\n// tudo que parecer uma lista de resultados e indexamos pelos dígitos.\nconst respostas = $input.all().map(i => i.json);\nconst registros = [];\nfor (const r of respostas) {\n  if (!r || r.error) continue;\n  const possiveis = Array.isArray(r) ? r\n    : Array.isArray(r.numbers) ? r.numbers\n    : Array.isArray(r.result) ? r.result\n    : Array.isArray(r.data) ? r.data\n    : Array.isArray(r.chats) ? r.chats\n    : [r];\n  registros.push(...possiveis.filter(Boolean));\n}\n\nconst mapa = new Map();\nfor (const reg of registros) {\n  const chave = String(\n    reg.query || reg.number || reg.jid || reg.phone || reg.wa_id || ''\n  ).replace(/\\D/g, '');\n  if (!chave) continue;\n  // Só tratamos como \"não tem\" quando a API diz isso com todas as letras.\n  // Na dúvida, manda: barrar por causa de uma resposta que não entendemos\n  // pararia a campanha inteira à toa.\n  const naoTem = reg.exists === false || reg.exists === 'false' || reg.isInWhatsapp === false;\n  mapa.set(chave, !naoTem);\n}\n\nconst houveResposta = mapa.size > 0;\n\nconst saida = fila.map(f => {\n  // Sem resposta utilizável da checagem, seguimos com o envio: barrar todo\n  // mundo por causa de uma API fora do ar seria pior que o problema.\n  const temWhatsapp = houveResposta ? (mapa.get(f.numero) ?? true) : true;\n  return { json: { ...f, tem_whatsapp: temWhatsapp, descartar: !temWhatsapp } };\n});\n\nconst aptos = saida.filter(s => s.json.tem_whatsapp);\n\n// Ninguém do lote tem WhatsApp: segue com todos marcados como \"descartar\" — o ramo\n// \"Sem WhatsApp\" registra cada um e o fluxo continua no próximo lote. (Antes isto fechava\n// a campanha inteira por engano.)\nreturn saida;\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -677,7 +677,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/campanha_envios",
+        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/campanha_envios?on_conflict=campanha_id,telefone",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -687,7 +687,7 @@
             },
             {
               "name": "Prefer",
-              "value": "resolution=ignore-duplicates,return=minimal"
+              "value": "resolution=merge-duplicates,return=minimal"
             }
           ]
         },
@@ -816,23 +816,36 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ 'https://conectfly-crm-farmacia.lnuwza.easypanel.host/api/campanhas/' + $('Loop Campanhas').item.json.id + '/status' }}",
+        "method": "PATCH",
+        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/campanhas",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "id",
+              "value": "=eq.{{ $('Loop Campanhas').item.json.id }}"
+            }
+          ]
+        },
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ status: 'enviada' }) }}",
-        "options": {},
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth"
+        "jsonBody": "={{ JSON.stringify({ status: 'enviada', enviada_em: $now.toISO(), motivo_pausa: null }) }}",
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -843,13 +856,79 @@
       "id": "512a5b56-bfe9-41b6-9b9e-4aaa7e3e553c",
       "name": "Marcar campanha enviada",
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "CRM_FARMACIA",
-          "name": "CRM Farmácia (N8N_WEBHOOK_SECRET)"
+        "httpCustomAuth": {
+          "id": "SUPABASE_FARMACIA",
+          "name": "Supabase Farmácia (service_role)"
         }
       },
       "onError": "continueRegularOutput",
       "executeOnce": true
+    },
+    {
+      "name": "Reservar envio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        8480,
+        2160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://fmujfsbkrliyiltvdvts.supabase.co/rest/v1/campanha_envios",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ campanha_id: $json.campanha_id, cliente_id: $json.cliente_id, telefone: $json.numero, status: 'falhou', erro: 'reservado - envio em andamento' }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "X5QBUsSycN3oLuik",
+          "name": "Supabase Farmácia (service_role)"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "4d366490-3964-4e4b-9a9b-22c66e5ecac4"
+    },
+    {
+      "name": "Selecionar reservados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8540,
+        2160
+      ],
+      "parameters": {
+        "jsCode": "// Só segue quem foi RESERVADO agora no banco (insert com índice único). Se outra rodada\n// já reservou o contato, ele não volta na resposta e fica de fora — nunca envia 2x.\nconst reservados = new Set($input.all().map(i => i.json && i.json.cliente_id).filter(Boolean));\nconst fila = $('Separar quem tem WhatsApp').all()\n  .map(i => i.json)\n  .filter(f => f.tem_whatsapp === true && reservados.has(f.cliente_id));\n// pairedItem: sem isto, com 2+ itens o n8n perde a origem deles e os nós seguintes\n// ($('Loop Campanhas').item) falham DEPOIS do envio. Todos descendem do mesmo item de campanha.\nreturn fila.map(f => ({ json: f, pairedItem: { item: 0 } }));\n"
+      },
+      "id": "c0244499-859d-4ca0-8a74-809cb75b5fb5"
+    },
+    {
+      "name": "Conferir já enviados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7136,
+        2192
+      ],
+      "parameters": {
+        "jsCode": "// TRAVA DE SEGURANCA: se a consulta de \"quem ja recebeu\" falhou, NAO seguimos.\n// Sem essa lista o fluxo nao sabe quem ja recebeu e poderia repetir mensagem.\nconst itens = $input.all();\nif (itens.some(i => i.json && i.json.error)) {\n  throw new Error('Consulta de ja enviados falhou — envio cancelado por seguranca.');\n}\nreturn itens;\n"
+      },
+      "id": "86aaef6f-f59f-454f-b654-28fe3935016c"
     }
   ],
   "connections": {
@@ -997,7 +1076,7 @@
       "main": [
         [
           {
-            "node": "Cota do dia",
+            "node": "Conferir já enviados",
             "type": "main",
             "index": 0
           }
@@ -1086,7 +1165,7 @@
       "main": [
         [
           {
-            "node": "Loop Clientes",
+            "node": "Reservar envio",
             "type": "main",
             "index": 0
           }
@@ -1097,7 +1176,7 @@
       "main": [
         [
           {
-            "node": "Marcar campanha enviada",
+            "node": "Loop Campanhas",
             "type": "main",
             "index": 0
           }
@@ -1178,6 +1257,39 @@
         [
           {
             "node": "Loop Campanhas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir já enviados": {
+      "main": [
+        [
+          {
+            "node": "Cota do dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reservar envio": {
+      "main": [
+        [
+          {
+            "node": "Selecionar reservados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Selecionar reservados": {
+      "main": [
+        [
+          {
+            "node": "Loop Clientes",
             "type": "main",
             "index": 0
           }

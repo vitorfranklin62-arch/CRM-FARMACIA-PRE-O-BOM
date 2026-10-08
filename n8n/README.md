@@ -180,3 +180,25 @@ Se o disjuntor parar o disparo, a campanha vira **Pausada** no CRM, com o
 motivo, e o botão passa a ser **Retomar**. Retomar não reenvia pra quem já
 recebeu (índice único em `campanha_envios`). A tela de Campanhas mostra o
 relatório: enviadas, falhas, sem WhatsApp e inválidos.
+
+
+## Como o disparo evita mensagem repetida (leia antes de mexer no fluxo)
+
+O fluxo **reserva o contato no banco antes de enviar** (nós `Reservar envio` →
+`Selecionar reservados`): um insert com índice único em `campanha_envios`
+(campanha + telefone). Só quem a reserva devolve é enviado. Depois do envio,
+`Registrar envio` atualiza a linha para `enviado` ou `falhou`. Assim, mesmo que
+qualquer nó depois do envio quebre, ninguém recebe duas vezes — o que
+aconteceu em 06–08/10/2026, quando um erro **depois** do envio e **antes** do
+registro fez um cliente receber a mesma mensagem a cada 5 minutos.
+
+Regras que não podem ser quebradas:
+- **Nunca** coloque um nó que pode falhar (ou que perde o vínculo de itens) entre
+  o envio e o registro sem reservar antes.
+- `Selecionar reservados` devolve `pairedItem`; sem isso, com 2+ itens, o
+  `$('Loop Campanhas').item` do `Ritmo e proteção` falha depois do envio.
+- A campanha só fecha ("Enviada") quando `Montar fila` não acha mais ninguém.
+  Fim de lote, cota do dia esgotada e lote sem WhatsApp **não** fecham.
+- Ao validar mudança no fluxo, **olhe as execuções no n8n**, não só o banco: o
+  banco não mostra envio que foi feito e não registrado.
+- Teste sempre com uma campanha de 2 números seus antes de usar com a base.
