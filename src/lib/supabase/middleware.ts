@@ -10,6 +10,10 @@ function buildCsp(nonce: string): string {
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
+    // Áudios do chat: links assinados do Storage (bucket privado chat-midia) e o
+    // preview do áudio recém-gravado (blob:). Sem isto o navegador bloqueia o
+    // <audio> (cai no default-src 'self').
+    "media-src 'self' blob: https://*.supabase.co",
     "font-src 'self'",
     "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
     "worker-src 'self'",
