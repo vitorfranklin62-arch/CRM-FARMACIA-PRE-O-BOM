@@ -57,7 +57,7 @@ export const PALETAS = {
 } satisfies Record<string, PaletaEtapa>;
 
 /** Prefixo do `data-alvo` das colunas. */
-export const PREFIXO_COLUNA = "coluna:";
+const PREFIXO_COLUNA = "coluna:";
 
 /** Valor do `data-alvo` da área de finalizar. */
 export const ALVO_FINALIZAR = "finalizar";

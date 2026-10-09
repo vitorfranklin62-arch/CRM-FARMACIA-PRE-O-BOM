@@ -25,7 +25,7 @@
 
 export const COLUNAS_MODELO = ["NOME", "LABORATÓRIO", "VENDA (PREÇO)", "QUANTIDADE", "OBSERVAÇÕES"] as const;
 
-export interface DetalheColuna {
+interface DetalheColuna {
   coluna: (typeof COLUNAS_MODELO)[number];
   obrigatoria: boolean;
   formato: string;
