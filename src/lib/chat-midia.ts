@@ -17,6 +17,7 @@ const EXTENSAO_POR_MIME: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
   "audio/ogg": "ogg",
+  "audio/webm": "webm",
   "audio/mpeg": "mp3",
   "audio/mp4": "m4a",
   "audio/wav": "wav",
@@ -58,6 +59,39 @@ export async function baixarEArmazenarMidia(params: {
   } catch {
     return null;
   }
+}
+
+// Formatos que o navegador grava (MediaRecorder): Chrome/Edge geram webm, Firefox
+// gera ogg e o Safari gera mp4. Qualquer outro tipo é recusado.
+const MIMES_AUDIO_GRAVADO = ["audio/webm", "audio/ogg", "audio/mp4"];
+
+/**
+ * Guarda no Storage um áudio gravado pela equipe no painel. Devolve null se o
+ * tipo não for de áudio, estiver vazio ou passar do limite — quem chama decide
+ * o que responder.
+ */
+export async function guardarAudioDaEquipe(params: {
+  conversaId: string;
+  bytes: ArrayBuffer;
+  mimeInformado: string;
+}): Promise<{ midia_path: string; midia_mime: string } | null> {
+  const mime = params.mimeInformado.split(";")[0].trim().toLowerCase();
+  if (!MIMES_AUDIO_GRAVADO.includes(mime)) return null;
+  if (params.bytes.byteLength === 0 || params.bytes.byteLength > LIMITES_BYTES.audio) return null;
+
+  const caminho = `${params.conversaId}/${Date.now()}-${crypto.randomUUID()}.${EXTENSAO_POR_MIME[mime]}`;
+  const supabase = createServiceClient();
+  const { error } = await supabase.storage.from(BUCKET).upload(caminho, params.bytes, { contentType: mime, upsert: false });
+  if (error) return null;
+
+  return { midia_path: caminho, midia_mime: mime };
+}
+
+/** Link assinado de um arquivo só — usado pra uazapi/N8N buscarem o áudio a enviar. */
+export async function gerarUrlAssinada(caminho: string, segundos: number): Promise<string | null> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(caminho, segundos);
+  return error || !data ? null : data.signedUrl;
 }
 
 const EXPIRACAO_SEGUNDOS = 60 * 60 * 6; // 6h — dá pra ver a conversa toda sem precisar gerar de novo a cada clique

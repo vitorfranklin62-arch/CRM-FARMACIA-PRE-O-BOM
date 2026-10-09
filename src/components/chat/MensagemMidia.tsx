@@ -217,16 +217,31 @@ function MidiaAudio({ msg, url }: { msg: MensagemComUsuario; url: string }) {
   const [naoToca, setNaoToca] = useState(false);
   const { erro, aoFalhar } = useFalhaDeMidia(url);
 
+  // Áudio gravado no navegador (webm) costuma vir sem duração (Infinity): pular
+  // pro fim força o navegador a calcular, e depois volta pro começo.
+  const forcandoDuracao = useRef(false);
+
   const lerMetadados = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (Number.isFinite(audio.duration)) setDuracao(audio.duration);
+    if (audio.duration === Infinity && !forcandoDuracao.current) {
+      forcandoDuracao.current = true;
+      audio.currentTime = 1e101;
+    } else if (Number.isFinite(audio.duration)) {
+      setDuracao(audio.duration);
+      if (forcandoDuracao.current) {
+        forcandoDuracao.current = false;
+        audio.currentTime = 0;
+        setAtual(0);
+      }
+    }
     setCarregando(false);
   }, []);
 
   // Mesmo problema da foto: o áudio pode ter carregado os metadados antes da
   // hidratação. readyState >= 1 (HAVE_METADATA) significa que já está pronto.
   useEffect(() => {
+    forcandoDuracao.current = false;
     setCarregando(true);
     setTocando(false);
     setAtual(0);

@@ -11,6 +11,7 @@ import { TagPills } from "@/components/clientes/TagPills";
 import { TagsManagerModal } from "@/components/clientes/TagsManagerModal";
 import { TemplatePicker } from "./TemplatePicker";
 import { MensagemMidia } from "./MensagemMidia";
+import { GravadorAudio } from "./GravadorAudio";
 import type { ConversaCompleta, MensagemComUsuario } from "@/types/relations";
 import type { Tag, TemplateMensagem } from "@/types/database";
 
@@ -63,6 +64,7 @@ export function MessageThread({
   const [travando, setTravando] = useState(false);
   const [bloqueando, setBloqueando] = useState(false);
   const [gerenciandoTags, setGerenciandoTags] = useState(false);
+  const [gravandoAudio, setGravandoAudio] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -268,7 +270,7 @@ export function MessageThread({
         <div ref={bottomRef} />
       </div>
 
-      <div className="border-t border-brand-100/70 bg-gradient-to-r from-brand-50/50 via-white to-accent-50/40 p-3 dark:border-white/10 dark:from-brand-500/10 dark:via-navy-800/40 dark:to-accent-500/10">
+      <div className="relative border-t border-brand-100/70 bg-gradient-to-r from-brand-50/50 via-white to-accent-50/40 p-3 dark:border-white/10 dark:from-brand-500/10 dark:via-navy-800/40 dark:to-accent-500/10">
         {showTemplates && (
           <TemplatePicker
             templates={templates}
@@ -294,26 +296,35 @@ export function MessageThread({
           >
             <FileText size={18} />
           </button>
-          <textarea
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage(texto);
-              }
-            }}
-            rows={1}
-            placeholder="Digite uma mensagem..."
-            className="flex-1 resize-none rounded-xl border border-brand-200/80 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:ring-brand-500/25"
+          <GravadorAudio
+            conversaId={conversa.id}
+            onEnviado={() => router.refresh()}
+            onGravandoChange={setGravandoAudio}
           />
-          <button
-            type="submit"
-            disabled={sending || !texto.trim()}
-            className="rounded-xl bg-gradiente-acento p-2.5 text-white shadow-brilho-acento transition hover:brightness-110 disabled:bg-none disabled:bg-accent-200 disabled:shadow-none"
-          >
-            <Send size={18} />
-          </button>
+          {!gravandoAudio && (
+            <>
+              <textarea
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage(texto);
+                  }
+                }}
+                rows={1}
+                placeholder="Digite uma mensagem..."
+                className="flex-1 resize-none rounded-xl border border-brand-200/80 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200 dark:border-white/10 dark:bg-white/5 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:ring-brand-500/25"
+              />
+              <button
+                type="submit"
+                disabled={sending || !texto.trim()}
+                className="rounded-xl bg-gradiente-acento p-2.5 text-white shadow-brilho-acento transition hover:brightness-110 disabled:bg-none disabled:bg-accent-200 disabled:shadow-none"
+              >
+                <Send size={18} />
+              </button>
+            </>
+          )}
         </form>
       </div>
     </div>
