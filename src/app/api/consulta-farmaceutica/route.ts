@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { consultaFarmaceuticaSchema } from "@/lib/validation";
-import { PROMPT_PADRAO_VITORIA_IA } from "@/lib/claude";
+import { PROMPT_PADRAO_VITORIA_IA } from "@/lib/vitoria-prompt";
 import { perguntarVitoriaN8n, VitoriaN8nError } from "@/lib/vitoria-n8n";
 
 /**

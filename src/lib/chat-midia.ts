@@ -81,7 +81,7 @@ function conteudoCombinaComMime(mime: string, bytes: ArrayBuffer) {
   return false;
 }
 
-export type ResultadoAudioEquipe =
+type ResultadoAudioEquipe =
   | { ok: true; midia_path: string; midia_mime: string }
   | { ok: false; motivo: "invalido" | "grande_demais" | "duplicado" | "falha" };
 

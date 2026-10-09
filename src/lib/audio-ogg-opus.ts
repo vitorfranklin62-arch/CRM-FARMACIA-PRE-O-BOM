@@ -13,7 +13,7 @@ const SAMPLES_POR_FRAME = 960; // 20 ms
 const PRE_SKIP = 312; // atraso padrão do codificador Opus a 48 kHz
 const MAX_PACOTES_POR_PAGINA = 40;
 
-export function suportaConversaoOggOpus() {
+function suportaConversaoOggOpus() {
   return typeof AudioEncoder !== "undefined" && typeof AudioData !== "undefined" && typeof OfflineAudioContext !== "undefined";
 }
 
@@ -91,8 +91,8 @@ function comentariosOpus() {
   return t;
 }
 
-/** Junta pacotes Opus (já codificados) num arquivo OGG. Exportado pra poder ser testado sozinho. */
-export function montarOggOpus(pacotes: { dados: Uint8Array; samples: number }[], taxaOriginal = TAXA): Uint8Array<ArrayBuffer> {
+/** Junta pacotes Opus (já codificados) num arquivo OGG. */
+function montarOggOpus(pacotes: { dados: Uint8Array; samples: number }[], taxaOriginal = TAXA): Uint8Array<ArrayBuffer> {
   const serial = Math.floor(Math.random() * 0xffffffff);
   const paginas: Uint8Array[] = [];
   let sequencia = 0;

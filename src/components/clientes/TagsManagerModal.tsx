@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import type { Tag, TagCor } from "@/types/database";
 import type { ClienteTagComTag } from "@/types/relations";
 
-export const CORES_TAG: { valor: TagCor; label: string }[] = [
+const CORES_TAG: { valor: TagCor; label: string }[] = [
   { valor: "blue", label: "Azul" },
   { valor: "green", label: "Verde" },
   { valor: "yellow", label: "Amarelo" },
