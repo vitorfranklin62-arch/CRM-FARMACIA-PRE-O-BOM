@@ -299,7 +299,7 @@ export function MessageThread({
           <GravadorAudio
             conversaId={conversa.id}
             onEnviado={() => router.refresh()}
-            onGravandoChange={setGravandoAudio}
+            onOcupadoChange={setGravandoAudio}
           />
           {!gravandoAudio && (
             <>

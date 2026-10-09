@@ -13,6 +13,7 @@ import { logAudit } from "@/lib/audit";
 import { formatCurrency } from "@/lib/utils";
 import { ProdutoForm } from "./ProdutoForm";
 import { ImportarEstoqueButton } from "./ImportarEstoqueButton";
+import { ModeloEstoqueButton } from "./ModeloEstoqueButton";
 import { LimparDuplicadosButton } from "./LimparDuplicadosButton";
 import type { Produto } from "@/types/database";
 
@@ -153,8 +154,9 @@ export function ProdutosTable({
         }
         action={
           isDona && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <LimparDuplicadosButton />
+              <ModeloEstoqueButton />
               <ImportarEstoqueButton />
               <Button size="sm" onClick={openNew}>
                 <Plus size={15} /> Novo produto
