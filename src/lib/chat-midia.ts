@@ -44,7 +44,10 @@ export async function baixarEArmazenarMidia(params: {
     const bytes = await resposta.arrayBuffer();
     if (bytes.byteLength === 0 || bytes.byteLength > LIMITES_BYTES[params.tipo]) return null;
 
-    const extensao = EXTENSAO_POR_MIME[mime] ?? (params.tipo === "documento" ? "pdf" : "bin");
+    // O WhatsApp manda áudio como "audio/ogg; codecs=opus" — tira o sufixo
+    // pra achar a extensão certa (senão virava ".bin").
+    const mimeBase = mime.split(";")[0].trim().toLowerCase();
+    const extensao = EXTENSAO_POR_MIME[mimeBase] ?? (params.tipo === "documento" ? "pdf" : "bin");
     const caminho = `${params.conversaId}/${Date.now()}-${crypto.randomUUID()}.${extensao}`;
 
     const supabase = createServiceClient();
