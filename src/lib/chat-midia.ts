@@ -40,7 +40,10 @@ export async function baixarEArmazenarMidia(params: {
     const resposta = await fetch(params.urlTemporaria);
     if (!resposta.ok) return null;
 
-    const mime = params.mimeInformado || resposta.headers.get("content-type") || "application/octet-stream";
+    // O WhatsApp manda "audio/ogg; codecs=opus": corta o que vem depois do ";"
+    // e usa minúsculas, senão a extensão não é encontrada e vira ".bin".
+    const mimeBruto = params.mimeInformado || resposta.headers.get("content-type") || "application/octet-stream";
+    const mime = mimeBruto.split(";")[0].trim().toLowerCase() || "application/octet-stream";
     const bytes = await resposta.arrayBuffer();
     if (bytes.byteLength === 0 || bytes.byteLength > LIMITES_BYTES[params.tipo]) return null;
 
