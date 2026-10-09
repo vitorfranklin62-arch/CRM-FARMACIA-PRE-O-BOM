@@ -32,7 +32,13 @@ export function VitoriaFloatingWidget({ fotoUrl }: { fotoUrl?: string | null }) 
   useEffect(() => {
     try {
       const salvo = localStorage.getItem(STORAGE_KEY);
-      if (salvo) setHistorico(JSON.parse(salvo));
+      if (salvo) {
+        // Pergunta "pendente" de uma sessão anterior nunca vai receber resposta
+        // (a página foi fechada/recarregada no meio) — descartar evita um
+        // "digitando..." eterno.
+        const lista = JSON.parse(salvo) as Mensagem[];
+        setHistorico(lista.filter((m) => !m.pendente));
+      }
     } catch {
       // localStorage indisponível ou dado corrompido — só começa vazio.
     }
@@ -40,7 +46,7 @@ export function VitoriaFloatingWidget({ fotoUrl }: { fotoUrl?: string | null }) 
 
   useEffect(() => {
     if (historico.length === 0) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(historico.slice(-MAX_HISTORICO_SALVO)));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(historico.filter((m) => !m.pendente).slice(-MAX_HISTORICO_SALVO)));
   }, [historico]);
 
   useEffect(() => {

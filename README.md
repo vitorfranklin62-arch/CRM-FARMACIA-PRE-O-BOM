@@ -69,7 +69,7 @@ Veja `.env.example`. Resumo:
 - `SUPABASE_SERVICE_ROLE_KEY` — só usado no servidor (webhooks e administração de usuários), nunca exposto ao browser
 - `N8N_WEBHOOK_SECRET` — token que o N8N deve enviar em `Authorization: Bearer <token>` nos webhooks
 - `N8N_BASE_URL`, `UAIZAP_API_KEY`, `UAIZAP_BASE_URL` — configuração das integrações
-- `ANTHROPIC_API_KEY` — usada só pelo widget flutuante interno **Vitória AI**, nunca pela IA que atende cliente
+- `N8N_VITORIA_WEBHOOK_URL` (opcional) — URL do webhook da **Vitória AI** no N8N; sem ela, usa o mesmo servidor N8N cadastrado em Configurações → Integrações
 
 ## Webhooks / API para o N8N
 
@@ -137,7 +137,7 @@ Pontos importantes sobre essa ferramenta:
   - O prompt (texto que define o comportamento da IA) começa com o padrão embutido em `PROMPT_PADRAO_VITORIA_IA` (`src/lib/claude.ts`) e fica salvo em `configuracoes.vitoria_ia_prompt` — deixar o campo em branco volta a usar o padrão.
   - A foto é enviada via upload (JPEG/PNG/WEBP, até 5MB) pro bucket `branding` do Supabase Storage (`POST /api/configuracoes/vitoria-foto`) e a URL fica em `configuracoes.vitoria_ia_foto_url`; sem foto configurada, usa o desenho ilustrado padrão (SVG).
 - Cada pergunta e resposta é salva em `consultas_farmaceuticas` (fica no audit trail do banco), mas o histórico mostrado no chat é local do navegador (`localStorage`) — não é compartilhado entre a equipe nem entre dispositivos, e não é pensado pra perguntas com dados pessoais de clientes.
-- Requer `ANTHROPIC_API_KEY` configurada no servidor; sem ela, o chat retorna erro explicando que a IA não está configurada.
+- A resposta vem do fluxo "Vitória AI (consulta interna da equipe)" no N8N (webhook `VITORIA-AI-CONSULTA-FARMACIA`, protegido por Header Auth). O CRM usa `N8N_WEBHOOK_SECRET`; a chave da IA fica na credencial do N8N, não no CRM.
 
 ## Importação de estoque
 
