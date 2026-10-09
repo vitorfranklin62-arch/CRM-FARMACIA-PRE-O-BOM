@@ -55,11 +55,14 @@ export async function perguntarVitoriaN8n(pergunta: string, prompt: string): Pro
   }
 
   if (!resposta.ok) {
-    throw new VitoriaN8nError(
+    const motivo =
       resposta.status === 404
         ? "O fluxo da Vitória AI não está ativo no N8N."
-        : "A Vitória AI não conseguiu responder agora. Tente de novo."
-    );
+        : resposta.status === 401 || resposta.status === 403
+          ? "O N8N recusou a senha do webhook da Vitória AI. Confira a credencial do nó \"Webhook Vitória AI\" no N8N (deve ser a mesma senha do CRM)."
+          : "A Vitória AI não conseguiu responder agora. Tente de novo.";
+    console.error(`[vitoria-n8n] N8N respondeu HTTP ${resposta.status}`);
+    throw new VitoriaN8nError(motivo);
   }
 
   const corpo = (await resposta.json().catch(() => null)) as { resposta?: unknown } | null;

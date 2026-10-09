@@ -1,5 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
-
 /**
  * Prompt padrão do agente de referência farmacêutica — ferramenta INTERNA
  * (widget "Vitória AI"), nunca exposta a clientes. Baseada só no
@@ -7,7 +5,8 @@ import Anthropic from "@anthropic-ai/sdk";
  * real), por isso o próprio prompt exige que toda resposta reforce esse
  * limite. A dona pode substituir esse texto em Configurações → Vitória AI
  * (fica salvo em `configuracoes.vitoria_ia_prompt`); esse aqui é só o valor
- * inicial e o que volta a valer se o campo for deixado em branco.
+ * inicial e o que volta a valer se o campo for deixado em branco. A resposta
+ * em si vem do fluxo da Vitória no N8N (ver src/lib/vitoria-n8n.ts).
  */
 export const PROMPT_PADRAO_VITORIA_IA = `Você é a Vitória AI, assistente de referência farmacêutica de uso INTERNO da Farmácia Preço Bom, usada apenas pela equipe (farmacêuticos e atendentes) — nunca por clientes.
 
@@ -26,44 +25,3 @@ Regras importantes:
 7. Não use markdown (sem **negrito**, sem #título) — a tela mostra texto puro. Para listas, use hífen e quebra de linha.
 
 Responda sempre em português do Brasil.`;
-
-let client: Anthropic | null = null;
-
-function getClient(): Anthropic {
-  if (!client) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new ConsultaFarmaceuticaError("ANTHROPIC_API_KEY não configurada no servidor.");
-    }
-    client = new Anthropic({ apiKey });
-  }
-  return client;
-}
-
-/** Erro esperado (config ausente, recusa, resposta vazia) — distinto de falhas da API da Anthropic. */
-export class ConsultaFarmaceuticaError extends Error {}
-
-export async function perguntarClaude(pergunta: string, promptCustom?: string | null): Promise<string> {
-  const response = await getClient().messages.create({
-    model: "claude-opus-5",
-    max_tokens: 1500,
-    thinking: { type: "adaptive" },
-    output_config: { effort: "medium" },
-    system: promptCustom?.trim() || PROMPT_PADRAO_VITORIA_IA,
-    messages: [{ role: "user", content: pergunta }],
-  });
-
-  if (response.stop_reason === "refusal") {
-    throw new ConsultaFarmaceuticaError(
-      "A IA não pôde responder essa pergunta. Tente reformular focando em informações farmacêuticas gerais."
-    );
-  }
-
-  const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === "text");
-  const texto = textBlock?.text?.trim();
-  if (!texto) {
-    throw new ConsultaFarmaceuticaError("A IA não retornou uma resposta.");
-  }
-
-  return texto;
-}
