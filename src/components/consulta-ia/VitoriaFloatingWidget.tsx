@@ -63,6 +63,8 @@ export function VitoriaFloatingWidget({ fotoUrl }: { fotoUrl?: string | null }) 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pergunta: texto }),
+        // Sem limite, uma resposta que nunca chega deixava o "digitando..." pra sempre.
+        signal: AbortSignal.timeout(60_000),
       });
       const body = await res.json();
 
@@ -77,7 +79,7 @@ export function VitoriaFloatingWidget({ fotoUrl }: { fotoUrl?: string | null }) 
       );
     } catch {
       setHistorico((atual) => atual.filter((m) => m.id !== id));
-      setError("Não foi possível conectar à IA agora.");
+      setError("A Vitória AI não respondeu a tempo. Tente de novo.");
     } finally {
       setEnviando(false);
     }
