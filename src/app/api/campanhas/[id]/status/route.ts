@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { lerCorpoJson } from "@/lib/api";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authorizeWebhook } from "@/lib/webhook-auth";
 import { campanhaStatusWebhookSchema } from "@/lib/validation";
@@ -16,12 +17,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "ID de campanha inválido." }, { status: 400 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
-  }
+  const { corpo: body, erro: erroJson } = await lerCorpoJson(request);
+  if (erroJson) return erroJson;
 
   const parsed = campanhaStatusWebhookSchema.safeParse(body);
   if (!parsed.success) {

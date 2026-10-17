@@ -27,7 +27,7 @@ const RODAPE_Y_MAX = 25;
 /** Itens com Y a menos disso um do outro são da mesma linha da tabela. */
 const TOLERANCIA_Y = 2;
 
-export interface EstoquePdfListaRow {
+interface EstoquePdfListaRow {
   pagina: number;
   nome: string;
   laboratorio: string | null;
@@ -35,7 +35,7 @@ export interface EstoquePdfListaRow {
   observacoes: string | null;
 }
 
-export interface ParseEstoquePdfListaResult {
+interface ParseEstoquePdfListaResult {
   linhas: EstoquePdfListaRow[];
   duvidosas: number;
   paginasDuvidosas: number[];

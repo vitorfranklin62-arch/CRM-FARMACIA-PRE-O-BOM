@@ -15,7 +15,7 @@
  *   d16 = Código interno do produto (mapeado para `sku`)
  */
 
-export interface EstoqueImportRow {
+interface EstoqueImportRow {
   nome: string;
   laboratorio: string | null;
   custo: number;
@@ -58,7 +58,7 @@ function extractField(block: string, tag: string): string {
   return match && match[1] !== undefined ? decodeXmlEntities(match[1]) : "";
 }
 
-export interface ParseEstoqueResult {
+interface ParseEstoqueResult {
   linhas: EstoqueImportRow[];
   ignoradas: number;
 }

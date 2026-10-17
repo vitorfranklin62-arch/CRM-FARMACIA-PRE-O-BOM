@@ -43,10 +43,6 @@ body {
 }
 
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-
   /* Barra de rolagem discreta e colorida, usada nas listas longas (chat, tabelas). */
   .rolagem-fina {
     scrollbar-width: thin;

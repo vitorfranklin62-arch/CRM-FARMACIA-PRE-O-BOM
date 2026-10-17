@@ -13,7 +13,7 @@
  */
 import * as XLSX from "xlsx";
 
-export interface EstoqueXlsxRow {
+interface EstoqueXlsxRow {
   nome: string;
   laboratorio: string | null;
   venda: number;
@@ -21,7 +21,7 @@ export interface EstoqueXlsxRow {
   observacoes: string | null;
 }
 
-export interface ParseEstoqueXlsxResult {
+interface ParseEstoqueXlsxResult {
   linhas: EstoqueXlsxRow[];
   ignoradas: number;
 }

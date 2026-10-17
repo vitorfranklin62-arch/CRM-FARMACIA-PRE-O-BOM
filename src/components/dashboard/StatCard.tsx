@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
  * Paleta dos cartões de métrica. Cada cartão ganha uma cor própria pra dar
  * ritmo ao painel, mantendo o texto sempre branco sobre fundo escuro/saturado.
  */
-export type CorStat = "marinho" | "azul" | "violeta" | "verde" | "laranja" | "coral" | "turquesa" | "indigo";
+type CorStat = "marinho" | "azul" | "violeta" | "verde" | "laranja" | "coral" | "turquesa" | "indigo";
 
 const CORES: Record<CorStat, string> = {
   marinho: "bg-gradient-to-br from-[#142868] to-[#24409E] shadow-brilho-marca",

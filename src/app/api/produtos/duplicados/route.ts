@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { respostaErroInesperado } from "@/lib/api";
 import { requireDona } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
 import { normalizarNome } from "@/lib/estoque-import";
 import { selecionarTodos } from "@/lib/supabase/fetch-all";
+import { agruparDuplicados } from "@/lib/agrupar-duplicados";
 
 interface ProdutoLinha {
   id: string;
@@ -23,20 +25,12 @@ interface ProdutoLinha {
  * atualizado um produto existente às vezes viravam produtos novos
  * duplicados.
  */
-function agruparDuplicados(produtos: ProdutoLinha[]) {
-  const grupos = new Map<string, ProdutoLinha[]>();
-  for (const p of produtos) {
-    const chave = normalizarNome(p.nome);
-    const grupo = grupos.get(chave);
-    if (grupo) grupo.push(p);
-    else grupos.set(chave, [p]);
-  }
-
-  const duplicados = Array.from(grupos.values()).filter((g) => g.length > 1);
-  for (const g of duplicados) {
-    g.sort((a, b) => new Date(b.atualizado_em).getTime() - new Date(a.atualizado_em).getTime());
-  }
-  return duplicados;
+function agruparProdutos(produtos: ProdutoLinha[]) {
+  return agruparDuplicados(
+    produtos,
+    (p) => normalizarNome(p.nome),
+    (p) => p.atualizado_em
+  );
 }
 
 /** GET: só mostra o que seria removido, não mexe em nada. */
@@ -52,7 +46,7 @@ export async function GET() {
       return NextResponse.json({ error: `Não foi possível ler o catálogo: ${error.message}` }, { status: 500 });
     }
 
-    const duplicados = agruparDuplicados(data);
+    const duplicados = agruparProdutos(data);
     const linhasParaRemover = duplicados.reduce((acc, g) => acc + g.length - 1, 0);
 
     return NextResponse.json({
@@ -66,10 +60,7 @@ export async function GET() {
       })),
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: `Erro inesperado: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 500 }
-    );
+    return respostaErroInesperado(err);
   }
 }
 
@@ -93,7 +84,7 @@ export async function POST() {
       return NextResponse.json({ error: `Não foi possível ler o catálogo: ${error.message}` }, { status: 500 });
     }
 
-    const duplicados = agruparDuplicados(data);
+    const duplicados = agruparProdutos(data);
     const idsParaRemover = duplicados.flatMap((g) => g.slice(1).map((p) => p.id));
 
     let removidos = 0;
@@ -126,9 +117,6 @@ export async function POST() {
       primeiroErro,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: `Erro inesperado: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 500 }
-    );
+    return respostaErroInesperado(err);
   }
 }

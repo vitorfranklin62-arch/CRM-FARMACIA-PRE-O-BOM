@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { lerCorpoJson } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { mensagemCreateSchema } from "@/lib/validation";
@@ -11,12 +12,8 @@ import { mensagemCreateSchema } from "@/lib/validation";
 export async function POST(request: Request) {
   const usuario = await requireUser();
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
-  }
+  const { corpo: body, erro: erroJson } = await lerCorpoJson(request);
+  if (erroJson) return erroJson;
 
   const parsed = mensagemCreateSchema.safeParse(body);
   if (!parsed.success) {

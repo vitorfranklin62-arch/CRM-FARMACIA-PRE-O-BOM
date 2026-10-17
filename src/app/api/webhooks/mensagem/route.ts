@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { lerCorpoJson } from "@/lib/api";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authorizeWebhook } from "@/lib/webhook-auth";
 import { mensagemWebhookSchema } from "@/lib/validation";
@@ -16,12 +17,8 @@ export async function POST(request: Request) {
   const unauthorized = authorizeWebhook(request, { limit: 240, windowMs: 60_000 });
   if (unauthorized) return unauthorized;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
-  }
+  const { corpo: body, erro: erroJson } = await lerCorpoJson(request);
+  if (erroJson) return erroJson;
 
   const parsed = mensagemWebhookSchema.safeParse(body);
   if (!parsed.success) {

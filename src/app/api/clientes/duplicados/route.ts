@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { respostaErroInesperado } from "@/lib/api";
 import { requireDona } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
 import { normalizarTelefone } from "@/lib/telefone";
 import { selecionarTodos } from "@/lib/supabase/fetch-all";
+import { agruparDuplicados } from "@/lib/agrupar-duplicados";
 
 interface ClienteLinha {
   id: string;
@@ -20,24 +22,12 @@ interface ClienteLinha {
  * WhatsApp) — cada uma com suas próprias conversas e pedidos. Dentro de
  * cada grupo, a linha com interação mais recente é a "sobrevivente".
  */
-function agruparDuplicados(clientes: ClienteLinha[]) {
-  const grupos = new Map<string, ClienteLinha[]>();
-  for (const c of clientes) {
-    const chave = normalizarTelefone(c.telefone);
-    const grupo = grupos.get(chave);
-    if (grupo) grupo.push(c);
-    else grupos.set(chave, [c]);
-  }
-
-  const duplicados = Array.from(grupos.values()).filter((g) => g.length > 1);
-  for (const g of duplicados) {
-    g.sort((a, b) => {
-      const dataA = new Date(a.ultima_interacao ?? a.criado_em).getTime();
-      const dataB = new Date(b.ultima_interacao ?? b.criado_em).getTime();
-      return dataB - dataA;
-    });
-  }
-  return duplicados;
+function agruparClientes(clientes: ClienteLinha[]) {
+  return agruparDuplicados(
+    clientes,
+    (c) => normalizarTelefone(c.telefone),
+    (c) => c.ultima_interacao ?? c.criado_em
+  );
 }
 
 /** GET: só mostra o que seria mesclado, não mexe em nada. */
@@ -53,7 +43,7 @@ export async function GET() {
       return NextResponse.json({ error: `Não foi possível ler os clientes: ${error.message}` }, { status: 500 });
     }
 
-    const duplicados = agruparDuplicados(data);
+    const duplicados = agruparClientes(data);
     const clientesParaRemover = duplicados.reduce((acc, g) => acc + g.length - 1, 0);
 
     return NextResponse.json({
@@ -67,10 +57,7 @@ export async function GET() {
       })),
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: `Erro inesperado: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 500 }
-    );
+    return respostaErroInesperado(err);
   }
 }
 
@@ -91,7 +78,7 @@ export async function POST() {
       return NextResponse.json({ error: `Não foi possível ler os clientes: ${error.message}` }, { status: 500 });
     }
 
-    const duplicados = agruparDuplicados(data);
+    const duplicados = agruparClientes(data);
 
     let mesclados = 0;
     let bloqueados = 0;
@@ -157,9 +144,6 @@ export async function POST() {
       primeiroErro,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: `Erro inesperado: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 500 }
-    );
+    return respostaErroInesperado(err);
   }
 }

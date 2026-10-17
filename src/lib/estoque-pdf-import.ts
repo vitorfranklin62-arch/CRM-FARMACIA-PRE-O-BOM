@@ -55,7 +55,7 @@ const TOLERANCIA = 0.02;
 
 export type FormatoPdfEstoque = "inventario" | "lista";
 
-export interface EstoquePdfRow {
+interface EstoquePdfRow {
   pagina: number;
   nome: string;
   laboratorio: string | null;
@@ -67,7 +67,7 @@ export interface EstoquePdfRow {
   observacoes?: string | null;
 }
 
-export interface ParseEstoquePdfResult {
+interface ParseEstoquePdfResult {
   formato: FormatoPdfEstoque;
   linhas: EstoquePdfRow[];
   duvidosas: number;

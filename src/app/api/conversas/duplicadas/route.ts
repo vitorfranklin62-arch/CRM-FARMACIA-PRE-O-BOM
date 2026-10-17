@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { respostaErroInesperado } from "@/lib/api";
 import { requireDona } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
 import { selecionarTodos } from "@/lib/supabase/fetch-all";
+import { agruparDuplicados } from "@/lib/agrupar-duplicados";
 import type { ConversaStatus } from "@/types/database";
 
 interface ConversaLinha {
@@ -21,19 +23,12 @@ interface ConversaLinha {
  * "sobrevivente"; as mensagens das outras são movidas pra ela antes de
  * remover as duplicatas, pra não perder histórico.
  */
-function agruparDuplicadas(conversas: ConversaLinha[]) {
-  const grupos = new Map<string, ConversaLinha[]>();
-  for (const c of conversas) {
-    const grupo = grupos.get(c.cliente_id);
-    if (grupo) grupo.push(c);
-    else grupos.set(c.cliente_id, [c]);
-  }
-
-  const duplicadas = Array.from(grupos.values()).filter((g) => g.length > 1);
-  for (const g of duplicadas) {
-    g.sort((a, b) => new Date(b.atualizado_em).getTime() - new Date(a.atualizado_em).getTime());
-  }
-  return duplicadas;
+function agruparConversas(conversas: ConversaLinha[]) {
+  return agruparDuplicados(
+    conversas,
+    (c) => c.cliente_id,
+    (c) => c.atualizado_em
+  );
 }
 
 /** GET: só mostra o que seria mesclado, não mexe em nada. */
@@ -49,7 +44,7 @@ export async function GET() {
       return NextResponse.json({ error: `Não foi possível ler as conversas: ${error.message}` }, { status: 500 });
     }
 
-    const duplicadas = agruparDuplicadas(data);
+    const duplicadas = agruparConversas(data);
     const conversasParaRemover = duplicadas.reduce((acc, g) => acc + g.length - 1, 0);
 
     return NextResponse.json({
@@ -58,10 +53,7 @@ export async function GET() {
       conversasParaRemover,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: `Erro inesperado: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 500 }
-    );
+    return respostaErroInesperado(err);
   }
 }
 
@@ -84,7 +76,7 @@ export async function POST() {
       return NextResponse.json({ error: `Não foi possível ler as conversas: ${error.message}` }, { status: 500 });
     }
 
-    const duplicadas = agruparDuplicadas(data);
+    const duplicadas = agruparConversas(data);
 
     let mescladas = 0;
     let bloqueadas = 0;
@@ -145,9 +137,6 @@ export async function POST() {
       primeiroErro,
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: `Erro inesperado: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 500 }
-    );
+    return respostaErroInesperado(err);
   }
 }

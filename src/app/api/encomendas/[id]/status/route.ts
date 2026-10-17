@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { lerCorpoJson } from "@/lib/api";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireUser } from "@/lib/auth";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
@@ -21,12 +22,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "ID de encomenda inválido." }, { status: 400 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
-  }
+  const { corpo: body, erro: erroJson } = await lerCorpoJson(request);
+  if (erroJson) return erroJson;
 
   const parsed = encomendaStatusSchema.safeParse(body);
   if (!parsed.success) {
