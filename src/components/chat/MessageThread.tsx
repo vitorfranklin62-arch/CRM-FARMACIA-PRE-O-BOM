@@ -2,18 +2,38 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Bot, User, Headset, FileText, Camera, MessageSquare, Lock, Unlock, Ban, ShieldCheck, Tag as TagIcon } from "lucide-react";
+import Link from "next/link";
+import {
+  Send,
+  Bot,
+  User,
+  Headset,
+  FileText,
+  Camera,
+  MessageSquare,
+  Lock,
+  Unlock,
+  Ban,
+  ShieldCheck,
+  Maximize2,
+  Minimize2,
+  PanelRightOpen,
+  PanelRightClose,
+  ArrowLeft,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { cn, formatDateTime, maskPhone } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
+import { formatarTelefone } from "@/lib/telefone";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
-import { TagPills } from "@/components/clientes/TagPills";
-import { TagsManagerModal } from "@/components/clientes/TagsManagerModal";
 import { TemplatePicker } from "./TemplatePicker";
 import { MensagemMidia } from "./MensagemMidia";
 import { GravadorAudio } from "./GravadorAudio";
+import { FichaCliente, type ResumoPedidosCliente } from "./FichaCliente";
+import { useChatExpandido } from "./ChatShell";
+import { CLASSIFICACOES } from "./classificacao";
 import type { ConversaCompleta, MensagemComUsuario } from "@/types/relations";
-import type { Tag, TemplateMensagem } from "@/types/database";
+import type { ConversaClassificacao, Tag, TemplateMensagem } from "@/types/database";
 
 // Cada remetente tem sua própria cor: a IA em violeta claro, o cliente no azul
 // da marca e a equipe em verde. Assim dá pra ler a conversa só pelas cores.
@@ -51,11 +71,13 @@ export function MessageThread({
   initialMensagens,
   templates,
   tagsDisponiveis,
+  resumoPedidos,
 }: {
   conversa: ConversaCompleta;
   initialMensagens: MensagemComUsuario[];
   templates: TemplateMensagem[];
   tagsDisponiveis: Tag[];
+  resumoPedidos: ResumoPedidosCliente;
 }) {
   const [mensagens, setMensagens] = useState(initialMensagens);
   const [texto, setTexto] = useState("");
@@ -63,13 +85,37 @@ export function MessageThread({
   const [showTemplates, setShowTemplates] = useState(false);
   const [travando, setTravando] = useState(false);
   const [bloqueando, setBloqueando] = useState(false);
-  const [gerenciandoTags, setGerenciandoTags] = useState(false);
   const [gravandoAudio, setGravandoAudio] = useState(false);
+  const [fichaAberta, setFichaAberta] = useState(false);
+  const [classificando, setClassificando] = useState<ConversaClassificacao | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const { expandido, alternar: alternarExpandido } = useChatExpandido();
 
   const travada = conversa.status === "aguardando_humano";
   const numeroBloqueado = conversa.clientes?.ia_bloqueada ?? false;
+  const classificacaoAtual = conversa.classificacao ?? "aberta";
+
+  // Em tela larga a ficha já abre do lado; em tela menor ela vira um painel
+  // por cima da conversa, aberto só quando a pessoa clica no botão.
+  useEffect(() => {
+    setFichaAberta(window.matchMedia("(min-width: 1280px)").matches);
+  }, []);
+
+  // Classificação do atendimento (Aberta / Aguardando o cliente / Resolvida).
+  // Não mexe na IA — quem trava/destrava a IA é o botão de cadeado.
+  async function classificar(valor: ConversaClassificacao) {
+    if (classificando || valor === classificacaoAtual) return;
+    setClassificando(valor);
+    const supabase = createClient();
+    const { error } = await supabase.from("conversas").update({ classificacao: valor }).eq("id", conversa.id);
+    if (error) {
+      alert("Não foi possível mudar a classificação. A migração 20261023_chat_classificacao_e_nao_lidas.sql já foi rodada no Supabase?");
+    } else {
+      router.refresh();
+    }
+    setClassificando(null);
+  }
 
   // Trava/destrava a IA só NESTA conversa — reaproveita o mesmo status que já
   // é setado sozinho quando uma funcionária responde manualmente (ver
@@ -153,22 +199,43 @@ export function MessageThread({
     setSending(false);
   }
 
+  const botaoIcone =
+    "rounded-xl p-2 text-gray-400 transition hover:bg-brand-50 hover:text-brand-600 disabled:opacity-50 dark:hover:bg-white/10";
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-brand-100/70 bg-gradient-to-r from-brand-50/80 via-white to-accent-50/50 px-5 py-3.5 dark:border-white/10 dark:from-brand-500/15 dark:via-navy-800/40 dark:to-accent-500/10">
+    <div className="relative flex h-full min-h-0">
+    <div className="flex min-w-0 flex-1 flex-col">
+      <div className="border-b border-brand-100/70 bg-gradient-to-r from-brand-50/80 via-white to-accent-50/50 px-4 py-3 dark:border-white/10 dark:from-brand-500/15 dark:via-navy-800/40 dark:to-accent-500/10 sm:px-5">
         <div className="flex items-center gap-3">
-          <Avatar nome={conversa.clientes?.nome ?? "?"} fotoUrl={conversa.clientes?.foto_url} size={38} comAnel />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{conversa.clientes?.nome ?? "Cliente"}</p>
-            <p className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-              {conversa.clientes?.origem_chat === "instagram" ? (
-                <Camera size={11} className="text-fuchsia-500 dark:text-fuchsia-400" />
-              ) : (
-                <MessageSquare size={11} className="text-emerald-500 dark:text-emerald-400" />
-              )}
-              {maskPhone(conversa.clientes?.telefone)}
-            </p>
-          </div>
+          {!expandido && (
+            <Link
+              href="/chat"
+              title="Voltar pra lista"
+              className="-ml-1 rounded-xl p-1.5 text-gray-400 transition hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-white/10 md:hidden"
+            >
+              <ArrowLeft size={18} />
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => setFichaAberta((v) => !v)}
+            disabled={!conversa.clientes}
+            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            title="Ver ficha do cliente"
+          >
+            <Avatar nome={conversa.clientes?.nome ?? "?"} fotoUrl={conversa.clientes?.foto_url} size={38} comAnel />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{conversa.clientes?.nome ?? "Cliente"}</p>
+              <p className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                {conversa.clientes?.origem_chat === "instagram" ? (
+                  <Camera size={11} className="text-fuchsia-500 dark:text-fuchsia-400" />
+                ) : (
+                  <MessageSquare size={11} className="text-emerald-500 dark:text-emerald-400" />
+                )}
+                {formatarTelefone(conversa.clientes?.telefone)}
+              </p>
+            </div>
+          </button>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             {numeroBloqueado && (
               <Badge variant="red" comBolinha className="hidden sm:inline-flex">
@@ -179,29 +246,48 @@ export function MessageThread({
               variant={conversa.status === "fechada" ? "gray" : conversa.status === "aguardando_humano" ? "yellow" : "blue"}
               comBolinha
               pulsando={conversa.status === "aguardando_humano"}
+              className="hidden sm:inline-flex"
             >
               {conversa.status === "aberta" ? "IA ativa" : conversa.status === "aguardando_humano" ? "Precisa de você" : "Fechada"}
             </Badge>
           </div>
         </div>
 
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <TagPills
-            tags={conversa.clientes?.cliente_tags ?? []}
-            onClick={conversa.clientes ? () => setGerenciandoTags(true) : undefined}
-            emptyLabel="+ adicionar tag"
-            className="min-w-0"
-          />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          {/* Classificador do atendimento */}
+          <div
+            role="radiogroup"
+            aria-label="Classificar conversa"
+            className="flex rounded-xl bg-white/80 p-0.5 ring-1 ring-inset ring-brand-100 dark:bg-white/5 dark:ring-white/10"
+          >
+            {CLASSIFICACOES.map((c) => {
+              const ativo = classificacaoAtual === c.valor;
+              const Icone = c.icone;
+              return (
+                <button
+                  key={c.valor}
+                  type="button"
+                  role="radio"
+                  aria-checked={ativo}
+                  onClick={() => classificar(c.valor)}
+                  disabled={!!classificando}
+                  title={c.label}
+                  aria-label={c.label}
+                  className={cn(
+                    "flex items-center gap-1 rounded-[10px] px-2.5 py-1.5 text-[11px] font-semibold transition disabled:cursor-wait",
+                    ativo ? c.ativo : "text-gray-500 hover:bg-brand-50 hover:text-brand-700 dark:text-gray-400 dark:hover:bg-white/10",
+                    classificando === c.valor && "animate-pulse"
+                  )}
+                >
+                  <Icone size={13} />
+                  <span className="hidden sm:inline">{c.valor === "aguardando_cliente" ? "Aguardando cliente" : c.label}</span>
+                  <span className="sm:hidden">{c.curto}</span>
+                </button>
+              );
+            })}
+          </div>
+
           <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setGerenciandoTags(true)}
-              disabled={!conversa.clientes}
-              title="Gerenciar tags deste cliente"
-              className="rounded-xl p-2 text-gray-400 transition hover:bg-brand-50 hover:text-brand-600 disabled:opacity-50 dark:hover:bg-white/10"
-            >
-              <TagIcon size={17} />
-            </button>
             <button
               type="button"
               onClick={alternarTrava}
@@ -230,20 +316,26 @@ export function MessageThread({
             >
               {numeroBloqueado ? <ShieldCheck size={17} /> : <Ban size={17} />}
             </button>
+            <button
+              type="button"
+              onClick={() => setFichaAberta((v) => !v)}
+              disabled={!conversa.clientes}
+              title={fichaAberta ? "Esconder ficha do cliente" : "Mostrar ficha do cliente"}
+              className={cn(botaoIcone, fichaAberta && "bg-brand-50 text-brand-600 dark:bg-white/10 dark:text-brand-200")}
+            >
+              {fichaAberta ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}
+            </button>
+            <button
+              type="button"
+              onClick={alternarExpandido}
+              title={expandido ? "Recolher conversa (Esc)" : "Expandir conversa (tela cheia)"}
+              className={cn(botaoIcone, expandido && "bg-brand-50 text-brand-600 dark:bg-white/10 dark:text-brand-200")}
+            >
+              {expandido ? <Minimize2 size={17} /> : <Maximize2 size={17} />}
+            </button>
           </div>
         </div>
       </div>
-
-      {conversa.clientes && (
-        <TagsManagerModal
-          open={gerenciandoTags}
-          onClose={() => setGerenciandoTags(false)}
-          clienteId={conversa.clientes.id}
-          clienteNome={conversa.clientes.nome}
-          tagsAtuais={conversa.clientes.cliente_tags}
-          tagsDisponiveis={tagsDisponiveis}
-        />
-      )}
 
       <div className="rolagem-fina flex-1 space-y-3 overflow-y-auto bg-gradient-to-b from-transparent via-brand-50/25 to-accent-50/25 px-5 py-4 dark:via-brand-500/[0.06] dark:to-accent-500/[0.05]">
         {mensagens.length === 0 && (
@@ -327,6 +419,27 @@ export function MessageThread({
           )}
         </form>
       </div>
+    </div>
+
+    {fichaAberta && conversa.clientes && (
+      <>
+        {/* Em tela menor a ficha fica por cima da conversa; um toque fora fecha. */}
+        <button
+          type="button"
+          aria-label="Fechar ficha"
+          onClick={() => setFichaAberta(false)}
+          className="absolute inset-0 z-10 bg-black/20 xl:hidden"
+        />
+        <div className="absolute inset-y-0 right-0 z-20 w-[19rem] max-w-[90%] border-l border-brand-100/70 shadow-xl dark:border-white/10 xl:static xl:z-auto xl:w-80 xl:max-w-none xl:shrink-0 xl:shadow-none">
+          <FichaCliente
+            cliente={conversa.clientes}
+            resumo={resumoPedidos}
+            tagsDisponiveis={tagsDisponiveis}
+            onFechar={() => setFichaAberta(false)}
+          />
+        </div>
+      </>
+    )}
     </div>
   );
 }

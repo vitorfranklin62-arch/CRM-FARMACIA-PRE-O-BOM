@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ChatShell } from "@/components/chat/ChatShell";
 import { MessageThread } from "@/components/chat/MessageThread";
 import { anexarUrlsAssinadas } from "@/lib/chat-midia";
+import type { ResumoPedidosCliente } from "@/components/chat/FichaCliente";
 import type { ConversaCompleta, MensagemComUsuario } from "@/types/relations";
 import type { Tag, TemplateMensagem } from "@/types/database";
 
@@ -18,6 +19,12 @@ export default async function ChatConversaPage({ params }: { params: Promise<{ i
   const { id } = await params;
   await requireUser();
   const supabase = await createClient();
+
+  // Abrir a conversa = ler as mensagens: zera o contador de não lidas antes de
+  // montar a lista, pra a bolinha verde já sumir nesta mesma renderização.
+  // (Mudar só nao_lidas não muda a ordem da lista — ver a migração
+  // 20261023_chat_classificacao_e_nao_lidas.sql.)
+  await supabase.from("conversas").update({ nao_lidas: 0 }).eq("id", id).gt("nao_lidas", 0);
 
   const conversasRes = await supabase
     .from("conversas")
@@ -38,6 +45,19 @@ export default async function ChatConversaPage({ params }: { params: Promise<{ i
   const tagsRes = await supabase.from("tags").select("*").order("nome");
 
   if (!conversaRes.data) notFound();
+
+  // Resumo de compras pra ficha do cliente (Pedidos / Já gastou / Último pedido).
+  const conversa = conversaRes.data as ConversaCompleta;
+  const { data: pedidos } = await supabase
+    .from("pedidos")
+    .select("total, criado_em")
+    .eq("cliente_id", conversa.cliente_id)
+    .order("criado_em", { ascending: false });
+  const resumoPedidos: ResumoPedidosCliente = {
+    quantidade: pedidos?.length ?? 0,
+    totalGasto: (pedidos ?? []).reduce((soma, p) => soma + Number(p.total ?? 0), 0),
+    ultimoPedidoEm: pedidos?.[0]?.criado_em ?? null,
+  };
 
   // Bucket de mídia do chat é privado — troca midia_path por um link
   // assinado temporário antes de mandar as mensagens pra tela.
@@ -61,10 +81,11 @@ export default async function ChatConversaPage({ params }: { params: Promise<{ i
       </div>
       <ChatShell conversas={(conversasRes.data as ConversaCompleta[]) ?? []} selectedId={id}>
         <MessageThread
-          conversa={conversaRes.data as ConversaCompleta}
+          conversa={conversa}
           initialMensagens={mensagensComMidia}
           templates={(templatesRes.data as TemplateMensagem[]) ?? []}
           tagsDisponiveis={(tagsRes.data as Tag[]) ?? []}
+          resumoPedidos={resumoPedidos}
         />
       </ChatShell>
     </div>

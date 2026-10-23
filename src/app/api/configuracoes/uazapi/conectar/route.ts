@@ -1,58 +1,53 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { requireDona } from "@/lib/auth";
+import { chamarUazapi, configUazapi, ERRO_SEM_CONFIG, interpretarEstado, respostaSegura } from "@/lib/uazapi";
+import { telefoneParaWhatsapp } from "@/lib/telefone";
+
+const corpoSchema = z.object({ telefone: z.string().trim().max(30).optional() }).optional();
 
 /**
- * POST /api/configuracoes/uazapi/conectar
- * Pede pra UAIZAP gerar um QR code novo pra conectar o número do WhatsApp
- * da farmácia. Só a dona pode chamar — chave da instância nunca sai do
- * servidor (fica em UAIZAP_API_KEY, variável de ambiente).
- *
- * A resposta é repassada quase crua: o formato exato do campo do QR code
- * pode variar por versão da UAIZAP, então o front tenta reconhecer os
- * formatos mais comuns e, se não reconhecer, mostra a resposta bruta pra
- * dar pra ajustar sem precisar decifrar um erro genérico.
+ * POST /api/configuracoes/uazapi/conectar   { telefone? }
+ * Começa a conexão do número da farmácia na uazapi:
+ *  - sem telefone → QR code pra ler com a câmera do celular;
+ *  - com telefone → código de pareamento pra digitar no celular (sem câmera).
+ * Se já houver uma conexão em andamento (409 da uazapi), devolve o status
+ * atual em vez de erro — o QR/código que já existe continua valendo.
+ * Só a dona pode chamar.
  */
-export async function POST() {
+export async function POST(request: Request) {
   await requireDona();
 
-  const baseUrl = process.env.UAIZAP_BASE_URL;
-  const apiKey = process.env.UAIZAP_API_KEY;
+  const config = configUazapi();
+  if (!config) return NextResponse.json({ error: ERRO_SEM_CONFIG, configurado: false }, { status: 400 });
 
-  if (!baseUrl || !apiKey) {
-    return NextResponse.json(
-      { error: "UAIZAP_BASE_URL e UAIZAP_API_KEY precisam estar configurados no servidor." },
-      { status: 400 }
-    );
-  }
+  const corpo = corpoSchema.safeParse(await request.json().catch(() => undefined));
+  if (!corpo.success) return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
 
-  try {
-    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/instance/connect`, {
-      method: "POST",
-      headers: { token: apiKey, Accept: "application/json", "Content-Type": "application/json" },
-      cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
-    });
-
-    const dados = await res.json().catch(() => null);
-
-    if (!res.ok) {
+  let phone: string | undefined;
+  if (corpo.data?.telefone) {
+    const telefone = telefoneParaWhatsapp(corpo.data.telefone);
+    if (!telefone) {
       return NextResponse.json(
-        { error: "A UAIZAP recusou o pedido de conexão.", detalhe: dados },
-        { status: 502 }
+        { error: "Número inválido. Use o número do WhatsApp da farmácia com DDD, ex.: (71) 99937-3863." },
+        { status: 400 }
       );
     }
-
-    return NextResponse.json({ dados });
-  } catch (erro) {
-    const timeout = erro instanceof Error && erro.name === "TimeoutError";
-    return NextResponse.json(
-      {
-        error: timeout
-          ? "A UAIZAP não respondeu a tempo (15s). Confira se UAIZAP_BASE_URL está correto e se o servidor está no ar."
-          : "Não foi possível falar com a UAIZAP.",
-        detalhe: erro instanceof Error ? erro.message : String(erro),
-      },
-      { status: 502 }
-    );
+    phone = telefone;
   }
+
+  const resposta = await chamarUazapi(config, "/instance/connect", { method: "POST", body: phone ? { phone } : {} });
+
+  if (!resposta.ok && resposta.status === 409) {
+    const status = await chamarUazapi(config, "/instance/status");
+    if (status.ok) {
+      return NextResponse.json({ estado: interpretarEstado(status.dados), dados: respostaSegura(status.dados), emAndamento: true });
+    }
+  }
+
+  if (!resposta.ok) {
+    return NextResponse.json({ error: resposta.erro, detalhe: respostaSegura(resposta.detalhe) }, { status: 502 });
+  }
+
+  return NextResponse.json({ estado: interpretarEstado(resposta.dados), dados: respostaSegura(resposta.dados) });
 }

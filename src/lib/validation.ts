@@ -73,6 +73,13 @@ export const mensagemCreateSchema = z.object({
   conteudo: z.string().trim().min(1).max(4000),
 });
 
+/** "Nova conversa" do Chat ao vivo: a equipe puxa assunto com um número, cadastrado ou não. */
+export const novaConversaSchema = z.object({
+  nome: z.string().trim().min(1, "Informe o nome do contato").max(200),
+  telefone: z.string().trim().min(8, "Número incompleto").max(30),
+  conteudo: z.string().trim().min(1, "Escreva a mensagem").max(4000),
+});
+
 export const mensagemWebhookSchema = z.object({
   cliente: z.object({
     id: z.string().uuid().nullable().optional(),
