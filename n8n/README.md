@@ -180,3 +180,73 @@ Se o disjuntor parar o disparo, a campanha vira **Pausada** no CRM, com o
 motivo, e o botão passa a ser **Retomar**. Retomar não reenvia pra quem já
 recebeu (índice único em `campanha_envios`). A tela de Campanhas mostra o
 relatório: enviadas, falhas, sem WhatsApp e inválidos.
+
+---
+
+# Follow-up de conversa sem resposta
+
+Quando a Vitória responde e o cliente some, o fluxo
+**"Farmácia Preço Bom - Follow-up sem resposta"** manda até duas mensagens:
+
+| Quando | O que a IA escreve |
+|---|---|
+| 15 min sem resposta | Toque leve retomando o assunto + uma pergunta simples |
+| 30 min sem resposta (15 min depois do 1º) | Encerramento gentil, sem pergunta: "é só chamar quando quiser" |
+
+O texto é gerado pela IA (gpt-5-mini) lendo as últimas 20 mensagens da
+conversa no CRM. O código-fonte do fluxo está em `followup-sem-resposta.sdk.js`
+(formato do Workflow SDK do N8N).
+
+## Como funciona
+
+```
+Receber Mensagem ──(IA terminou de responder)──→ grava farmacia_<tel>_followup no Redis
+                 ──(qualquer mensagem nova)─────→ apaga a chave
+Webhook Envia ────(atendente respondeu no CRM)──→ apaga a chave
+
+Follow-up (a cada minuto) → lê as chaves vencidas
+   → fora de 7:30–20:30?                        → descarta (não acumula pro dia seguinte)
+   → IA pausada (Redis), botão do CRM, conversa
+     aguardando_humano/fechada, cliente com SAIR
+     (aceita_campanhas = false)?                → descarta
+   → última mensagem da conversa não é da IA, ou
+     a IA não fez pergunta (despedida/confirmação)? → descarta
+   → IA escreve o texto (ou responde NAO_ENVIAR) → descarta se NAO_ENVIAR
+   → confere de novo que o cliente não respondeu
+   → envia por POST /send/text (uazapi) com delay (mostra "digitando..."),
+     track_source = crm_followup, track_id = <conversa>:<etapa>
+   → registra no chat do CRM e na memória da Vitória
+   → agenda a etapa 2 ou encerra
+```
+
+- Falha no envio **não** é reenviada (a doc da uazapi pede pra não fazer retry
+  automático): o follow-up daquela conversa é descartado.
+- O eco do envio não volta pro fluxo: o webhook da uazapi já está com
+  `excludeMessages: ["wasSentByApi"]`.
+- A chave no Redis expira sozinha em 2 h.
+- Pra auditar o que saiu: `POST /message/find` na uazapi com
+  `{ "track_source": "crm_followup" }`.
+
+## Onde mexer
+
+- **Horário e número de etapas:** nó *Separar vencidos* (`INICIO`, `FIM`, `ETAPAS`).
+- **Intervalo (15 min):** nó *follow-up: agendar* do "Receber Mensagem"
+  (`intervalo_min` e `plus({ minutes: 15 })`).
+- **Tom das mensagens:** prompt do nó *Escrever follow-up (IA)*.
+
+## Segurança (feito junto com o follow-up)
+
+- O token da instância uazapi saiu de dentro dos nós do "Receber Mensagem"
+  (estava escrito em 5 nós). Todos usam a credencial
+  **`UAZAPI Farmácia (token da instância)`**. O nó *buscar foto perfil* também
+  deixou de usar o token e a URL que chegavam no corpo da requisição.
+- O **Webhook Envia** exige `Authorization: Bearer <N8N_WEBHOOK_SECRET>` (o CRM
+  já mandava). Sem isso, responde 403.
+- O **Webhook Recebe** passou a ter um caminho secreto, e o webhook da uazapi
+  foi atualizado pra ele. A uazapi não manda cabeçalho de autenticação, então
+  o segredo é a própria URL — não cole ela em lugar público.
+- **Falta você:** o token antigo da uazapi ficou exposto dentro do fluxo e no
+  histórico de versões do N8N. Gere um novo (painel da uazapi ou
+  `POST /instance/token/rotate`) e atualize em dois lugares: a credencial
+  `UAZAPI Farmácia (token da instância)` no N8N e a variável `UAIZAP_API_KEY`
+  do CRM no Easypanel.
