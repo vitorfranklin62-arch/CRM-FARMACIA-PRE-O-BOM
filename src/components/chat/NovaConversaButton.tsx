@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { CHAVE_CONVERSAS } from "@/lib/chat/conversas";
 import { SquarePen, Send } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -37,6 +39,7 @@ export function NovaConversaButton() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const digitos = telefone.replace(/\D/g, "");
   const podeEnviar = nome.trim() && digitos.length >= 10 && conteudo.trim() && !enviando;
@@ -73,6 +76,8 @@ export function NovaConversaButton() {
       setTelefone("");
       setConteudo("");
       setAberto(false);
+      // O Realtime já traz a conversa nova pra lista; buscar de novo é só garantia.
+      queryClient.invalidateQueries({ queryKey: CHAVE_CONVERSAS });
       router.push(`/chat/${json.conversa_id}`);
       router.refresh();
     } catch {

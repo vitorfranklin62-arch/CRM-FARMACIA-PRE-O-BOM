@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Download, ExternalLink, FileText, ImageOff, Pause, Play, X } from "lucide-react";
@@ -46,12 +46,19 @@ function formatarTempo(segundos: number) {
 }
 
 /**
+ * Quem carregou as mensagens sabe buscar links novos (no Chat ao vivo, o
+ * useMensagens). Sem esse contexto, cai no router.refresh.
+ */
+export const RenovarLinksMidiaContext = createContext<(() => void) | null>(null);
+
+/**
  * Controla a falha de carregamento da mídia. Os links assinados expiram em 6h:
- * na primeira falha pedimos links novos UMA vez (router.refresh) e só depois
- * mostramos o erro. O ref impede que isso vire um loop.
+ * na primeira falha pedimos links novos UMA vez e só depois mostramos o erro.
+ * O ref impede que isso vire um loop.
  */
 function useFalhaDeMidia(url: string) {
   const router = useRouter();
+  const renovarLinks = useContext(RenovarLinksMidiaContext);
   const jaRenovou = useRef(false);
   const renovandoRef = useRef(false);
   const [renovando, setRenovando] = useState(false);
@@ -81,11 +88,12 @@ function useFalhaDeMidia(url: string) {
       jaRenovou.current = true;
       renovandoRef.current = true;
       setRenovando(true);
-      router.refresh();
+      if (renovarLinks) renovarLinks();
+      else router.refresh();
       return;
     }
     setErro(true);
-  }, [router]);
+  }, [router, renovarLinks]);
 
   return { erro, renovando, aoFalhar };
 }

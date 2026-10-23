@@ -1,38 +1,15 @@
-import { MessagesSquare } from "lucide-react";
-import { requireUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
-import { ChatShell } from "@/components/chat/ChatShell";
-import type { ConversaCompleta } from "@/types/relations";
+import { MessageCircle, Sparkles } from "lucide-react";
 
-export const dynamic = "force-dynamic";
-
-export default async function ChatPage() {
-  await requireUser();
-  const supabase = await createClient();
-
-  const { data } = await supabase
-    .from("conversas")
-    .select("*, clientes(*)")
-    .order("atualizado_em", { ascending: false })
-    .limit(100);
-
+export default function ChatPage() {
   return (
-    <div className="space-y-4">
-      {/* Faixa colorida de topo, no mesmo padrão dos quadros de Pedidos e Encomendas. */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand-600 via-brand-500 to-accent-500 px-5 py-6 text-white shadow-card-md">
-        <div className="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/10" />
-        <div className="pointer-events-none absolute -bottom-20 right-24 h-40 w-40 rounded-full bg-white/5" />
-        <div className="relative flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
-            <MessagesSquare size={22} />
-          </span>
-          <div>
-            <h1 className="text-xl font-bold">Chat ao vivo</h1>
-            <p className="text-sm text-white/80">Acompanhe e intervenha nas conversas com clientes.</p>
-          </div>
-        </div>
+    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradiente-marca text-white shadow-brilho-marca">
+        <MessageCircle size={30} />
       </div>
-      <ChatShell conversas={(data as ConversaCompleta[]) ?? []} />
+      <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Selecione uma conversa</p>
+      <p className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+        <Sparkles size={13} className="text-accent-400" />A Vitória continua respondendo enquanto isso
+      </p>
     </div>
   );
 }

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/ui/Logo";
+import { useChatRealtime } from "@/components/chat/ChatRealtimeProvider";
 import type { UsuarioRole } from "@/types/database";
 
 const STORAGE_KEY = "precobom-sidebar-recolhida";
@@ -48,6 +49,7 @@ export function Sidebar({ role }: { role: UsuarioRole }) {
   const pathname = usePathname();
   const items = NAV_ITEMS.filter((item) => !item.donaOnly || role === "dona");
   const [recolhida, setRecolhida] = useState(false);
+  const { conversasNaoLidas } = useChatRealtime();
 
   // Lê a preferência salva só depois de montar (evita divergir do HTML
   // renderizado no servidor, que sempre começa expandido).
@@ -102,8 +104,21 @@ export function Sidebar({ role }: { role: UsuarioRole }) {
                   : "border-transparent text-white/75 hover:bg-white/[0.08] hover:text-white"
               )}
             >
-              <Icon size={18} className={cn("shrink-0 transition-colors", active ? "text-accent-300" : "text-white/60 group-hover:text-white")} />
+              <span className="relative shrink-0">
+                <Icon size={18} className={cn("transition-colors", active ? "text-accent-300" : "text-white/60 group-hover:text-white")} />
+                {item.href === "/chat" && conversasNaoLidas > 0 && recolhida && (
+                  <span aria-hidden className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-navy-900" />
+                )}
+              </span>
               {!recolhida && item.label}
+              {item.href === "/chat" && conversasNaoLidas > 0 && !recolhida && (
+                <span
+                  className="ml-auto rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold leading-5 text-white"
+                  aria-label={`${conversasNaoLidas} conversas não lidas`}
+                >
+                  {conversasNaoLidas > 99 ? "99+" : conversasNaoLidas}
+                </span>
+              )}
             </Link>
           );
         })}
