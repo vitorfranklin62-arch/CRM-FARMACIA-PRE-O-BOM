@@ -4,6 +4,8 @@ export type PedidoStatus = "novo" | "separando" | "pronto" | "entregue";
 export type EncomendaStatus = "pendente" | "chegou" | "entregue" | "cancelada";
 export type PagamentoStatus = "pendente" | "confirmado";
 export type ConversaStatus = "aberta" | "aguardando_humano" | "fechada";
+/** Classificação do atendimento escolhida pela equipe — não controla a IA (isso é ConversaStatus). */
+export type ConversaClassificacao = "aberta" | "aguardando_cliente" | "resolvida";
 export type Remetente = "ia" | "cliente" | "funcionaria";
 export type TemplateCategoria = "confirmacao" | "promocao" | "duvida" | "outro";
 export type ClientesAlvo = "todos" | "por_filtro";
@@ -128,6 +130,9 @@ export type Conversa = {
   cliente_id: string;
   pedido_id: string | null;
   status: ConversaStatus;
+  classificacao: ConversaClassificacao;
+  /** Mensagens do cliente ainda não abertas no painel (mantido por trigger no banco). */
+  nao_lidas: number;
   criado_em: string;
   atualizado_em: string;
 }
