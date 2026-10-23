@@ -1,0 +1,88 @@
+{
+  "name": "Farmácia Preço Bom - Tick das campanhas (uazapi)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "0cefcca7-a9b1-4bea-a5f7-6587b5a50dbd",
+      "name": "A cada 2 min"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://conectfly-crm-farmacia.lnuwza.easypanel.host/api/campanhas/processar",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 120000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        0
+      ],
+      "id": "9d627743-022e-4566-89b2-afbdbc821569",
+      "name": "Processar campanhas no CRM",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CRM_FARMACIA",
+          "name": "CRM Farmácia (N8N_WEBHOOK_SECRET)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "A cada 2 min": {
+      "main": [
+        [
+          {
+            "node": "Processar campanhas no CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 300
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

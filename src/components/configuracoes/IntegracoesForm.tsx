@@ -67,7 +67,7 @@ export function IntegracoesForm({
           </p>
         </div>
         <div>
-          <Label htmlFor="integracao_n8n_campanha_webhook_url">Webhook do N8N para disparar campanhas</Label>
+          <Label htmlFor="integracao_n8n_campanha_webhook_url">Webhook do N8N para disparar campanhas (desativado)</Label>
           <Input
             id="integracao_n8n_campanha_webhook_url"
             name="integracao_n8n_campanha_webhook_url"
@@ -75,8 +75,8 @@ export function IntegracoesForm({
             placeholder="https://seu-n8n.exemplo.com/webhook/disparar-campanha"
           />
           <p className="mt-1 text-xs text-gray-400">
-            Usado pelo botão &quot;Disparar agora&quot; em Campanhas. Campanhas agendadas também são pegas
-            automaticamente pelo N8N no horário marcado.
+            Não é mais usado: as campanhas agora saem pela fila de campanhas da própria uazapi, controlada pelo
+            CRM. O N8N só precisa do fluxo &quot;tick-campanhas&quot;, que chama o CRM a cada 2 minutos.
           </p>
         </div>
         <div>

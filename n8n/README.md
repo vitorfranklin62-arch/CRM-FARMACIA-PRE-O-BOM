@@ -1,7 +1,77 @@
-# Disparo de campanha com proteção anti-ban
+# Disparo de campanhas — versão nova (fila nativa da uazapi)
 
-`disparar-campanha-antiban.json` substitui o fluxo antigo de disparo. Importe
-no N8N (Workflows → Import from File).
+Desde outubro/2026 as campanhas **não saem mais pelo N8N mensagem a mensagem**.
+O CRM monta lotes de 20 pessoas e entrega cada lote à fila de campanhas da
+própria uazapi (`POST /sender/advanced`), que cuida do intervalo entre as
+mensagens. O N8N só "dá a batida" a cada 2 minutos. Código:
+`src/lib/campanhas/disparo.ts` (fluxo) e `src/lib/campanhas/regras.ts`
+(painel de controle: ritmo, tetos, janela, rodapé).
+
+## Passo a passo da troca (nesta ordem)
+
+1. **Desative o fluxo antigo** "Disparar Campanha (anti-ban)" no N8N.
+   ⚠️ Se os dois ficarem ativos, o antigo continua mandando por `/send/text`
+   pra quem ainda não está em lote — a mesma campanha sairia por dois caminhos.
+2. **Rode a migração** `supabase/migrations/20261023_campanhas_disparo_uazapi.sql`
+   no SQL editor do Supabase. Ela só adiciona (tabela `campanha_lotes`, colunas
+   em `campanha_envios`, status `agendado`/`cancelado`).
+3. **Publique o CRM** com este código.
+4. **Importe `tick-campanhas.json`** no N8N, selecione a credencial
+   `CRM Farmácia (N8N_WEBHOOK_SECRET)` no nó HTTP, confira a URL do CRM e ative.
+5. No CRM, em **Campanhas**, clique em **Ativar** na faixa "Acompanhamento de
+   entrega". Isso cria um webhook **adicional** na uazapi (eventos `sender` e
+   `messages_update`) apontando pra `/api/webhooks/uazapi` — o webhook que já
+   leva as mensagens pro N8N não é alterado. Se o CRM estiver atrás de proxy e
+   o endereço detectado sair errado, defina `CRM_URL_PUBLICA` no servidor.
+6. Estreie com uma campanha de 3–5 contatos seus (ver "Como estrear" abaixo).
+
+## Como funciona agora
+
+```
+N8N a cada 2 min ──┐
+Botão Disparar ────┼─→ POST /api/campanhas/processar (rodada)
+uazapi "lote done" ┘        │
+                            ├─ 1. sincroniza lotes: /sender/listfolders + /sender/listmessages
+                            │     → campanha_envios: enviado / falhou / message_id
+                            ├─ 2. travas: disjuntor (5 falhas seguidas → stop),
+                            │     campanha pausada → stop, fora do horário → stop
+                            └─ 3. sem lote rodando? retoma o pausado ou cria o próximo:
+                                  WhatsApp conectado? → limite do WhatsApp (/instance/wa_messages_limits)
+                                  → cota do dia → público (filtrar_clientes_campanha)
+                                  → /chat/check → reserva no banco → /sender/advanced
+
+uazapi messages_update ─→ /api/webhooks/uazapi → entregue_em / lido_em
+```
+
+| # | Proteção | Onde |
+|---|---|---|
+| 1 | Intervalo sorteado de 25–75s entre mensagens (feito pela uazapi) | `delayMin`/`delayMax` do lote |
+| 2 | Parada longa de 4–9 min entre lotes de 20 | `scheduled_for` do lote seguinte |
+| 3 | Janela 8h–20h, seg a sáb; lote dimensionado pra caber nela | `regras.ts` |
+| 4 | WhatsApp precisa estar conectado | `/instance/status` |
+| 5 | Pausa se o WhatsApp sinalizar restrição de novas conversas | `/instance/wa_messages_limits` |
+| 6 | Teto de 250/dia (todas as campanhas) | `campanha_envios` do dia |
+| 7 | Sem WhatsApp, telefone inválido ou estrangeiro: não envia | `/chat/check` + `regras.ts` |
+| 8 | Ninguém recebe duas vezes (reserva com índice único antes de enviar) | `campanha_envios` |
+| 9 | Um lote ativo por vez na instância (índice único no banco) | `campanha_lotes` |
+| 10 | Disjuntor: 5 falhas seguidas pausam a campanha | rodada |
+| 11 | Rodapé "responda SAIR" + filtro de opt-out | `regras.ts` + `aceita_campanhas` |
+
+**Pausar / Retomar** na tela de Campanhas usam `POST /sender/edit` (`stop` /
+`continue`): o lote para na uazapi e continua de onde parou.
+
+A uazapi também pausa a fila sozinha enquanto alguém da farmácia manda
+mensagem pelo chat (`paused_for_direct_message`), então o atendimento ao vivo
+não fica atrás da campanha.
+
+---
+
+# (Legado) Disparo de campanha pelo N8N, mensagem a mensagem
+
+> Tudo daqui pra baixo descreve o fluxo antigo `disparar-campanha-antiban.json`,
+> mantido só como referência. **Ele deve ficar desativado.** As seções
+> "Variáveis na mensagem", "Como estrear", "Filtro de público" e "Descadastro"
+> continuam valendo pro disparo novo.
 
 ## ANTES DE QUALQUER COISA: trocar os segredos vazados
 
@@ -135,9 +205,9 @@ O rodapé de descadastro é acrescentado sozinho, uma vez só.
 ## Como estrear (não ative direto na lista inteira)
 
 1. Rode a migração.
-2. `limitePorExecucao: 5` e `limiteDia: 20` no começo.
+2. No disparo novo: `loteTamanho: 5` e `limiteDia: 20` em `src/lib/campanhas/regras.ts` no começo.
 3. Crie uma campanha de teste com 3–5 contatos seus. Dispare pelo botão do
-   CRM e acompanhe a execução no N8N.
+   CRM e acompanhe na própria tela de Campanhas (lote, enviadas, entregues, lidas).
 4. Confira em `campanha_envios` se gravou certo.
 5. Suba os tetos aos poucos ao longo de uns dias — número novo ou parado
    há tempo aguenta bem menos que número movimentado. Se aparecer bloqueio

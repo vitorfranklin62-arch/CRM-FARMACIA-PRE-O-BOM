@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { requireDona } from "@/lib/auth";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { logAudit } from "@/lib/audit";
+import { processarCampanhas } from "@/lib/campanhas/disparo";
 
 /**
  * POST /api/campanhas/:id/disparar
  * Botão "Disparar agora" em Campanhas. Marca a campanha como agendada pra
  * agora (também serve pra RETOMAR uma campanha pausada — quem já recebeu não
- * recebe de novo, o N8N pula quem está em campanha_envios) e avisa o N8N, que busca os clientes e envia via UAIZAP/WhatsApp.
+ * recebe de novo) e roda uma rodada do disparo na hora, que entrega o
+ * primeiro lote pra fila de campanhas da uazapi (ou retoma o lote pausado).
  */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const usuario = await requireDona();
@@ -40,27 +42,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   await logAudit(supabase, "campanha_disparada", "campanhas", id, undefined, usuario.id);
 
-  const service = createServiceClient();
-  const { data: config } = await service
-    .from("configuracoes")
-    .select("valor")
-    .eq("chave", "integracao_n8n_campanha_webhook_url")
-    .maybeSingle();
-
-  const webhookUrl = config?.valor;
-  const secret = process.env.N8N_WEBHOOK_SECRET;
-
-  if (webhookUrl && secret) {
-    try {
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${secret}` },
-        body: JSON.stringify({ campanha_id: id }),
-      });
-    } catch {
-      // Best-effort — se o N8N não responder agora, o schedule trigger dele pega a campanha depois
-    }
-  }
-
-  return NextResponse.json({ ok: true });
+  // Fora da janela de horário ou com outro lote rodando, a rodada só registra
+  // o motivo e a campanha sai na próxima batida do agendador.
+  const rodada = await processarCampanhas();
+  return NextResponse.json({ ok: true, acoes: rodada.acoes });
 }
