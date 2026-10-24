@@ -82,7 +82,7 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
       .then(({ data }) => setTags((data as Pick<Tag, "id" | "nome">[] | null) ?? []));
   }, [open, clientesAlvo, clientes.length]);
 
-  // Prévia "quantos vão receber". Usa a MESMA função do banco que o N8N usa
+  // Prévia "quantos vão receber". Usa a MESMA função do banco que é usada
   // no disparo, então o número aqui é o que será enviado de verdade.
   useEffect(() => {
     if (!open) return;

@@ -5,7 +5,8 @@ import { campanhaStatusWebhookSchema } from "@/lib/validation";
 
 /**
  * POST /api/campanhas/:id/status
- * Chamado pelo N8N para confirmar que uma campanha foi enviada (ou atualizar seu status).
+ * Chamado pelo fluxo antigo do N8N para confirmar que uma campanha foi enviada (ou atualizar seu
+ * status). O disparo novo (src/lib/campanhas/disparo.ts) não usa esta rota; ela fica por compatibilidade.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const unauthorized = authorizeWebhook(request);

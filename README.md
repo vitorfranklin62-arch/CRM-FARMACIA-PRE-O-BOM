@@ -79,7 +79,14 @@ Todas as rotas abaixo exigem o header `Authorization: Bearer <N8N_WEBHOOK_SECRET
 - `POST /api/webhooks/cliente` — cria ou atualiza um cliente a partir de uma nova interação
 - `POST /api/webhooks/mensagem` — registra no Chat ao vivo cada mensagem trocada no WhatsApp/Instagram (do cliente ou da IA), criando cliente/conversa se necessário
 - `GET /api/templates` — lista os templates de mensagem cadastrados
-- `POST /api/campanhas/:id/status` — confirma o envio (ou outro status) de uma campanha
+- `POST /api/campanhas/:id/status` — confirma o envio (ou outro status) de uma campanha (só o fluxo antigo de disparo usa)
+- `POST /api/campanhas/processar` — rodada do disparo de campanhas; o fluxo `n8n/tick-campanhas.json` chama a cada 2 min
+
+### Campanhas (CRM → uazapi)
+
+As campanhas saem pela fila nativa de "Mensagem em massa" da uazapi: o CRM monta lotes pequenos, entrega com `POST /sender/advanced` e acompanha cada mensagem (enviada, falhou, entregue, lida). Detalhes, proteções anti-ban e passo a passo da implantação em `n8n/README.md`.
+
+- `POST /api/webhooks/uazapi` — recebe **direto da uazapi** os eventos `sender` (lote começou/terminou) e `messages_update` (recibos). Não usa o Bearer do N8N: a origem é provada pelo `token` da instância que vem no corpo, conferido contra `UAIZAP_API_KEY`. É registrado pelo botão "Ativar" na tela de Campanhas, como um webhook adicional (o webhook que leva as mensagens pro N8N não muda).
 
 ### Chat ao vivo (CRM → N8N)
 
@@ -260,7 +267,7 @@ Aplicados a toda resposta via middleware (`src/lib/supabase/middleware.ts`, fun�
 
 ### Webhooks (N8N → CRM)
 
-- Toda rota `/api/webhooks/*` (e `/api/campanhas/:id/status`) exige `Authorization: Bearer <N8N_WEBHOOK_SECRET>` — sem o token exato, a rota responde 401 antes de tocar no banco (`src/lib/webhook-auth.ts`).
+- Toda rota `/api/webhooks/*` (exceto `/api/webhooks/uazapi`, que confere o token da instância) e `/api/campanhas/:id/status` e `/api/campanhas/processar` exigem `Authorization: Bearer <N8N_WEBHOOK_SECRET>` — sem o token exato, a rota responde 401 antes de tocar no banco (`src/lib/webhook-auth.ts`).
 - Rate limiting por IP + rota (padrão 60 req/min, 240 req/min nas rotas de chat) — evita abuso ou um workflow com bug em loop infinito de chamadas.
 - Todo payload é validado com Zod (`src/lib/validation.ts`) antes de tocar no banco — nada de campo inesperado ou tipo errado vira SQL/lógica de negócio.
 - Consultas ao banco usam o client do Supabase (`postgrest-js`), que sempre parametriza os valores — não há concatenação de SQL em lugar nenhum do código, então injeção de SQL não é uma superfície de ataque válida aqui.

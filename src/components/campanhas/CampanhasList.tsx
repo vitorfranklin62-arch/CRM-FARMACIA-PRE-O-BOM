@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Megaphone, Send } from "lucide-react";
+import { Plus, Megaphone, Send, Pause } from "lucide-react";
 import { Table, type Column } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { CampanhaForm } from "./CampanhaForm";
 import { formatDateTime } from "@/lib/utils";
-import type { Campanha, FiltroCampanha } from "@/types/database";
+import type { Campanha, CampanhaLote, FiltroCampanha } from "@/types/database";
 
 const STATUS_VARIANT = { rascunho: "gray", agendada: "yellow", enviada: "green", pausada: "red" } as const;
 const STATUS_LABEL = { rascunho: "Rascunho", agendada: "Em andamento", enviada: "Enviada", pausada: "Pausada" } as const;
@@ -27,16 +27,34 @@ function descreverPublico(c: Campanha): string {
   return partes.length > 0 ? partes.join(" · ") : "Filtro";
 }
 
-export type ResumoEnvio = { enviado: number; falhou: number; sem_whatsapp: number; invalido: number };
+export type ResumoEnvio = {
+  agendado: number;
+  enviado: number;
+  entregue: number;
+  lido: number;
+  falhou: number;
+  sem_whatsapp: number;
+  invalido: number;
+};
+
+/** Situação do lote em aberto (o que está na fila da uazapi agora), em uma linha. */
+function descreverLote(l: CampanhaLote): string {
+  if (l.status === "criando") return `Entregando lote de ${l.total} à uazapi...`;
+  if (l.status === "pausado") return l.pausado_pela_janela ? `Lote de ${l.total} parado até abrir o horário` : `Lote de ${l.total} pausado`;
+  if (l.status === "enviando") return `Enviando lote de ${l.total}`;
+  return `Lote de ${l.total} começa ${formatDateTime(l.agendado_para)}`;
+}
 
 export function CampanhasList({
   campanhas,
   userId,
   resumo = {},
+  loteAberto = {},
 }: {
   campanhas: Campanha[];
   userId: string;
   resumo?: Record<string, ResumoEnvio>;
+  loteAberto?: Record<string, CampanhaLote>;
 }) {
   const [open, setOpen] = useState(false);
   const [disparando, setDisparando] = useState<string | null>(null);
@@ -55,6 +73,20 @@ export function CampanhasList({
       alert("Não foi possível disparar a campanha.");
       return;
     }
+    router.refresh();
+  }
+
+  async function handlePausar(c: Campanha) {
+    if (!confirm(`Pausar "${c.titulo}"? As mensagens que ainda estão na fila param; "Retomar" continua de onde parou.`)) return;
+    setDisparando(c.id);
+    const res = await fetch(`/api/campanhas/${c.id}/pausar`, { method: "POST" });
+    const json = await res.json().catch(() => ({}));
+    setDisparando(null);
+    if (!res.ok) {
+      alert(json.error ?? "Não foi possível pausar a campanha.");
+      return;
+    }
+    if (json.aviso) alert(json.aviso);
     router.refresh();
   }
 
@@ -88,6 +120,9 @@ export function CampanhasList({
           {c.status === "pausada" && c.motivo_pausa && (
             <p className="max-w-[16rem] text-xs text-red-500">{c.motivo_pausa}</p>
           )}
+          {loteAberto[c.id] && (
+            <p className="max-w-[16rem] text-xs text-gray-400 dark:text-gray-500">{descreverLote(loteAberto[c.id])}</p>
+          )}
         </div>
       ),
     },
@@ -99,6 +134,9 @@ export function CampanhasList({
         return (
           <p className="text-xs text-gray-500 dark:text-gray-400">
             <span className="font-medium text-green-600">{r.enviado} enviadas</span>
+            {r.entregue > 0 && <span> · {r.entregue} entregues</span>}
+            {r.lido > 0 && <span className="text-brand-600"> · {r.lido} lidas</span>}
+            {r.agendado > 0 && <span> · {r.agendado} na fila</span>}
             {r.falhou > 0 && <span className="text-red-500"> · {r.falhou} falhas</span>}
             {r.sem_whatsapp > 0 && <span> · {r.sem_whatsapp} sem WhatsApp</span>}
             {r.invalido > 0 && <span> · {r.invalido} inválidos</span>}
@@ -108,8 +146,21 @@ export function CampanhasList({
     },
     {
       header: "",
-      accessor: (c) =>
-        c.status !== "enviada" && (
+      accessor: (c) => {
+        if (c.status === "enviada") return null;
+        // Em andamento: dá pra pausar. Rascunho/pausada: dá pra disparar/retomar.
+        if (c.status === "agendada" && (loteAberto[c.id] || resumo[c.id])) {
+          return (
+            <button
+              onClick={() => handlePausar(c)}
+              disabled={disparando === c.id}
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              <Pause size={13} /> {disparando === c.id ? "Pausando..." : "Pausar"}
+            </button>
+          );
+        }
+        return (
           <button
             onClick={() => handleDisparar(c)}
             disabled={disparando === c.id}
@@ -117,7 +168,8 @@ export function CampanhasList({
           >
             <Send size={13} /> {disparando === c.id ? "Disparando..." : c.status === "pausada" ? "Retomar" : "Disparar agora"}
           </button>
-        ),
+        );
+      },
       className: "text-right",
     },
   ];

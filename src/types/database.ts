@@ -184,14 +184,42 @@ export type Campanha = {
   criado_por: string;
 }
 
+export type CampanhaEnvioStatus = "agendado" | "enviado" | "falhou" | "sem_whatsapp" | "invalido" | "cancelado";
+
 export type CampanhaEnvio = {
   id: string;
   campanha_id: string;
   cliente_id: string | null;
   telefone: string;
-  status: "enviado" | "falhou" | "sem_whatsapp" | "invalido";
+  status: CampanhaEnvioStatus;
   erro: string | null;
+  /** Com status "agendado", quando entrou no lote; depois, a hora real do envio. */
   enviado_em: string;
+  lote_id: string | null;
+  /** ID da mensagem no WhatsApp — é por ele que chegam os recibos de entrega/leitura. */
+  message_id: string | null;
+  entregue_em: string | null;
+  lido_em: string | null;
+}
+
+export type CampanhaLoteStatus = "criando" | "agendado" | "enviando" | "pausado" | "concluido" | "cancelado" | "falhou";
+
+/** Um lote = uma campanha criada na uazapi (POST /sender/advanced). */
+export type CampanhaLote = {
+  id: string;
+  campanha_id: string;
+  folder_id: string | null;
+  status: CampanhaLoteStatus;
+  total: number;
+  agendado_para: string | null;
+  /** true quando quem pausou foi a janela de horário — só esses voltam sozinhos. */
+  pausado_pela_janela: boolean;
+  /** Última retomada — o disjuntor só conta falhas depois dela. */
+  retomado_em: string | null;
+  erro: string | null;
+  criado_em: string;
+  atualizado_em: string;
+  concluido_em: string | null;
 }
 
 export type VendaLog = {
@@ -239,6 +267,7 @@ export type AuditAcao =
   | "produto_atualizado"
   | "produto_excluido"
   | "campanha_disparada"
+  | "campanha_pausada"
   | "estoque_importado"
   | "produtos_duplicados_removidos"
   | "produtos_fora_do_arquivo_removidos"
@@ -392,6 +421,7 @@ export interface Database {
         ]
       >;
       campanha_envios: TableDef<CampanhaEnvio>;
+      campanha_lotes: TableDef<CampanhaLote>;
       vendas_log: TableDef<VendaLog>;
       bairros_entrega: TableDef<BairroEntrega>;
       vitrine_itens: TableDef<VitrineItem>;
