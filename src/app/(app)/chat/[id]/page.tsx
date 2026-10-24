@@ -1,12 +1,9 @@
-import { MessagesSquare } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { ChatShell } from "@/components/chat/ChatShell";
 import { MessageThread } from "@/components/chat/MessageThread";
-import { anexarUrlsAssinadas } from "@/lib/chat-midia";
 import type { ResumoPedidosCliente } from "@/components/chat/FichaCliente";
-import type { ConversaCompleta, MensagemComUsuario } from "@/types/relations";
+import type { ConversaCompleta } from "@/types/relations";
 import type { Tag, TemplateMensagem } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -15,34 +12,22 @@ export const dynamic = "force-dynamic";
 // no cabeçalho do Chat sem precisar de outra consulta.
 const CLIENTE_COM_TAGS_SELECT = "*, cliente_tags(cliente_id, tag_id, criado_em, tags(*))";
 
+/**
+ * Painel da conversa. O servidor monta só o cabeçalho e a ficha do cliente;
+ * as mensagens são carregadas no navegador (useMensagens), em páginas, e
+ * chegam ao vivo pelo Realtime. A lista de conversas e o zerar das não lidas
+ * ficam no layout (ChatShell / ChatRealtimeProvider).
+ */
 export default async function ChatConversaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   await requireUser();
   const supabase = await createClient();
 
-  // Abrir a conversa = ler as mensagens: zera o contador de não lidas antes de
-  // montar a lista, pra a bolinha verde já sumir nesta mesma renderização.
-  // (Mudar só nao_lidas não muda a ordem da lista — ver a migração
-  // 20261023_chat_classificacao_e_nao_lidas.sql.)
-  await supabase.from("conversas").update({ nao_lidas: 0 }).eq("id", id).gt("nao_lidas", 0);
-
-  const conversasRes = await supabase
-    .from("conversas")
-    .select(`*, clientes(${CLIENTE_COM_TAGS_SELECT})`)
-    .order("atualizado_em", { ascending: false })
-    .limit(100);
-  const conversaRes = await supabase
-    .from("conversas")
-    .select(`*, clientes(${CLIENTE_COM_TAGS_SELECT})`)
-    .eq("id", id)
-    .maybeSingle();
-  const mensagensRes = await supabase
-    .from("mensagens")
-    .select("*, usuarios(*)")
-    .eq("conversa_id", id)
-    .order("criado_em", { ascending: true });
-  const templatesRes = await supabase.from("templates_mensagem").select("*").order("titulo");
-  const tagsRes = await supabase.from("tags").select("*").order("nome");
+  const [conversaRes, templatesRes, tagsRes] = await Promise.all([
+    supabase.from("conversas").select(`*, clientes(${CLIENTE_COM_TAGS_SELECT})`).eq("id", id).maybeSingle(),
+    supabase.from("templates_mensagem").select("*").order("titulo"),
+    supabase.from("tags").select("*").order("nome"),
+  ]);
 
   if (!conversaRes.data) notFound();
 
@@ -59,35 +44,13 @@ export default async function ChatConversaPage({ params }: { params: Promise<{ i
     ultimoPedidoEm: pedidos?.[0]?.criado_em ?? null,
   };
 
-  // Bucket de mídia do chat é privado — troca midia_path por um link
-  // assinado temporário antes de mandar as mensagens pra tela.
-  const mensagensComMidia = await anexarUrlsAssinadas((mensagensRes.data as MensagemComUsuario[]) ?? []);
-
   return (
-    <div className="space-y-4">
-      {/* Faixa colorida de topo, no mesmo padrão dos quadros de Pedidos e Encomendas. */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand-600 via-brand-500 to-accent-500 px-5 py-6 text-white shadow-card-md">
-        <div className="pointer-events-none absolute -right-10 -top-16 h-48 w-48 rounded-full bg-white/10" />
-        <div className="pointer-events-none absolute -bottom-20 right-24 h-40 w-40 rounded-full bg-white/5" />
-        <div className="relative flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
-            <MessagesSquare size={22} />
-          </span>
-          <div>
-            <h1 className="text-xl font-bold">Chat ao vivo</h1>
-            <p className="text-sm text-white/80">Acompanhe e intervenha nas conversas com clientes.</p>
-          </div>
-        </div>
-      </div>
-      <ChatShell conversas={(conversasRes.data as ConversaCompleta[]) ?? []} selectedId={id}>
-        <MessageThread
-          conversa={conversa}
-          initialMensagens={mensagensComMidia}
-          templates={(templatesRes.data as TemplateMensagem[]) ?? []}
-          tagsDisponiveis={(tagsRes.data as Tag[]) ?? []}
-          resumoPedidos={resumoPedidos}
-        />
-      </ChatShell>
-    </div>
+    <MessageThread
+      key={conversa.id}
+      conversa={conversa}
+      templates={(templatesRes.data as TemplateMensagem[]) ?? []}
+      tagsDisponiveis={(tagsRes.data as Tag[]) ?? []}
+      resumoPedidos={resumoPedidos}
+    />
   );
 }

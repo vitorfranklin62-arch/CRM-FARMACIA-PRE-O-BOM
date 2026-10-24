@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useChatRealtime } from "@/components/chat/ChatRealtimeProvider";
 import type { UsuarioRole } from "@/types/database";
 
 interface NavItem {
@@ -49,6 +50,7 @@ const FIXOS = ["/dashboard", "/pedidos", "/chat", "/clientes"];
 export function MobileNav({ role }: { role: UsuarioRole }) {
   const pathname = usePathname();
   const [maisAberto, setMaisAberto] = useState(false);
+  const { conversasNaoLidas } = useChatRealtime();
 
   const items = TODOS_ITEMS.filter((item) => !item.donaOnly || role === "dona");
   const barraItems = items.filter((item) => FIXOS.includes(item.href));
@@ -114,11 +116,19 @@ export function MobileNav({ role }: { role: UsuarioRole }) {
             >
               <span
                 className={cn(
-                  "flex h-7 w-12 items-center justify-center rounded-full transition",
+                  "relative flex h-7 w-12 items-center justify-center rounded-full transition",
                   active && "bg-gradiente-acento text-white shadow-brilho-acento"
                 )}
               >
                 <Icon size={20} />
+                {item.href === "/chat" && conversasNaoLidas > 0 && (
+                  <span
+                    className="absolute -top-1 right-0.5 rounded-full bg-emerald-500 px-1 text-[9px] font-bold leading-4 text-white"
+                    aria-label={`${conversasNaoLidas} conversas não lidas`}
+                  >
+                    {conversasNaoLidas > 99 ? "99+" : conversasNaoLidas}
+                  </span>
+                )}
               </span>
               {item.label}
             </Link>

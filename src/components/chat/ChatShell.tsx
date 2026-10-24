@@ -1,14 +1,12 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { MessageCircle, Sparkles } from "lucide-react";
+import { useParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
 import { ConversationList } from "./ConversationList";
 import { MesclarConversasButton } from "./MesclarConversasButton";
 import { NovaConversaButton } from "./NovaConversaButton";
-import type { ConversaCompleta } from "@/types/relations";
+import { useChatRealtime, useConversas } from "./ChatRealtimeProvider";
 
 /**
  * Modo "expandido" da conversa: o chat ocupa a tela toda (some a lista de
@@ -26,21 +24,20 @@ export function useChatExpandido() {
 
 const CHAVE_EXPANDIDO = "chat:expandido";
 
-export function ChatShell({
-  conversas,
-  selectedId,
-  children,
-}: {
-  conversas: ConversaCompleta[];
-  selectedId?: string;
-  children?: React.ReactNode;
-}) {
-  const router = useRouter();
+/**
+ * Moldura do Chat ao vivo (fica no layout de /chat): lista de conversas à
+ * esquerda e a conversa aberta (children) à direita. A lista vem do cache
+ * mantido ao vivo pelo ChatRealtimeProvider.
+ */
+export function ChatShell({ children }: { children: React.ReactNode }) {
+  const params = useParams<{ id?: string }>();
+  const selectedId = params?.id;
   const [expandido, setExpandido] = useState(false);
+  const { data: conversas, isPending, isError, refetch } = useConversas();
+  const { conversasNaoLidas: naoLidas } = useChatRealtime();
 
   // Quantas conversas estão esperando alguém da farmácia responder.
-  const aguardando = conversas.filter((c) => c.status === "aguardando_humano").length;
-  const naoLidas = conversas.filter((c) => (c.nao_lidas ?? 0) > 0).length;
+  const aguardando = (conversas ?? []).filter((c) => c.status === "aguardando_humano").length;
 
   // Lembra se estava expandido ao trocar de conversa (cada conversa é uma página).
   useEffect(() => {
@@ -72,19 +69,6 @@ export function ChatShell({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [expandido, alternar]);
-
-  // Lista ao vivo: conversa nova, mensagem não lida ou mudança de status/classificação
-  // feita por outra pessoa aparece sem precisar recarregar a página.
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel("conversas-lista")
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversas" }, () => router.refresh())
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [router]);
 
   const modoExpandido = expandido && !!selectedId;
 
@@ -124,21 +108,17 @@ export function ChatShell({
               <MesclarConversasButton />
             </div>
           </div>
-          <ConversationList conversas={conversas} selectedId={selectedId} />
+          <ConversationList
+            conversas={conversas}
+            carregando={isPending}
+            erro={isError}
+            onTentarDeNovo={() => refetch()}
+            selectedId={selectedId}
+          />
         </div>
 
         <div className={cn("min-w-0 flex-1 md:flex md:flex-col", selectedId ? "flex flex-col" : "hidden")}>
-          {children ?? (
-            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradiente-marca text-white shadow-brilho-marca">
-                <MessageCircle size={30} />
-              </div>
-              <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Selecione uma conversa</p>
-              <p className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
-                <Sparkles size={13} className="text-accent-400" />A Vitória continua respondendo enquanto isso
-              </p>
-            </div>
-          )}
+          {children}
         </div>
       </div>
     </ExpandidoContext.Provider>

@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { CHAVE_CONVERSAS } from "@/lib/chat/conversas";
 import { Merge } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
@@ -14,6 +16,7 @@ interface PreviewDuplicadas {
 export function MesclarConversasButton() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   async function handleClick() {
     setLoading(true);
@@ -52,6 +55,8 @@ export function MesclarConversasButton() {
         `Mesclagem concluída!\n\n${resultado.mescladas} conversa(s) duplicada(s) mesclada(s) e removida(s).` +
           (resultado.bloqueadas > 0 ? `\n⚠️ ${resultado.bloqueadas} não puderam ser mescladas.` : "")
       );
+      // A lista vem do cache (ver ChatRealtimeProvider): busca de novo sem as conversas removidas.
+      queryClient.invalidateQueries({ queryKey: CHAVE_CONVERSAS });
       router.refresh();
     } catch (err) {
       alert(`Erro de conexão: ${err instanceof Error ? err.message : String(err)}`);

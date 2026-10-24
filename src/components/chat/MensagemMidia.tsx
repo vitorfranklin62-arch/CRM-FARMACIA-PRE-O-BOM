@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Download, ExternalLink, FileText, ImageOff, Pause, Play, X } from "lucide-react";
@@ -46,12 +46,19 @@ function formatarTempo(segundos: number) {
 }
 
 /**
+ * Quem carregou as mensagens sabe buscar links novos (no Chat ao vivo, o
+ * useMensagens). Sem esse contexto, cai no router.refresh.
+ */
+export const RenovarLinksMidiaContext = createContext<(() => void) | null>(null);
+
+/**
  * Controla a falha de carregamento da mídia. Os links assinados expiram em 6h:
- * na primeira falha pedimos links novos UMA vez (router.refresh) e só depois
- * mostramos o erro. O ref impede que isso vire um loop.
+ * na primeira falha pedimos links novos UMA vez e só depois mostramos o erro.
+ * O ref impede que isso vire um loop.
  */
 function useFalhaDeMidia(url: string) {
   const router = useRouter();
+  const renovarLinks = useContext(RenovarLinksMidiaContext);
   const jaRenovou = useRef(false);
   const renovandoRef = useRef(false);
   const [renovando, setRenovando] = useState(false);
@@ -81,11 +88,12 @@ function useFalhaDeMidia(url: string) {
       jaRenovou.current = true;
       renovandoRef.current = true;
       setRenovando(true);
-      router.refresh();
+      if (renovarLinks) renovarLinks();
+      else router.refresh();
       return;
     }
     setErro(true);
-  }, [router]);
+  }, [router, renovarLinks]);
 
   return { erro, renovando, aoFalhar };
 }
@@ -153,17 +161,16 @@ function MidiaImagem({ msg, url }: { msg: MensagemComUsuario; url: string }) {
   const { erro, aoFalhar } = useFalhaDeMidia(url);
   const fechar = useCallback(() => setAmpliada(false), []);
 
-  // A página é renderizada no servidor: a imagem pode terminar de carregar
-  // antes da hidratação e aí o onLoad nunca dispara. Por isso conferimos o
-  // estado real do <img> aqui também.
+  // A foto pode já estar no cache do navegador e terminar de carregar antes
+  // deste efeito rodar (aí o onLoad não dispara de novo): confere o estado
+  // real do <img>. Só o caso "já carregou" — com loading="lazy", uma foto que
+  // ainda não apareceu na tela também conta como `complete` em alguns
+  // navegadores, e isso não é erro (o onError cuida das falhas de verdade).
   useEffect(() => {
     setCarregando(true);
     const img = imgRef.current;
-    if (img?.complete) {
-      if (img.naturalWidth > 0) setCarregando(false);
-      else aoFalhar();
-    }
-  }, [url, aoFalhar]);
+    if (img?.complete && img.naturalWidth > 0) setCarregando(false);
+  }, [url]);
 
   if (erro) {
     return (
@@ -197,6 +204,10 @@ function MidiaImagem({ msg, url }: { msg: MensagemComUsuario; url: string }) {
           alt={nome}
           onLoad={() => setCarregando(false)}
           onError={aoFalhar}
+          // Só baixa quando a bolha chega perto da área visível — rolar uma
+          // conversa cheia de receitas não baixa todas as fotos de uma vez.
+          loading="lazy"
+          decoding="async"
           className="max-h-64 w-auto max-w-full rounded-lg object-cover"
         />
       </button>

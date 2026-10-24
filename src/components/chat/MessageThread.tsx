@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -20,18 +20,30 @@ import {
   PanelRightOpen,
   PanelRightClose,
   ArrowLeft,
+  ArrowDown,
+  Check,
+  Clock,
+  AlertCircle,
+  RotateCcw,
+  X,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { cn, formatDateTime } from "@/lib/utils";
 import { formatarTelefone } from "@/lib/telefone";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { TemplatePicker } from "./TemplatePicker";
-import { MensagemMidia } from "./MensagemMidia";
+import { MensagemMidia, RenovarLinksMidiaContext } from "./MensagemMidia";
 import { GravadorAudio } from "./GravadorAudio";
 import { FichaCliente, type ResumoPedidosCliente } from "./FichaCliente";
 import { useChatExpandido } from "./ChatShell";
+import { useConversas } from "./ChatRealtimeProvider";
+import { useMensagens, type MensagemNaTela } from "./useMensagens";
+import { SkeletonMensagens } from "./Skeletons";
 import { CLASSIFICACOES } from "./classificacao";
+import { Spinner } from "@/components/ui/Spinner";
+import { CHAVE_CONVERSAS, type ConversaDaLista } from "@/lib/chat/conversas";
 import type { ConversaCompleta, MensagemComUsuario } from "@/types/relations";
 import type { ConversaClassificacao, Tag, TemplateMensagem } from "@/types/database";
 
@@ -66,31 +78,97 @@ function temMidiaVisivel(msg: MensagemComUsuario) {
   return !!msg.midia_url && (msg.tipo === "imagem" || msg.tipo === "audio");
 }
 
+// Distância do fim (px) em que ainda consideramos que a pessoa "está no fim" da conversa.
+const PERTO_DO_FIM_PX = 80;
+// Rolou até perto do topo: carrega as mensagens anteriores.
+const PERTO_DO_TOPO_PX = 120;
+
 export function MessageThread({
-  conversa,
-  initialMensagens,
+  conversa: conversaDoServidor,
   templates,
   tagsDisponiveis,
   resumoPedidos,
 }: {
   conversa: ConversaCompleta;
-  initialMensagens: MensagemComUsuario[];
   templates: TemplateMensagem[];
   tagsDisponiveis: Tag[];
   resumoPedidos: ResumoPedidosCliente;
 }) {
-  const [mensagens, setMensagens] = useState(initialMensagens);
   const [texto, setTexto] = useState("");
-  const [sending, setSending] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [travando, setTravando] = useState(false);
   const [bloqueando, setBloqueando] = useState(false);
   const [gravandoAudio, setGravandoAudio] = useState(false);
   const [fichaAberta, setFichaAberta] = useState(false);
   const [classificando, setClassificando] = useState<ConversaClassificacao | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { expandido, alternar: alternarExpandido } = useChatExpandido();
+  const {
+    mensagens,
+    carregando,
+    erro: erroMensagens,
+    tentarDeNovo,
+    temMaisAntigas,
+    carregandoAntigas,
+    carregarAntigas,
+    sincronizar,
+    renovarLinks,
+    enviarTexto,
+    reenviar,
+    descartar,
+  } = useMensagens(conversaDoServidor.id);
+
+  // ---- Rascunho por conversa ------------------------------------------------
+  // Trocar de cliente no meio da digitação não perde o texto. Fica no
+  // sessionStorage (some ao fechar a aba) pra não deixar texto de atendimento
+  // guardado no computador da farmácia.
+  const chaveRascunho = `chat:rascunho:${conversaDoServidor.id}`;
+  useEffect(() => {
+    try {
+      const salvo = sessionStorage.getItem(chaveRascunho);
+      if (salvo) setTexto(salvo);
+    } catch {
+      // Sem sessionStorage: começa vazio.
+    }
+  }, [chaveRascunho]);
+
+  function mudarTexto(valor: string) {
+    setTexto(valor);
+    try {
+      if (valor) sessionStorage.setItem(chaveRascunho, valor);
+      else sessionStorage.removeItem(chaveRascunho);
+    } catch {
+      // idem
+    }
+  }
+
+  // Status/classificação ao vivo: o cache da lista é atualizado pelo Realtime,
+  // então mudança feita por outra atendente aparece aqui na hora, sem
+  // recarregar. O resto (cliente, tags) vem do servidor.
+  const { data: conversasAoVivo } = useConversas();
+  const aoVivo = conversasAoVivo?.find((c) => c.id === conversaDoServidor.id);
+  const conversa = useMemo(
+    () =>
+      aoVivo
+        ? {
+            ...conversaDoServidor,
+            status: aoVivo.status,
+            classificacao: aoVivo.classificacao,
+            clientes: conversaDoServidor.clientes && aoVivo.clientes
+              ? { ...conversaDoServidor.clientes, ia_bloqueada: aoVivo.clientes.ia_bloqueada }
+              : conversaDoServidor.clientes,
+          }
+        : conversaDoServidor,
+    [conversaDoServidor, aoVivo]
+  );
+
+  /** Muda a conversa no cache na hora (a tela responde ao clique sem esperar o banco). */
+  function atualizarNoCache(mudar: (c: ConversaDaLista) => ConversaDaLista) {
+    queryClient.setQueryData<ConversaDaLista[]>(CHAVE_CONVERSAS, (lista) =>
+      lista?.map((c) => (c.id === conversaDoServidor.id ? mudar(c) : c))
+    );
+  }
 
   const travada = conversa.status === "aguardando_humano";
   const numeroBloqueado = conversa.clientes?.ia_bloqueada ?? false;
@@ -107,12 +185,13 @@ export function MessageThread({
   async function classificar(valor: ConversaClassificacao) {
     if (classificando || valor === classificacaoAtual) return;
     setClassificando(valor);
+    const anterior = classificacaoAtual;
+    atualizarNoCache((c) => ({ ...c, classificacao: valor }));
     const supabase = createClient();
     const { error } = await supabase.from("conversas").update({ classificacao: valor }).eq("id", conversa.id);
     if (error) {
+      atualizarNoCache((c) => ({ ...c, classificacao: anterior }));
       alert("Não foi possível mudar a classificação. A migração 20261023_chat_classificacao_e_nao_lidas.sql já foi rodada no Supabase?");
-    } else {
-      router.refresh();
     }
     setClassificando(null);
   }
@@ -124,14 +203,17 @@ export function MessageThread({
   async function alternarTrava() {
     if (travando) return;
     setTravando(true);
+    const statusAnterior = conversa.status;
     const novoStatus = travada ? "aberta" : "aguardando_humano";
+    atualizarNoCache((c) => ({ ...c, status: novoStatus }));
     const supabase = createClient();
     const { error } = await supabase
       .from("conversas")
       .update({ status: novoStatus, atualizado_em: new Date().toISOString() })
       .eq("id", conversa.id);
-    if (!error) {
-      router.refresh();
+    if (error) {
+      atualizarNoCache((c) => ({ ...c, status: statusAnterior }));
+      alert("Não foi possível travar/destravar a IA nesta conversa.");
     }
     setTravando(false);
   }
@@ -154,49 +236,71 @@ export function MessageThread({
       })
       .eq("id", conversa.clientes.id);
     if (!error) {
+      // `clientes` não está no Realtime: atualiza a lista na hora e o cabeçalho pelo servidor.
+      atualizarNoCache((c) => (c.clientes ? { ...c, clientes: { ...c.clientes, ia_bloqueada: !numeroBloqueado } } : c));
       router.refresh();
     }
     setBloqueando(false);
   }
 
-  useEffect(() => setMensagens(initialMensagens), [initialMensagens]);
+  // ---- Rolagem ----------------------------------------------------------
+  // Mensagem nova só rola até o fim se a pessoa já estava no fim (ou se foi
+  // ela que enviou); senão aparece o botão "Novas mensagens". Ao carregar as
+  // anteriores (rolando pra cima), a posição da tela é mantida.
+  const listaRef = useRef<HTMLDivElement>(null);
+  const pertoDoFimRef = useRef(true);
+  const distanciaDoFimAntesRef = useRef<number | null>(null);
+  const ultimaIdVistaRef = useRef<string | null>(null);
+  const [novasAbaixo, setNovasAbaixo] = useState(false);
+  const primeiraId = mensagens[0]?.id;
+  const ultimaId = mensagens.at(-1)?.id;
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [mensagens.length]);
+  function irParaOFim(suave: boolean) {
+    const el = listaRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: suave ? "smooth" : "auto" });
+    pertoDoFimRef.current = true;
+    setNovasAbaixo(false);
+  }
 
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`mensagens-${conversa.id}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "mensagens", filter: `conversa_id=eq.${conversa.id}` },
-        () => router.refresh()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [conversa.id, router]);
-
-  async function sendMessage(conteudo: string) {
-    const trimmed = conteudo.trim();
-    if (!trimmed || sending) return;
-
-    setSending(true);
-    const res = await fetch("/api/chat/enviar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversa_id: conversa.id, conteudo: trimmed }),
-    });
-
-    if (res.ok) {
-      setTexto("");
-      router.refresh();
+  function aoRolar() {
+    const el = listaRef.current;
+    if (!el) return;
+    const perto = el.scrollHeight - el.scrollTop - el.clientHeight < PERTO_DO_FIM_PX;
+    pertoDoFimRef.current = perto;
+    if (perto) setNovasAbaixo(false);
+    if (el.scrollTop < PERTO_DO_TOPO_PX && temMaisAntigas && !carregandoAntigas) {
+      distanciaDoFimAntesRef.current = el.scrollHeight - el.scrollTop;
+      carregarAntigas();
     }
-    setSending(false);
+  }
+
+  // Mensagens anteriores entraram em cima: devolve a tela pro mesmo ponto.
+  useLayoutEffect(() => {
+    const el = listaRef.current;
+    if (!el || distanciaDoFimAntesRef.current === null) return;
+    el.scrollTop = el.scrollHeight - distanciaDoFimAntesRef.current;
+    distanciaDoFimAntesRef.current = null;
+  }, [primeiraId]);
+
+  // Chegou mensagem no fim.
+  useLayoutEffect(() => {
+    if (!ultimaId) return;
+    const primeiraVez = ultimaIdVistaRef.current === null;
+    ultimaIdVistaRef.current = ultimaId;
+    if (primeiraVez || pertoDoFimRef.current) irParaOFim(!primeiraVez);
+    else setNovasAbaixo(true);
+  }, [ultimaId]);
+
+  // A mensagem aparece na hora (envio otimista); se falhar, a própria bolha
+  // mostra o erro com "Tentar novamente" — o campo já fica livre pra próxima.
+  function sendMessage(conteudo: string) {
+    const trimmed = conteudo.trim();
+    if (!trimmed) return;
+    // Quem enviou quer ver a própria mensagem: rola até o fim.
+    pertoDoFimRef.current = true;
+    mudarTexto("");
+    enviarTexto(trimmed);
   }
 
   const botaoIcone =
@@ -337,37 +441,55 @@ export function MessageThread({
         </div>
       </div>
 
-      <div className="rolagem-fina flex-1 space-y-3 overflow-y-auto bg-gradient-to-b from-transparent via-brand-50/25 to-accent-50/25 px-5 py-4 dark:via-brand-500/[0.06] dark:to-accent-500/[0.05]">
-        {mensagens.length === 0 && (
+      <RenovarLinksMidiaContext.Provider value={renovarLinks}>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={listaRef}
+        onScroll={aoRolar}
+        className="rolagem-fina flex-1 space-y-3 overflow-y-auto bg-gradient-to-b from-transparent via-brand-50/25 to-accent-50/25 px-5 py-4 dark:via-brand-500/[0.06] dark:to-accent-500/[0.05]"
+      >
+        {carregando && <SkeletonMensagens />}
+        {erroMensagens && !carregando && (
+          <div className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+            <p>Não foi possível carregar as mensagens.</p>
+            <button type="button" onClick={() => tentarDeNovo()} className="mt-2 font-semibold text-brand-600 hover:underline dark:text-brand-300">
+              Tentar de novo
+            </button>
+          </div>
+        )}
+        {!carregando && !erroMensagens && mensagens.length === 0 && (
           <p className="py-10 text-center text-sm text-gray-400 dark:text-gray-500">Sem mensagens ainda.</p>
         )}
-        {mensagens.map((msg) => {
-          const style = REMETENTE_STYLE[msg.remetente];
-          const Icon = style.icon;
-          return (
-            <div key={msg.id} className={cn("flex", style.align)}>
-              <div className={cn("max-w-[75%] rounded-2xl px-3.5 py-2.5 transition", style.bubble)}>
-                <div className="mb-1 flex items-center gap-1.5 text-[11px] opacity-70">
-                  <Icon size={11} />
-                  {msg.remetente === "funcionaria" && msg.usuarios ? msg.usuarios.nome : style.label}
-                </div>
-                <MensagemMidia msg={msg} />
-                {/* Em foto/áudio o texto é só a descrição/transcrição que a IA usa — não aparece pra equipe */}
-                {!temMidiaVisivel(msg) && <p className="whitespace-pre-wrap text-sm">{msg.conteudo}</p>}
-                <p className="mt-1 text-[10px] opacity-60">{formatDateTime(msg.criado_em)}</p>
-              </div>
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
+        {carregandoAntigas && (
+          <div className="flex justify-center py-1">
+            <Spinner size={18} />
+          </div>
+        )}
+        {!carregando && !temMaisAntigas && mensagens.length > 0 && (
+          <p className="text-center text-[11px] text-gray-400 dark:text-gray-500">Início da conversa</p>
+        )}
+        {mensagens.map((msg) => (
+          <BolhaMensagem key={msg.id} msg={msg} onReenviar={reenviar} onDescartar={descartar} />
+        ))}
       </div>
+      {novasAbaixo && (
+        <button
+          type="button"
+          onClick={() => irParaOFim(true)}
+          className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-white shadow-card-md transition hover:bg-emerald-600"
+        >
+          <ArrowDown size={14} /> Novas mensagens
+        </button>
+      )}
+      </div>
+      </RenovarLinksMidiaContext.Provider>
 
       <div className="relative border-t border-brand-100/70 bg-gradient-to-r from-brand-50/50 via-white to-accent-50/40 p-3 dark:border-white/10 dark:from-brand-500/10 dark:via-navy-800/40 dark:to-accent-500/10">
         {showTemplates && (
           <TemplatePicker
             templates={templates}
             onSelect={(conteudo) => {
-              setTexto(conteudo);
+              mudarTexto(conteudo);
               setShowTemplates(false);
             }}
             onClose={() => setShowTemplates(false)}
@@ -390,14 +512,17 @@ export function MessageThread({
           </button>
           <GravadorAudio
             conversaId={conversa.id}
-            onEnviado={() => router.refresh()}
+            onEnviado={() => {
+              pertoDoFimRef.current = true;
+              sincronizar();
+            }}
             onOcupadoChange={setGravandoAudio}
           />
           {!gravandoAudio && (
             <>
               <textarea
                 value={texto}
-                onChange={(e) => setTexto(e.target.value)}
+                onChange={(e) => mudarTexto(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -410,7 +535,7 @@ export function MessageThread({
               />
               <button
                 type="submit"
-                disabled={sending || !texto.trim()}
+                disabled={!texto.trim()}
                 className="rounded-xl bg-gradiente-acento p-2.5 text-white shadow-brilho-acento transition hover:brightness-110 disabled:bg-none disabled:bg-accent-200 disabled:shadow-none"
               >
                 <Send size={18} />
@@ -442,4 +567,81 @@ export function MessageThread({
     )}
     </div>
   );
+}
+
+/**
+ * Uma bolha de mensagem. Memoizada: digitar no campo de texto (ou chegar
+ * mensagem nova) não redesenha todas as bolhas da conversa.
+ */
+const BolhaMensagem = memo(function BolhaMensagem({
+  msg,
+  onReenviar,
+  onDescartar,
+}: {
+  msg: MensagemNaTela;
+  onReenviar: (id: string) => void;
+  onDescartar: (id: string) => void;
+}) {
+  const style = REMETENTE_STYLE[msg.remetente];
+  const Icon = style.icon;
+  const falhou = msg._envio === "erro";
+
+  return (
+    <div className={cn("flex", style.align)}>
+      <div className="max-w-[75%]">
+        <div
+          className={cn(
+            "rounded-2xl px-3.5 py-2.5 transition",
+            style.bubble,
+            msg._envio === "enviando" && "opacity-80",
+            falhou && "opacity-70 ring-2 ring-red-400"
+          )}
+        >
+          <div className="mb-1 flex items-center gap-1.5 text-[11px] opacity-70">
+            <Icon size={11} />
+            {msg.remetente === "funcionaria" && msg.usuarios ? msg.usuarios.nome : style.label}
+          </div>
+          <MensagemMidia msg={msg} />
+          {/* Em foto/áudio o texto é só a descrição/transcrição que a IA usa — não aparece pra equipe */}
+          {!temMidiaVisivel(msg) && <p className="whitespace-pre-wrap text-sm">{msg.conteudo}</p>}
+          <p className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
+            {formatDateTime(msg.criado_em)}
+            {msg.remetente === "funcionaria" && <StatusEnvio estado={msg._envio} />}
+          </p>
+        </div>
+        {falhou && (
+          <div className="mt-1 flex items-center justify-end gap-2 text-[11px] font-semibold">
+            <span className="mr-auto text-red-600 dark:text-red-400">Não foi enviada</span>
+            <button
+              type="button"
+              onClick={() => onReenviar(msg.id)}
+              className="flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-brand-600 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-white/10"
+            >
+              <RotateCcw size={12} /> Tentar novamente
+            </button>
+            <button
+              type="button"
+              onClick={() => onDescartar(msg.id)}
+              title="Descartar mensagem"
+              aria-label="Descartar mensagem"
+              className="rounded-lg p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/10"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+/**
+ * Estado da mensagem enviada pelo painel: relógio enquanto envia, ✓ quando
+ * foi salva e repassada pro WhatsApp, alerta se falhou. ("Entregue" e "lida"
+ * dependem de o N8N/uazapi devolver esse retorno — ainda não existe.)
+ */
+function StatusEnvio({ estado }: { estado: MensagemNaTela["_envio"] }) {
+  if (estado === "enviando") return <Clock size={11} aria-label="Enviando" />;
+  if (estado === "erro") return <AlertCircle size={11} aria-label="Erro no envio" />;
+  return <Check size={12} aria-label="Enviada" />;
 }
