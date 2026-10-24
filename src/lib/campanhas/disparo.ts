@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { chamarUazapi, configUazapi, interpretarEstado } from "@/lib/uazapi";
 import {
   CFG,
+  chaveDoTelefone,
   dentroDaJanela,
   inicioDoDiaSaoPaulo,
   montarTexto,
@@ -459,17 +460,37 @@ async function inicioDoProximoLote(supabase: Supabase): Promise<Date> {
 
 type Destinatario = { cliente_id: string; numero: string; texto: string };
 
-/** Confere na uazapi quem tem WhatsApp. Na dúvida (resposta que não deu pra ler), considera que tem. */
-async function semWhatsapp(config: ConfigUazapi, numeros: string[]): Promise<Set<string>> {
-  const fora = new Set<string>();
-  const resposta = await chamarUazapi(config, "/chat/check", { method: "POST", body: { numbers: numeros } });
-  if (!resposta.ok) return fora;
-  for (const item of lista(resposta.dados, "numbers", "result", "data")) {
-    const r = objeto(item);
-    const consulta = texto(r?.query)?.replace(/\D/g, "");
-    if (r && consulta && r.isInWhatsapp === false) fora.add(consulta);
+/**
+ * Confere na uazapi quem tem WhatsApp, testando o número com e sem o 9º
+ * dígito. Devolve, por número da fila: o número que o WhatsApp confirmou (o
+ * JID que ele devolveu — é por ele que o envio sai), `null` se a uazapi disse
+ * que nenhuma forma existe, ou o próprio número se não deu pra saber (na
+ * dúvida, manda: barrar todo mundo por uma API fora do ar seria pior).
+ */
+async function conferirWhatsapp(config: ConfigUazapi, numeros: string[]): Promise<Map<string, string | null>> {
+  const consultas = Array.from(new Set(numeros.flatMap((n) => variantesDoTelefone(n))));
+  const resposta = await chamarUazapi(config, "/chat/check", { method: "POST", body: { numbers: consultas } });
+
+  const respostas = new Map<string, { ok: boolean; jid: string | null }>();
+  if (resposta.ok) {
+    for (const item of lista(resposta.dados, "numbers", "result", "data")) {
+      const r = objeto(item);
+      const consulta = texto(r?.query)?.replace(/\D/g, "");
+      if (!r || !consulta) continue;
+      const naoTem = r.isInWhatsapp === false || r.isInWhatsapp === "false";
+      const jid = texto(r.jid)?.split("@")[0].replace(/\D/g, "") || null;
+      respostas.set(consulta, { ok: !naoTem, jid });
+    }
   }
-  return fora;
+
+  const resultado = new Map<string, string | null>();
+  for (const numero of numeros) {
+    const variantes = variantesDoTelefone(numero);
+    const confirmada = variantes.find((v) => respostas.get(v)?.ok);
+    if (confirmada) resultado.set(numero, respostas.get(confirmada)?.jid || confirmada);
+    else resultado.set(numero, variantes.some((v) => respostas.has(v)) ? null : numero);
+  }
+  return resultado;
 }
 
 async function criarLote(
@@ -509,8 +530,11 @@ async function criarLote(
     .select("telefone, status")
     .eq("campanha_id", campanha.id)
     .limit(10000);
-  // "cancelado" = estava num lote que não saiu: pode entrar de novo.
-  const jaTratados = new Set((registrados ?? []).filter((r) => r.status !== "cancelado").map((r) => r.telefone));
+  // "cancelado" = estava num lote que não saiu: pode entrar de novo. Compara
+  // pela chave DDD + 8 últimos dígitos (com ou sem o 9º dígito é a mesma pessoa).
+  const jaTratados = new Set(
+    (registrados ?? []).filter((r) => r.status !== "cancelado").map((r) => chaveDoTelefone(r.telefone))
+  );
 
   // Até 3 tentativas: se a conferência do /chat/check tirar todo mundo da
   // fila, monta outra com os próximos da lista em vez de esperar 5 minutos.
@@ -520,8 +544,10 @@ async function criarLote(
     for (const c of clientes) {
       if (fila.length >= vagas) break;
       const numero = telefoneDaCampanha(c.telefone);
-      if (!numero || vistos.has(numero) || jaTratados.has(numero)) continue;
-      vistos.add(numero);
+      if (!numero) continue;
+      const chave = chaveDoTelefone(numero);
+      if (vistos.has(chave) || jaTratados.has(chave)) continue;
+      vistos.add(chave);
       fila.push({ cliente_id: c.id, numero, texto: montarTexto(campanha.mensagem, c.nome) });
     }
 
@@ -534,9 +560,9 @@ async function criarLote(
       return "concluida";
     }
 
-    const fora = await semWhatsapp(config, fila.map((f) => f.numero));
-    if (fora.size > 0) {
-      const semZap = fila.filter((f) => fora.has(f.numero));
+    const conferidos = await conferirWhatsapp(config, fila.map((f) => f.numero));
+    const semZap = fila.filter((f) => conferidos.get(f.numero) === null);
+    if (semZap.length > 0) {
       await supabase.from("campanha_envios").upsert(
         semZap.map((f) => ({
           campanha_id: campanha.id,
@@ -549,10 +575,13 @@ async function criarLote(
         })),
         { onConflict: "campanha_id,telefone" }
       );
-      for (const f of semZap) jaTratados.add(f.numero);
+      for (const f of semZap) jaTratados.add(chaveDoTelefone(f.numero));
     }
 
-    const aptos = fila.filter((f) => !fora.has(f.numero));
+    // Envia (e registra) pelo número que o WhatsApp confirmou.
+    const aptos = fila
+      .filter((f) => conferidos.get(f.numero) !== null)
+      .map((f) => ({ ...f, numero: conferidos.get(f.numero) ?? f.numero }));
     if (aptos.length === 0) continue;
 
     return await entregarLote(supabase, config, campanha, aptos, inicio, acoes);

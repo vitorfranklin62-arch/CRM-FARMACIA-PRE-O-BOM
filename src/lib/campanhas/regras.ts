@@ -102,7 +102,12 @@ const DDDS = new Set([
   91, 92, 93, 94, 95, 96, 97, 98, 99,
 ]);
 
-/** Telefone do cadastro → "55DDDNÚMERO", ou null se não for um telefone brasileiro plausível. */
+/**
+ * Telefone do cadastro → "55DDDNÚMERO", ou null se não for um telefone brasileiro plausível.
+ * Celular antigo sem o 9º dígito (6-9 + 7 dígitos) é aceito como está: é assim que
+ * o WhatsApp guarda muita conta brasileira, e o CRM recebe o número do próprio
+ * WhatsApp. A checagem no /chat/check decide qual forma vale.
+ */
 export function telefoneDaCampanha(bruto: string | null | undefined): string | null {
   let d = String(bruto ?? "").replace(/\D/g, "").replace(/^0+/, "");
   if (!d) return null;
@@ -112,10 +117,21 @@ export function telefoneDaCampanha(bruto: string | null | undefined): string | n
 
   const resto = d.slice(2);
   const celular = resto.length === 9 && resto[0] === "9";
+  const celularAntigo = resto.length === 8 && /^[6-9]/.test(resto);
   const fixo = resto.length === 8 && /^[2-5]/.test(resto);
-  if (!celular && !fixo) return null;
+  if (!celular && !celularAntigo && !fixo) return null;
 
   return `55${d}`;
+}
+
+/**
+ * Chave de comparação: DDD + 8 últimos dígitos. O mesmo celular com e sem o
+ * 9º dígito vira UMA pessoa — ninguém recebe duas vezes por o número estar
+ * gravado de um jeito no cadastro e de outro no registro de envio.
+ */
+export function chaveDoTelefone(numero: string): string {
+  const local = numero.replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+  return local.slice(0, 2) + local.slice(-8);
 }
 
 /**
@@ -138,9 +154,27 @@ export function sortearInteiro(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+/**
+ * Primeiro nome limpo: tira emoji/pontuação das pontas ("-🇧🇷-Rodrigo" → "Rodrigo"),
+ * descarta nome sem letra ("." → sem nome) e arruma caixa ("FRANKLIN" → "Franklin").
+ */
+// Construídos com RegExp porque a flag "u" (classes \p{L}) não passa no target do tsconfig.
+const PONTAS_SEM_LETRA = new RegExp("^[^\\p{L}]+|[^\\p{L}\\p{N}]+$", "gu");
+const TEM_LETRA = new RegExp("\\p{L}", "u");
+
+function primeiroNome(nomeCliente: string | null | undefined): string {
+  let primeiro = String(nomeCliente ?? "").trim().split(/\s+/)[0] || "";
+  primeiro = primeiro.replace(PONTAS_SEM_LETRA, "");
+  if (!TEM_LETRA.test(primeiro)) return "";
+  if (primeiro === primeiro.toUpperCase() || primeiro === primeiro.toLowerCase()) {
+    primeiro = primeiro.charAt(0).toUpperCase() + primeiro.slice(1).toLowerCase();
+  }
+  return primeiro;
+}
+
 /** Aplica {{nome}} e {{saudacao}} e acrescenta o rodapé de descadastro (uma vez só). */
 export function montarTexto(mensagem: string, nomeCliente: string | null | undefined): string {
-  const primeiro = String(nomeCliente ?? "").trim().split(/\s+/)[0] || "";
+  const primeiro = primeiroNome(nomeCliente);
   let texto = mensagem.replace(/\{\{\s*saudacao\s*\}\}/gi, sortear(CFG.saudacoes));
 
   if (primeiro) {
