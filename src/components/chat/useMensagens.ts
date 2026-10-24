@@ -5,8 +5,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChatRealtime } from "./ChatRealtimeProvider";
 import type { MensagemComUsuario } from "@/types/relations";
 
+/**
+ * Mensagem como aparece na tela. As enviadas pelo painel entram na hora, antes
+ * da resposta do servidor (`_local`), com o estado do envio em `_envio`. Quando
+ * a versão do banco chega (mesmo id), ela substitui a local e os campos somem.
+ */
+export type MensagemNaTela = MensagemComUsuario & { _local?: true; _envio?: "enviando" | "erro" };
+
 /** O que está carregado de uma conversa: as mensagens (em ordem) e se há mais antigas no banco. */
-type JanelaMensagens = { mensagens: MensagemComUsuario[]; temMaisAntigas: boolean };
+type JanelaMensagens = { mensagens: MensagemNaTela[]; temMaisAntigas: boolean };
 
 const chaveMensagens = (conversaId: string) => ["mensagens", conversaId] as const;
 
@@ -20,10 +27,20 @@ async function buscarMensagens(conversaId: string, cursor: { antes?: string; dep
 }
 
 /** Junta duas listas sem repetir (a versão nova de uma mensagem vence) e ordena por data. */
-function mesclar(atuais: MensagemComUsuario[], novas: MensagemComUsuario[]) {
+function mesclar(atuais: MensagemNaTela[], novas: MensagemNaTela[]) {
   const porId = new Map(atuais.map((m) => [m.id, m]));
   for (const m of novas) porId.set(m.id, m);
   return Array.from(porId.values()).sort((a, b) => Date.parse(a.criado_em) - Date.parse(b.criado_em));
+}
+
+/**
+ * Última mensagem que já veio do banco — é dela que sai o cursor "depois de".
+ * As locais ficam de fora: a data delas é do relógio deste computador, que
+ * pode estar adiantado e fazer a busca pular mensagens.
+ */
+function ultimaDoBanco(mensagens: MensagemNaTela[]) {
+  for (let i = mensagens.length - 1; i >= 0; i--) if (!mensagens[i]._local) return mensagens[i];
+  return undefined;
 }
 
 /**
@@ -60,16 +77,18 @@ export function useMensagens(conversaId: string) {
     const rodar = async () => {
       do {
         pendenteRef.current = false;
-        const ultima = queryClient.getQueryData<JanelaMensagens>(chaveAtual)?.mensagens.at(-1);
-        if (!ultima) {
-          // Nada carregado ainda (ou conversa vazia): busca a página inicial de novo.
+        const janela = queryClient.getQueryData<JanelaMensagens>(chaveAtual);
+        if (!janela) {
+          // Primeira carga ainda em andamento: busca de novo, já com o que acabou de chegar.
           await queryClient.invalidateQueries({ queryKey: chaveAtual });
           return;
         }
+        const ultima = ultimaDoBanco(janela.mensagens);
         try {
-          const { mensagens } = await buscarMensagens(conversaId, { depois: ultima.criado_em });
-          queryClient.setQueryData<JanelaMensagens>(chaveAtual, (janela) =>
-            janela ? { ...janela, mensagens: mesclar(janela.mensagens, mensagens) } : janela
+          // Sem nenhuma mensagem do banco ainda (conversa nova): busca a página inicial.
+          const { mensagens } = await buscarMensagens(conversaId, ultima ? { depois: ultima.criado_em } : {});
+          queryClient.setQueryData<JanelaMensagens>(chaveAtual, (atual) =>
+            atual ? { ...atual, mensagens: mesclar(atual.mensagens, mensagens) } : atual
           );
         } catch {
           // Sem conexão agora — a próxima mensagem ou a reconexão tentam de novo.
@@ -127,8 +146,99 @@ export function useMensagens(conversaId: string) {
     }
   }, [conversaId, queryClient]);
 
+  // ---- Envio otimista ----------------------------------------------------
+
+  const mudarMensagem = useCallback(
+    (id: string, mudar: (m: MensagemNaTela, todas: MensagemNaTela[]) => MensagemNaTela[] | MensagemNaTela) => {
+      queryClient.setQueryData<JanelaMensagens>(chaveMensagens(conversaId), (janela) => {
+        if (!janela) return janela;
+        const alvo = janela.mensagens.find((m) => m.id === id);
+        if (!alvo) return janela;
+        const resultado = mudar(alvo, janela.mensagens);
+        return {
+          ...janela,
+          mensagens: Array.isArray(resultado) ? resultado : janela.mensagens.map((m) => (m.id === id ? resultado : m)),
+        };
+      });
+    },
+    [conversaId, queryClient]
+  );
+
+  const tentarEnvio = useCallback(
+    async (idLocal: string, conteudo: string) => {
+      mudarMensagem(idLocal, (m) => ({ ...m, _envio: "enviando" }));
+      try {
+        const res = await fetch("/api/chat/enviar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ conversa_id: conversaId, conteudo }),
+        });
+        if (!res.ok) throw new Error();
+        const { id } = (await res.json()) as { id: string };
+        // Salva no banco: a local passa a ter o id de verdade. Se o Realtime já
+        // trouxe a versão do banco antes desta resposta, só some com a local.
+        mudarMensagem(idLocal, (m, todas) =>
+          todas.some((outra) => outra.id === id)
+            ? todas.filter((outra) => outra.id !== idLocal)
+            : { ...m, id, _envio: undefined }
+        );
+        sincronizar();
+      } catch {
+        mudarMensagem(idLocal, (m) => ({ ...m, _envio: "erro" }));
+      }
+    },
+    [conversaId, mudarMensagem, sincronizar]
+  );
+
+  /** Mostra a mensagem na hora e envia em seguida. */
+  const enviarTexto = useCallback(
+    (conteudo: string) => {
+      const local: MensagemNaTela = {
+        id: `local-${crypto.randomUUID()}`,
+        conversa_id: conversaId,
+        remetente: "funcionaria",
+        usuario_id: null,
+        usuarios: null,
+        conteudo,
+        tipo: "texto",
+        midia_path: null,
+        midia_nome: null,
+        midia_mime: null,
+        criado_em: new Date().toISOString(),
+        _local: true,
+        _envio: "enviando",
+      };
+      queryClient.setQueryData<JanelaMensagens>(chaveMensagens(conversaId), (janela) => ({
+        temMaisAntigas: janela?.temMaisAntigas ?? false,
+        mensagens: mesclar(janela?.mensagens ?? [], [local]),
+      }));
+      tentarEnvio(local.id, conteudo);
+    },
+    [conversaId, queryClient, tentarEnvio]
+  );
+
+  /** Botão "Tentar novamente" de uma mensagem que falhou. */
+  const reenviar = useCallback(
+    (idLocal: string) => {
+      const msg = queryClient
+        .getQueryData<JanelaMensagens>(chaveMensagens(conversaId))
+        ?.mensagens.find((m) => m.id === idLocal);
+      if (msg?._envio === "erro") tentarEnvio(idLocal, msg.conteudo);
+    },
+    [conversaId, queryClient, tentarEnvio]
+  );
+
+  /** Tira da tela uma mensagem que falhou e a pessoa desistiu de enviar. */
+  const descartar = useCallback(
+    (idLocal: string) => mudarMensagem(idLocal, (_m, todas) => todas.filter((m) => m.id !== idLocal)),
+    [mudarMensagem]
+  );
+
   return {
     mensagens: query.data?.mensagens ?? [],
+    enviarTexto,
+    reenviar,
+    descartar,
     carregando: query.isPending,
     erro: query.isError,
     tentarDeNovo: query.refetch,

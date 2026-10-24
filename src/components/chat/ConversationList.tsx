@@ -1,8 +1,9 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { MessageSquare, Camera, Ban, Search } from "lucide-react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { MessageSquare, Camera, Ban, Search, Mic, FileText, Image as ImageIcon } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
@@ -102,6 +103,15 @@ export function ConversationList({
         (termoDigitos.length >= 3 && c.clientes?.telefone.includes(termoDigitos)))
   );
 
+  const rolagemRef = useRef<HTMLDivElement>(null);
+  const virtualizador = useVirtualizer({
+    count: visiveis.length,
+    getScrollElement: () => rolagemRef.current,
+    estimateSize: () => 92,
+    overscan: 8,
+    getItemKey: (indice) => visiveis[indice].id,
+  });
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="space-y-2 border-b border-brand-100/70 px-3 py-2.5 dark:border-white/10">
@@ -149,7 +159,7 @@ export function ConversationList({
         </div>
       </div>
 
-      <div className="rolagem-fina flex-1 overflow-y-auto">
+      <div ref={rolagemRef} className="rolagem-fina flex-1 overflow-y-auto">
         {carregando && <SkeletonListaConversas />}
         {erro && !carregando && (
           <div className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
@@ -164,14 +174,27 @@ export function ConversationList({
             {conversas.length === 0 ? "Nenhuma conversa ainda." : "Nenhuma conversa neste filtro."}
           </p>
         )}
-        {visiveis.map((conversa) => (
-          <ItemConversa
-            key={conversa.id}
-            conversa={conversa}
-            selecionada={selectedId === conversa.id}
-            tempo={formatRelativeTime(conversa.atualizado_em)}
-          />
-        ))}
+        {/* Lista virtualizada: só os itens visíveis (e alguns em volta) existem na tela. */}
+        <div className="relative w-full" style={{ height: virtualizador.getTotalSize() }}>
+          {virtualizador.getVirtualItems().map((linha) => {
+            const conversa = visiveis[linha.index];
+            return (
+              <div
+                key={linha.key}
+                data-index={linha.index}
+                ref={virtualizador.measureElement}
+                className="absolute left-0 top-0 w-full"
+                style={{ transform: `translateY(${linha.start}px)` }}
+              >
+                <ItemConversa
+                  conversa={conversa}
+                  selecionada={selectedId === conversa.id}
+                  tempo={formatRelativeTime(conversa.atualizado_em)}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -235,6 +258,7 @@ const ItemConversa = memo(function ItemConversa({
             {tempo}
           </span>
         </div>
+        <PreviaUltimaMensagem conversa={conversa} destaque={naoLidas > 0} />
         <div className="mt-1 flex items-center gap-1.5">
           {conversa.clientes?.ia_bloqueada && (
             <Ban size={12} className="shrink-0 text-red-500 dark:text-red-400" aria-label="IA bloqueada" />
@@ -270,3 +294,33 @@ const ItemConversa = memo(function ItemConversa({
     </Link>
   );
 });
+
+const ICONE_MIDIA = { imagem: ImageIcon, audio: Mic, documento: FileText } as const;
+const LABEL_MIDIA = { imagem: "Foto", audio: "Áudio", documento: "Documento" } as const;
+const PREFIXO_REMETENTE = { cliente: "", ia: "IA: ", funcionaria: "Você: " } as const;
+
+/**
+ * Começo da última mensagem, como no WhatsApp Web. Em foto/áudio/documento
+ * mostra só o tipo — o texto guardado nessas mensagens é a descrição/transcrição
+ * que a IA usa, que também não aparece pra equipe dentro da conversa.
+ * Sem a migração 20261024_chat_previa_ultima_mensagem.sql não mostra nada.
+ */
+function PreviaUltimaMensagem({ conversa, destaque }: { conversa: ConversaDaLista; destaque: boolean }) {
+  const tipo = conversa.ultima_mensagem_tipo ?? "texto";
+  if (!conversa.ultima_mensagem && tipo === "texto") return null;
+  const prefixo = PREFIXO_REMETENTE[conversa.ultima_mensagem_remetente ?? "cliente"];
+  const Icone = tipo !== "texto" ? ICONE_MIDIA[tipo] : null;
+
+  return (
+    <p
+      className={cn(
+        "mt-0.5 flex items-center gap-1 truncate text-xs",
+        destaque ? "font-medium text-gray-700 dark:text-gray-200" : "text-gray-500 dark:text-gray-400"
+      )}
+    >
+      {prefixo && <span className="shrink-0">{prefixo}</span>}
+      {Icone && <Icone size={12} className="shrink-0" />}
+      <span className="truncate">{Icone ? LABEL_MIDIA[tipo as keyof typeof LABEL_MIDIA] : conversa.ultima_mensagem}</span>
+    </p>
+  );
+}

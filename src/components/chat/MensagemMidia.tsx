@@ -161,17 +161,16 @@ function MidiaImagem({ msg, url }: { msg: MensagemComUsuario; url: string }) {
   const { erro, aoFalhar } = useFalhaDeMidia(url);
   const fechar = useCallback(() => setAmpliada(false), []);
 
-  // A página é renderizada no servidor: a imagem pode terminar de carregar
-  // antes da hidratação e aí o onLoad nunca dispara. Por isso conferimos o
-  // estado real do <img> aqui também.
+  // A foto pode já estar no cache do navegador e terminar de carregar antes
+  // deste efeito rodar (aí o onLoad não dispara de novo): confere o estado
+  // real do <img>. Só o caso "já carregou" — com loading="lazy", uma foto que
+  // ainda não apareceu na tela também conta como `complete` em alguns
+  // navegadores, e isso não é erro (o onError cuida das falhas de verdade).
   useEffect(() => {
     setCarregando(true);
     const img = imgRef.current;
-    if (img?.complete) {
-      if (img.naturalWidth > 0) setCarregando(false);
-      else aoFalhar();
-    }
-  }, [url, aoFalhar]);
+    if (img?.complete && img.naturalWidth > 0) setCarregando(false);
+  }, [url]);
 
   if (erro) {
     return (
@@ -205,6 +204,10 @@ function MidiaImagem({ msg, url }: { msg: MensagemComUsuario; url: string }) {
           alt={nome}
           onLoad={() => setCarregando(false)}
           onError={aoFalhar}
+          // Só baixa quando a bolha chega perto da área visível — rolar uma
+          // conversa cheia de receitas não baixa todas as fotos de uma vez.
+          loading="lazy"
+          decoding="async"
           className="max-h-64 w-auto max-w-full rounded-lg object-cover"
         />
       </button>

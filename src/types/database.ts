@@ -133,6 +133,14 @@ export type Conversa = {
   classificacao: ConversaClassificacao;
   /** Mensagens do cliente ainda não abertas no painel (mantido por trigger no banco). */
   nao_lidas: number;
+  /**
+   * Resumo da última mensagem (prévia da lista do Chat ao vivo), mantido por
+   * trigger. Opcional: só existe depois da migração 20261024_chat_previa_ultima_mensagem.sql.
+   */
+  ultima_mensagem?: string | null;
+  ultima_mensagem_em?: string | null;
+  ultima_mensagem_remetente?: Remetente | null;
+  ultima_mensagem_tipo?: TipoMensagem | null;
   criado_em: string;
   atualizado_em: string;
 }
