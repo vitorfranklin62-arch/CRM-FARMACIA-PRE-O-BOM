@@ -68,11 +68,14 @@ export function CampanhasList({
     if (!confirm(pergunta)) return;
     setDisparando(c.id);
     const res = await fetch(`/api/campanhas/${c.id}/disparar`, { method: "POST" });
+    const json = await res.json().catch(() => ({}));
     setDisparando(null);
     if (!res.ok) {
-      alert("Não foi possível disparar a campanha.");
+      alert(json.error ?? "Não foi possível disparar a campanha.");
       return;
     }
+    // O que a rodada fez (lote criado, fora do horário, WhatsApp desconectado...).
+    if (Array.isArray(json.acoes) && json.acoes.length > 0) alert(json.acoes.join("\n"));
     router.refresh();
   }
 

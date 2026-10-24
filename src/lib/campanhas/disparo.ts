@@ -64,6 +64,19 @@ async function rodada(): Promise<ResultadoRodada> {
 
   const supabase = createServiceClient();
   const acoes: string[] = [];
+
+  // Sem a migração 20261023_campanhas_disparo_uazapi.sql as consultas abaixo
+  // falhariam caladas e a campanha ficaria "em andamento" sem nunca sair.
+  const { error: semTabela } = await supabase.from("campanha_lotes").select("id").limit(1);
+  if (semTabela) {
+    return {
+      ok: false,
+      acoes: [
+        `Tabela campanha_lotes indisponível (${semTabela.message}). Rode a migração supabase/migrations/20261023_campanhas_disparo_uazapi.sql no Supabase.`,
+      ],
+    };
+  }
+
   try {
     await sincronizarLotes(supabase, config, acoes);
     await iniciarProximoLote(supabase, config, acoes);
