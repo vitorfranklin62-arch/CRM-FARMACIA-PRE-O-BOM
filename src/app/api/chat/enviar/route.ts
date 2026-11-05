@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { mensagemCreateSchema } from "@/lib/validation";
+import { pausarIaPorRespostaHumana } from "@/lib/ia/pausa";
 
 /**
  * POST /api/chat/enviar
@@ -46,14 +47,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não foi possível registrar a mensagem." }, { status: 500 });
   }
 
-  // Uma funcionária respondendo manualmente pelo CRM é sinal de que um humano
-  // já está cuidando da conversa — marca "aguardando_humano" pra IA não
-  // continuar respondendo por cima (mesmo efeito de quando alguém intervém
-  // direto pelo WhatsApp do celular).
-  await supabase
-    .from("conversas")
-    .update({ atualizado_em: new Date().toISOString(), status: "aguardando_humano" })
-    .eq("id", conversa_id);
+  // Uma funcionária respondendo pelo CRM pausa a IA por alguns minutos (padrão
+  // 10, renova a cada resposta) pra ela não responder por cima — e a IA volta
+  // sozinha depois, exatamente como o aviso do N8N promete. Antes isso era uma
+  // trava SEM PRAZO, a principal causa da "IA travando sem motivo".
+  await pausarIaPorRespostaHumana(supabase, conversa_id, usuario.id);
 
   // Notifica o N8N pra entregar a mensagem via UAIZAP/WhatsApp (best-effort — a mensagem já foi salva)
   const service = createServiceClient();

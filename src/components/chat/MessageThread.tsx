@@ -31,6 +31,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { cn, formatDateTime } from "@/lib/utils";
 import { formatarTelefone } from "@/lib/telefone";
+import { estadoIa, horaBahia, rotuloMotivo } from "@/lib/ia/estado";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { TemplatePicker } from "./TemplatePicker";
@@ -170,7 +171,28 @@ export function MessageThread({
     );
   }
 
-  const travada = conversa.status === "aguardando_humano";
+  // Relógio de 30 s: a pausa por tempo vence sozinha e a tela acompanha.
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setAgora(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const estado = estadoIa(conversa, new Date(agora));
+  const travada = estado === "PAUSA_TEMPORARIA" || estado === "HUMANO_ASSUMIU";
+  const textoEstado =
+    estado === "PAUSA_TEMPORARIA" && conversa.ia_pausada_ate
+      ? `IA pausada até ${horaBahia(conversa.ia_pausada_ate)}`
+      : estado === "HUMANO_ASSUMIU"
+        ? "Precisa de você"
+        : estado === "ENCERRADA"
+          ? "Fechada"
+          : "IA ativa";
+  const dicaEstado =
+    estado === "PAUSA_TEMPORARIA"
+      ? "Alguém da equipe respondeu: a IA volta sozinha no horário indicado (cada nova resposta renova)."
+      : estado === "HUMANO_ASSUMIU"
+        ? `IA travada nesta conversa — ${rotuloMotivo(conversa.ia_motivo)}.`
+        : undefined;
   const numeroBloqueado = conversa.clientes?.ia_bloqueada ?? false;
   const classificacaoAtual = conversa.classificacao ?? "aberta";
 
@@ -203,16 +225,19 @@ export function MessageThread({
   async function alternarTrava() {
     if (travando) return;
     setTravando(true);
-    const statusAnterior = conversa.status;
-    const novoStatus = travada ? "aberta" : "aguardando_humano";
-    atualizarNoCache((c) => ({ ...c, status: novoStatus }));
+    const anterior = { status: conversa.status, ia_pausada_ate: conversa.ia_pausada_ate, ia_motivo: conversa.ia_motivo };
+    const novo = travada
+      ? { status: "aberta" as const, ia_pausada_ate: null, ia_motivo: "destravada_manual" as const }
+      : { status: "aguardando_humano" as const, ia_pausada_ate: null, ia_motivo: "manual" as const };
+    atualizarNoCache((c) => ({ ...c, ...novo }));
     const supabase = createClient();
-    const { error } = await supabase
-      .from("conversas")
-      .update({ status: novoStatus, atualizado_em: new Date().toISOString() })
-      .eq("id", conversa.id);
+    let { error } = await supabase.from("conversas").update(novo).eq("id", conversa.id);
+    // Banco ainda sem a migração 20261105 (sem as colunas ia_*): grava só o status.
+    if (error && (error.code === "PGRST204" || error.code === "42703")) {
+      ({ error } = await supabase.from("conversas").update({ status: novo.status }).eq("id", conversa.id));
+    }
     if (error) {
-      atualizarNoCache((c) => ({ ...c, status: statusAnterior }));
+      atualizarNoCache((c) => ({ ...c, ...anterior }));
       alert("Não foi possível travar/destravar a IA nesta conversa.");
     }
     setTravando(false);
@@ -346,14 +371,15 @@ export function MessageThread({
                 IA bloqueada
               </Badge>
             )}
-            <Badge
-              variant={conversa.status === "fechada" ? "gray" : conversa.status === "aguardando_humano" ? "yellow" : "blue"}
-              comBolinha
-              pulsando={conversa.status === "aguardando_humano"}
-              className="hidden sm:inline-flex"
-            >
-              {conversa.status === "aberta" ? "IA ativa" : conversa.status === "aguardando_humano" ? "Precisa de você" : "Fechada"}
-            </Badge>
+            <span title={dicaEstado} className="hidden sm:inline-flex">
+              <Badge
+                variant={estado === "ENCERRADA" ? "gray" : estado === "HUMANO_ASSUMIU" ? "yellow" : estado === "PAUSA_TEMPORARIA" ? "purple" : "blue"}
+                comBolinha
+                pulsando={estado === "HUMANO_ASSUMIU"}
+              >
+                {textoEstado}
+              </Badge>
+            </span>
           </div>
         </div>
 
@@ -396,7 +422,12 @@ export function MessageThread({
               type="button"
               onClick={alternarTrava}
               disabled={travando}
-              title={travada ? "Destravar: deixar a IA responder de novo nesta conversa" : "Travar: a IA para de responder nesta conversa até você destravar"}
+              title={
+                travada
+                  ? "Destravar: a IA volta a responder nesta conversa agora"
+                  : "Travar: a IA para de responder nesta conversa até você destravar (a rotina das 22h respeita esta trava)"
+              }
+              aria-label={travada ? "Destravar a IA nesta conversa" : "Travar a IA nesta conversa"}
               className={cn(
                 "rounded-xl p-2 transition disabled:opacity-50",
                 travada

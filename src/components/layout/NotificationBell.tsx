@@ -79,10 +79,15 @@ export function NotificationBell() {
       setTimeout(() => setPulse(false), 2000);
     }
 
+    // Toca só quando a conversa passa a PRECISAR de alguém (transferência da
+    // IA, trava sem prazo). A pausa curta de quando a própria equipe responde
+    // (ia_pausada_ate preenchido) não é motivo pra tocar o sininho.
     function statusVirouAguardandoHumano(novo: unknown, antigo: unknown) {
-      const novoStatus = (novo as { status?: string } | null)?.status;
-      const statusAntigo = (antigo as { status?: string } | null)?.status;
-      return novoStatus === "aguardando_humano" && statusAntigo !== "aguardando_humano";
+      const n = novo as { status?: string; ia_pausada_ate?: string | null } | null;
+      const a = antigo as { status?: string; ia_pausada_ate?: string | null } | null;
+      const precisaAgora = n?.status === "aguardando_humano" && !n?.ia_pausada_ate;
+      const precisavaAntes = a?.status === "aguardando_humano" && !a?.ia_pausada_ate;
+      return precisaAgora && !precisavaAntes;
     }
 
     const supabase = createClient();

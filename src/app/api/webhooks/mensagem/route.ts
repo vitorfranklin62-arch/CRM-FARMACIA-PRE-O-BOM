@@ -5,6 +5,8 @@ import { mensagemWebhookSchema } from "@/lib/validation";
 import { normalizarTelefone } from "@/lib/telefone";
 import { baixarEArmazenarMidia } from "@/lib/chat-midia";
 import { pedidoDeOptout, registrarOptout } from "@/lib/optout";
+import { estadoIa } from "@/lib/ia/estado";
+import { atualizarEstadoConversa, travarIaSemPrazo } from "@/lib/ia/pausa";
 
 /**
  * POST /api/webhooks/mensagem
@@ -28,9 +30,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Payload inválido.", detalhes: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { cliente, remetente, conteudo, conversa_status, tipo, midia_url_temporaria, midia_nome, midia_mime } = parsed.data;
+  const { cliente, remetente, conteudo, conversa_status, tipo, midia_url_temporaria, midia_nome, midia_mime, mensagem_externa_id } =
+    parsed.data;
   const supabase = createServiceClient();
   const now = new Date().toISOString();
+
+  // 0. Evento repetido (o WhatsApp/N8N às vezes entrega a mesma mensagem 2x):
+  // devolve o que já foi gravado e não mexe em mais nada — nem no estado da IA.
+  if (mensagem_externa_id) {
+    const repetida = await buscarMensagemPorIdExterno(supabase, mensagem_externa_id);
+    if (repetida) return respostaDuplicada(repetida);
+  }
   const telefoneNormalizado = normalizarTelefone(cliente.telefone);
   const nomeInformado = cliente.nome?.trim() || null;
 
@@ -101,7 +111,7 @@ export async function POST(request: Request) {
   if (!conversaId) {
     const { data: novaConversa, error: conversaError } = await supabase
       .from("conversas")
-      .insert({ cliente_id: clienteId, status: conversa_status ?? "aberta" })
+      .insert({ cliente_id: clienteId, status: conversa_status === "fechada" ? "fechada" : "aberta" })
       .select("id")
       .single();
 
@@ -112,14 +122,13 @@ export async function POST(request: Request) {
       );
     }
     conversaId = novaConversa.id;
+    if (conversa_status === "aguardando_humano") {
+      await travarIaSemPrazo(supabase, conversaId, motivoDaTrava(remetente), atorDoWebhook(remetente), {
+        ia_evento_id: mensagem_externa_id ?? null,
+      });
+    }
   } else {
-    // Só muda o status quando o chamador pede explicitamente. Sem isso, a
-    // mensagem do cliente (ou da IA) que chega logo depois de uma funcionária
-    // assumir a conversa rebaixava "aguardando_humano" pra "aberta" e a IA
-    // voltava a responder por cima do atendente. Conversa "fechada" reabre.
-    const { data: atual } = await supabase.from("conversas").select("status").eq("id", conversaId).single();
-    const novoStatus = conversa_status ?? (atual?.status === "aguardando_humano" ? "aguardando_humano" : "aberta");
-    await supabase.from("conversas").update({ status: novoStatus }).eq("id", conversaId);
+    await atualizarEstadoDaConversa(supabase, conversaId, { conversa_status, remetente, mensagem_externa_id });
   }
 
   // 3. Baixar a mídia (se tiver) e guardar uma cópia permanente no Storage do
@@ -137,19 +146,31 @@ export async function POST(request: Request) {
   }
 
   // 4. Registrar a mensagem
-  const { data: mensagem, error: mensagemError } = await supabase
+  const linhaMensagem = {
+    conversa_id: conversaId,
+    remetente,
+    conteudo,
+    tipo: midia ? tipo! : "texto",
+    midia_path: midia?.midia_path ?? null,
+    midia_mime: midia?.midia_mime ?? null,
+    midia_nome: midia ? (midia_nome ?? null) : null,
+  } as const;
+  let { data: mensagem, error: mensagemError } = await supabase
     .from("mensagens")
-    .insert({
-      conversa_id: conversaId,
-      remetente,
-      conteudo,
-      tipo: midia ? tipo! : "texto",
-      midia_path: midia?.midia_path ?? null,
-      midia_mime: midia?.midia_mime ?? null,
-      midia_nome: midia ? (midia_nome ?? null) : null,
-    })
+    .insert({ ...linhaMensagem, ...(mensagem_externa_id ? { externo_id: mensagem_externa_id } : {}) })
     .select("id")
     .single();
+
+  // Duas entregas do mesmo evento ao mesmo tempo: o índice único do banco barra
+  // a segunda, que devolve a primeira.
+  if (mensagemError?.code === "23505" && mensagem_externa_id) {
+    const repetida = await buscarMensagemPorIdExterno(supabase, mensagem_externa_id);
+    if (repetida) return respostaDuplicada(repetida);
+  }
+  // Banco ainda sem a coluna externo_id (migração 20261105 não rodada): grava como antes.
+  if (mensagemError && mensagem_externa_id && (mensagemError.code === "PGRST204" || mensagemError.code === "42703")) {
+    ({ data: mensagem, error: mensagemError } = await supabase.from("mensagens").insert(linhaMensagem).select("id").single());
+  }
 
   if (mensagemError || !mensagem) {
     return NextResponse.json(
@@ -179,4 +200,77 @@ export async function POST(request: Request) {
     { cliente_id: clienteId, conversa_id: conversaId, mensagem_id: mensagem.id, optout },
     { status: 201 }
   );
+}
+
+type ServiceClient = ReturnType<typeof createServiceClient>;
+type Remetente = "ia" | "cliente" | "funcionaria";
+
+/** A IA chamando atendente (tool chamar_atendente do N8N) é uma transferência. */
+function motivoDaTrava(remetente: Remetente) {
+  return remetente === "ia" ? ("transferencia_ia" as const) : ("manual" as const);
+}
+
+function atorDoWebhook(remetente: Remetente) {
+  return remetente === "ia" ? "ia" : "n8n";
+}
+
+async function buscarMensagemPorIdExterno(supabase: ServiceClient, externoId: string) {
+  const { data, error } = await supabase
+    .from("mensagens")
+    .select("id, conversa_id, conversas(cliente_id)")
+    .eq("externo_id", externoId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const conversa = Array.isArray(data.conversas) ? data.conversas[0] : data.conversas;
+  return { mensagem_id: data.id, conversa_id: data.conversa_id, cliente_id: conversa?.cliente_id ?? null };
+}
+
+function respostaDuplicada(r: { mensagem_id: string; conversa_id: string; cliente_id: string | null }) {
+  return NextResponse.json({ ...r, optout: false, duplicada: true }, { status: 200 });
+}
+
+/**
+ * Regras de estado quando chega mensagem numa conversa que já existe:
+ * - O chamador pediu um status (ex.: a IA transferiu pra atendente) → aplica,
+ *   com motivo registrado. Transferência fica SEM prazo (até alguém destravar
+ *   ou até a rotina das 22h).
+ * - Senão, uma trava/pausa vigente é mantida (a IA não volta por cima do
+ *   atendente); uma pausa cujo prazo já venceu é liberada; conversa fechada reabre.
+ */
+async function atualizarEstadoDaConversa(
+  supabase: ServiceClient,
+  conversaId: string,
+  p: { conversa_status?: "aberta" | "aguardando_humano" | "fechada" | null; remetente: Remetente; mensagem_externa_id?: string | null }
+) {
+  let atual: { status: string; ia_pausada_ate?: string | null } | null = null;
+  const comEstado = await supabase.from("conversas").select("status, ia_pausada_ate").eq("id", conversaId).single();
+  if (comEstado.error) {
+    // Banco sem as colunas novas: comportamento antigo.
+    const simples = await supabase.from("conversas").select("status").eq("id", conversaId).single();
+    atual = simples.data;
+  } else {
+    atual = comEstado.data;
+  }
+  const evento = p.mensagem_externa_id ?? null;
+
+  if (p.conversa_status === "aguardando_humano") {
+    await travarIaSemPrazo(supabase, conversaId, motivoDaTrava(p.remetente), atorDoWebhook(p.remetente), { ia_evento_id: evento });
+    return;
+  }
+  if (p.conversa_status && p.conversa_status !== atual?.status) {
+    await atualizarEstadoConversa(supabase, conversaId, { status: p.conversa_status, ia_motivo: "webhook", ia_ator: "n8n" });
+    return;
+  }
+  if (!atual || p.conversa_status) return;
+
+  if (atual.status === "fechada") {
+    await atualizarEstadoConversa(supabase, conversaId, { status: "aberta", ia_motivo: "cliente_reabriu", ia_ator: "sistema" });
+  } else if (atual.status === "aguardando_humano" && estadoIa(atual) === "IA_ATIVA") {
+    await atualizarEstadoConversa(supabase, conversaId, {
+      status: "aberta",
+      ia_motivo: "pausa_expirada",
+      ia_ator: "sistema",
+      ia_evento_id: evento,
+    });
+  }
 }

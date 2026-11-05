@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { estadoIa } from "@/lib/ia/estado";
 import { useParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { ConversationList } from "./ConversationList";
@@ -37,7 +38,8 @@ export function ChatShell({ children }: { children: React.ReactNode }) {
   const { conversasNaoLidas: naoLidas } = useChatRealtime();
 
   // Quantas conversas estão esperando alguém da farmácia responder.
-  const aguardando = (conversas ?? []).filter((c) => c.status === "aguardando_humano").length;
+  // Pausa de poucos minutos (a própria equipe acabou de responder) não conta.
+  const aguardando = (conversas ?? []).filter((c) => estadoIa(c) === "HUMANO_ASSUMIU").length;
 
   // Lembra se estava expandido ao trocar de conversa (cada conversa é uma página).
   useEffect(() => {

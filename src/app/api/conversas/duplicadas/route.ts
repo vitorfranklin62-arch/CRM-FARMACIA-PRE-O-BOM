@@ -98,10 +98,23 @@ export async function POST() {
         ? "aguardando_humano"
         : sobrevivente.status;
 
-      const { error: erroAtualizar } = await supabase
+      // Trava herdada de uma duplicata entra como "mesclagem" (a rotina das 22h
+      // pode liberar); sem isso o banco registraria como trava manual.
+      const herdouTrava = statusFinal === "aguardando_humano" && sobrevivente.status !== "aguardando_humano";
+      let { error: erroAtualizar } = await supabase
         .from("conversas")
-        .update({ pedido_id: pedidoId, status: statusFinal })
+        .update({
+          pedido_id: pedidoId,
+          status: statusFinal,
+          ...(herdouTrava ? { ia_motivo: "mesclagem" as const, ia_pausada_ate: null } : {}),
+        })
         .eq("id", sobrevivente.id);
+      if (herdouTrava && (erroAtualizar?.code === "PGRST204" || erroAtualizar?.code === "42703")) {
+        ({ error: erroAtualizar } = await supabase
+          .from("conversas")
+          .update({ pedido_id: pedidoId, status: statusFinal })
+          .eq("id", sobrevivente.id));
+      }
       if (erroAtualizar) {
         bloqueadas += outras.length;
         primeiroErro ??= erroAtualizar.message;

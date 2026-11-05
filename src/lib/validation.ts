@@ -99,6 +99,10 @@ export const mensagemWebhookSchema = z.object({
   midia_url_temporaria: z.string().trim().url("URL inválida").max(2000).nullable().optional(),
   midia_nome: z.string().trim().max(300).nullable().optional(),
   midia_mime: z.string().trim().max(150).nullable().optional(),
+  // Id da mensagem no WhatsApp (uazapi `messageid`). Opcional, mas quando o N8N
+  // manda, o mesmo evento repetido pelo webhook é ignorado (não grava de novo
+  // nem muda o estado da conversa).
+  mensagem_externa_id: z.string().trim().min(1).max(200).nullable().optional(),
 });
 
 export const produtoCreateSchema = z.object({
@@ -139,6 +143,10 @@ export const encomendaCreateSchema = z.object({
   produto_nome: z.string().trim().min(1).max(300),
   quantidade: z.number().int().positive().max(9999),
   observacoes: z.string().trim().max(2000).nullable().optional(),
+});
+
+export const pedidoStatusSchema = z.object({
+  status: z.enum(["novo", "separando", "pronto", "entregue"]),
 });
 
 export const encomendaStatusSchema = z.object({
@@ -210,3 +218,97 @@ export const importarEstoqueRemoverSchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(500),
   arquivo: z.string().trim().min(1).max(300),
 });
+
+// ---------------------------------------------------------------------------
+// Central de Tarefas
+// ---------------------------------------------------------------------------
+export const TAREFA_STATUS = ["PENDENTE", "EM_ANDAMENTO", "AGUARDANDO_CLIENTE", "AGUARDANDO_APROVACAO", "CONCLUIDA", "CANCELADA"] as const;
+export const TAREFA_PRIORIDADES = ["baixa", "media", "alta", "urgente"] as const;
+export const TAREFA_CATEGORIAS = [
+  "pedido_atrasado",
+  "produto_indisponivel",
+  "reclamacao",
+  "pagamento_pendente",
+  "erro_integracao",
+  "atendimento",
+  "estoque",
+  "outro",
+] as const;
+
+const uuidOpcional = z.string().uuid().nullable().optional();
+
+export const tarefaCreateSchema = z.object({
+  titulo: z.string().trim().min(3, "Título muito curto").max(200),
+  descricao: z.string().trim().max(4000).nullable().optional(),
+  categoria: z.enum(TAREFA_CATEGORIAS).default("outro"),
+  prioridade: z.enum(TAREFA_PRIORIDADES).default("media"),
+  responsavel_id: uuidOpcional,
+  cliente_id: uuidOpcional,
+  pedido_id: uuidOpcional,
+  conversa_id: uuidOpcional,
+  prazo: z.string().datetime({ offset: true }).nullable().optional(),
+  observacoes: z.string().trim().max(4000).nullable().optional(),
+});
+
+export const tarefaUpdateSchema = z
+  .object({
+    status: z.enum(TAREFA_STATUS).optional(),
+    prioridade: z.enum(TAREFA_PRIORIDADES).optional(),
+    responsavel_id: uuidOpcional,
+    prazo: z.string().datetime({ offset: true }).nullable().optional(),
+    observacoes: z.string().trim().max(4000).nullable().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, "Nada para atualizar.");
+
+/** Tarefa aberta pelo N8N/IA (webhook com o token do N8N). */
+export const tarefaWebhookSchema = z.object({
+  titulo: z.string().trim().min(3).max(200),
+  descricao: z.string().trim().max(4000).nullable().optional(),
+  categoria: z.enum(TAREFA_CATEGORIAS).default("atendimento"),
+  prioridade: z.enum(TAREFA_PRIORIDADES).default("media"),
+  // Telefone da CONVERSA (preenchido pelo N8N, nunca pela IA) — é por ele que
+  // a tarefa é ligada ao cliente.
+  telefone_cliente: z.string().trim().min(8).max(30).nullable().optional(),
+  sugestao_ia: z.string().trim().max(2000).nullable().optional(),
+  chave_dedup: z.string().trim().max(200).nullable().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Ferramentas da IA (Tool Router)
+// ---------------------------------------------------------------------------
+export const ferramentaIaSchema = z.discriminatedUnion("ferramenta", [
+  z.object({
+    ferramenta: z.literal("consultar_pedidos"),
+    telefone_cliente: z.string().trim().min(8).max(30),
+  }),
+  z.object({
+    ferramenta: z.literal("consultar_produto"),
+    telefone_cliente: z.string().trim().min(8).max(30),
+    argumentos: z.object({ termo: z.string().trim().min(2).max(120) }),
+  }),
+  z.object({
+    ferramenta: z.literal("registrar_pendencia"),
+    telefone_cliente: z.string().trim().min(8).max(30),
+    argumentos: z.object({
+      tipo: z.enum(["reclamacao", "produto_indisponivel", "problema_pedido", "pagamento", "outro"]),
+      resumo: z.string().trim().min(5).max(1500),
+      urgente: z.boolean().optional(),
+    }),
+  }),
+]);
+
+// ---------------------------------------------------------------------------
+// Painel Operações
+// ---------------------------------------------------------------------------
+export const recuperacaoManualSchema = z.object({
+  simular: z.boolean(),
+  confirmar: z.boolean().optional(),
+});
+
+export const mensagemAutomaticaUpdateSchema = z.object({
+  chave: z.string().trim().min(1).max(60),
+  conteudo: z.string().max(1500).optional(),
+  ativo: z.boolean().optional(),
+});
+
+export const avisosPedidoSchema = z.object({ ativo: z.boolean() });

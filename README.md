@@ -78,6 +78,9 @@ Todas as rotas abaixo exigem o header `Authorization: Bearer <N8N_WEBHOOK_SECRET
 - `POST /api/webhooks/pedido` — cria pedido (e cliente/produtos se necessário) quando uma venda é confirmada pela IA
 - `POST /api/webhooks/cliente` — cria ou atualiza um cliente a partir de uma nova interação
 - `POST /api/webhooks/mensagem` — registra no Chat ao vivo cada mensagem trocada no WhatsApp/Instagram (do cliente ou da IA), criando cliente/conversa se necessário
+- `POST /api/webhooks/tarefa` — abre uma tarefa na Central de Tarefas (com `chave_dedup` não duplica)
+- `POST /api/ia/ferramentas` — ferramentas controladas da IA (`consultar_pedidos`, `consultar_produto`, `registrar_pendencia`), sempre limitadas ao cliente da conversa
+- `POST /api/automacoes/recuperacao-ia` — plano B da rotina das 22h (se o pg_cron não estiver disponível)
 - `GET /api/templates` — lista os templates de mensagem cadastrados
 - `POST /api/campanhas/:id/status` — confirma o envio (ou outro status) de uma campanha (só o fluxo antigo de disparo usa)
 - `POST /api/campanhas/processar` — rodada do disparo de campanhas; o fluxo `n8n/tick-campanhas.json` chama a cada 2 min
@@ -129,6 +132,29 @@ Quadro com 3 colunas:
 Uma encomenda em "Aguardando chegar" ou "Chegou" também pode ser cancelada (`cancelada`) — some do quadro, mas fica no histórico (Configurações → Atividade).
 
 O aviso automático só dispara uma vez por encomenda (na transição pra "chegou" — mudar o status de novo não reenvia); se o N8N não estiver configurado, o status muda normalmente e só a notificação por WhatsApp é pulada. Rota: `POST /api/encomendas/:id/status`, autenticada por sessão.
+
+## Estado da IA, rotina das 22h e Central de Tarefas
+
+Diagnóstico completo do "IA travando sem motivo" em `docs/diagnostico-ia-travando.md`.
+
+- **Resposta pelo Chat ao vivo pausa a IA por 10 min** (renova a cada resposta; `configuracoes.ia_pausa_resposta_humana_minutos`) e ela volta sozinha. Antes travava pra sempre.
+- **Botão Travar** = trava sem prazo, respeitada pela rotina das 22h. **Bloquear número** = nunca liberado automaticamente.
+- **Transferência da IA** (`chamar_atendente`) = trava sem prazo, liberada às 22h.
+- Toda mudança fica em `conversa_eventos_ia` (motivo, quem, quando) e aparece em **Operações da IA**.
+- **Rotina das 22h (Salvador)**: `recuperar_atendimentos_ia()` via pg_cron, idempotente, não envia mensagem. Pode ser simulada e executada à mão no painel Operações (só a dona, com confirmação).
+- **Central de Tarefas** (`/tarefas`): tarefas abertas pela IA, automações (pedido parado há 90 min, falha de aviso, falha da rotina) e pela equipe, com histórico, SLA e dedup.
+- **Mensagens automáticas** (Operações): textos dos avisos de pedido/encomenda editáveis com pré-visualização. Avisos de pedido começam **desligados**.
+
+### Implantação (nesta ordem)
+
+1. No SQL editor do Supabase: `supabase/migrations/20261105_central_tarefas.sql`, depois `20261105_ia_estado_e_recuperacao_22h.sql`, depois `20261105_mensagens_automaticas_pedidos.sql`. Se aparecer o aviso de pg_cron indisponível, ative em Database → Extensions → **pg_cron** e rode as duas primeiras de novo.
+2. Publique o CRM. (O código funciona mesmo se publicado antes das migrações — cai no comportamento antigo.)
+3. Aplique os ajustes do N8N em `docs/n8n-ajustes.md` (recomendado, não obrigatório).
+
+### Testes
+
+- `npm test` — regras de estado, templates, telefone, eventos de pedido.
+- `npm run test:sql` — monta um Postgres **local e descartável** (variáveis `PGHOST`/`PGPORT`/`PGUSER`) com o schema e todas as migrações e roda as verificações do banco. Nunca apontar para produção.
 
 ## Vitória AI (widget flutuante de referência farmacêutica)
 

@@ -1,3 +1,5 @@
+import type { MotivoIa } from "@/lib/ia/estado";
+
 export type UsuarioRole = "dona" | "funcionaria";
 export type OrigemChat = "whatsapp" | "instagram";
 export type PedidoStatus = "novo" | "separando" | "pronto" | "entregue";
@@ -12,6 +14,7 @@ export type ClientesAlvo = "todos" | "por_filtro";
 export type CampanhaStatus = "rascunho" | "agendada" | "enviada" | "pausada";
 export type ConfiguracaoTipo = "string" | "number" | "boolean" | "json";
 export type TagCor = "blue" | "green" | "yellow" | "gray" | "red" | "purple";
+export type { EstadoIa, MotivoIa } from "@/lib/ia/estado";
 
 export type Usuario = {
   id: string;
@@ -141,6 +144,16 @@ export type Conversa = {
   ultima_mensagem_em?: string | null;
   ultima_mensagem_remetente?: Remetente | null;
   ultima_mensagem_tipo?: TipoMensagem | null;
+  /**
+   * Estado da IA (migração 20261105_ia_estado_e_recuperacao_22h.sql). Com
+   * status "aguardando_humano": ia_pausada_ate = fim da pausa (null = trava
+   * sem prazo). Ver src/lib/ia/estado.ts.
+   */
+  ia_pausada_ate?: string | null;
+  ia_motivo?: MotivoIa | null;
+  ia_motivo_em?: string | null;
+  ia_ator?: string | null;
+  ia_evento_id?: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -157,6 +170,8 @@ export type Mensagem = {
   midia_path: string | null;
   midia_nome: string | null;
   midia_mime: string | null;
+  /** Id da mensagem no WhatsApp (único) — evita gravar o mesmo evento duas vezes. */
+  externo_id?: string | null;
   criado_em: string;
 }
 
@@ -286,7 +301,13 @@ export type AuditAcao =
   | "clientes_duplicados_mesclados"
   | "vitrine_item_criado"
   | "vitrine_item_atualizado"
-  | "vitrine_item_excluido";
+  | "vitrine_item_excluido"
+  | "tarefa_criada"
+  | "tarefa_atualizada"
+  | "ia_recuperacao_executada"
+  | "ia_ferramenta_executada"
+  | "mensagens_automaticas_atualizadas"
+  | "notificacoes_pedido_alteradas";
 
 export type AuditLog = {
   id: string;
@@ -304,6 +325,110 @@ export type ConsultaFarmaceutica = {
   pergunta: string;
   resposta: string | null;
   criado_em: string;
+}
+
+export type ConversaEventoIa = {
+  id: string;
+  conversa_id: string;
+  estado_anterior: string | null;
+  estado_novo: string;
+  status_anterior: string | null;
+  status_novo: string | null;
+  motivo: string | null;
+  ator: string | null;
+  evento_id: string | null;
+  pausada_ate: string | null;
+  criado_em: string;
+}
+
+export type RotinaExecucao = {
+  id: string;
+  rotina: string;
+  origem: "agendada" | "manual";
+  data_referencia: string;
+  status: "executando" | "concluida" | "falhou";
+  ator: string | null;
+  resultado: Record<string, unknown> | null;
+  erro: string | null;
+  iniciada_em: string;
+  finalizada_em: string | null;
+}
+
+export type TarefaStatus =
+  | "PENDENTE"
+  | "EM_ANDAMENTO"
+  | "AGUARDANDO_CLIENTE"
+  | "AGUARDANDO_APROVACAO"
+  | "CONCLUIDA"
+  | "CANCELADA";
+export type TarefaPrioridade = "baixa" | "media" | "alta" | "urgente";
+export type TarefaCategoria =
+  | "pedido_atrasado"
+  | "produto_indisponivel"
+  | "reclamacao"
+  | "pagamento_pendente"
+  | "erro_integracao"
+  | "atendimento"
+  | "estoque"
+  | "outro";
+export type TarefaOrigem = "ia" | "automacao" | "manual" | "sistema";
+
+export type Tarefa = {
+  id: string;
+  numero: number;
+  titulo: string;
+  descricao: string | null;
+  categoria: TarefaCategoria;
+  prioridade: TarefaPrioridade;
+  status: TarefaStatus;
+  responsavel_id: string | null;
+  cliente_id: string | null;
+  pedido_id: string | null;
+  conversa_id: string | null;
+  origem: TarefaOrigem;
+  prazo: string | null;
+  observacoes: string | null;
+  sugestao_ia: string | null;
+  chave_dedup: string | null;
+  contexto: Record<string, unknown> | null;
+  criado_por: string | null;
+  concluida_em: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+export type TarefaHistorico = {
+  id: string;
+  tarefa_id: string;
+  acao: string;
+  de: string | null;
+  para: string | null;
+  ator: string | null;
+  detalhes: Record<string, unknown> | null;
+  criado_em: string;
+}
+
+export type MensagemAutomatica = {
+  chave: string;
+  titulo: string;
+  descricao: string | null;
+  conteudo: string;
+  ativo: boolean;
+  atualizado_por: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+export type PedidoNotificacao = {
+  id: string;
+  pedido_id: string | null;
+  encomenda_id: string | null;
+  evento: string;
+  status: "reservada" | "enviada" | "falhou" | "ignorada";
+  mensagem_id: string | null;
+  motivo: string | null;
+  criado_em: string;
+  atualizado_em: string;
 }
 
 type Relationship = {
@@ -454,6 +579,37 @@ export interface Database {
         ]
       >;
       configuracoes: TableDef<Configuracao>;
+      conversa_eventos_ia: TableDef<ConversaEventoIa>;
+      rotinas_execucoes: TableDef<RotinaExecucao>;
+      tarefas: TableDef<
+        Tarefa,
+        [
+          {
+            foreignKeyName: "tarefas_cliente_id_fkey";
+            columns: ["cliente_id"];
+            isOneToOne: false;
+            referencedRelation: "clientes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tarefas_pedido_id_fkey";
+            columns: ["pedido_id"];
+            isOneToOne: false;
+            referencedRelation: "pedidos";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tarefas_responsavel_id_fkey";
+            columns: ["responsavel_id"];
+            isOneToOne: false;
+            referencedRelation: "usuarios";
+            referencedColumns: ["id"];
+          },
+        ]
+      >;
+      tarefa_historico: TableDef<TarefaHistorico>;
+      mensagens_automaticas: TableDef<MensagemAutomatica>;
+      pedido_notificacoes: TableDef<PedidoNotificacao>;
       login_tentativas: TableDef<LoginTentativa>;
       audit_log: TableDef<
         AuditLog,
@@ -482,6 +638,14 @@ export interface Database {
     };
     Views: Record<never, never>;
     Functions: {
+      deve_ia_responder: { Args: { telefone_busca: string }; Returns: boolean };
+      buscar_produtos: { Args: { termo: string }; Returns: Produto[] };
+      recuperar_atendimentos_ia: {
+        Args: { p_origem?: "agendada" | "manual"; p_simular?: boolean; p_ator?: string };
+        Returns: Record<string, unknown>;
+      };
+      painel_operacoes_ia: { Args: Record<string, never>; Returns: Record<string, unknown> };
+      abrir_tarefa: { Args: { p: Record<string, unknown> }; Returns: { id: string; numero: number; criada: boolean } };
       filtrar_clientes_campanha: {
         Args: { filtro: FiltroCampanha | null };
         Returns: { id: string; nome: string; telefone: string; origem_chat: string | null }[];

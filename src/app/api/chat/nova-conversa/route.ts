@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { novaConversaSchema } from "@/lib/validation";
 import { telefoneParaWhatsapp } from "@/lib/telefone";
 import { logAudit } from "@/lib/audit";
+import { travarIaSemPrazo } from "@/lib/ia/pausa";
 
 /**
  * POST /api/chat/nova-conversa  { nome, telefone, conteudo }
@@ -120,10 +121,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não foi possível registrar a mensagem." }, { status: 500 });
   }
 
-  await supabase
-    .from("conversas")
-    .update({ atualizado_em: new Date().toISOString(), status: "aguardando_humano" })
-    .eq("id", conversaId);
+  // Conversa puxada pela equipe: fica com ela, sem prazo (a rotina das 22h ou o
+  // botão Destravar devolvem pra IA). O motivo fica registrado.
+  await travarIaSemPrazo(supabase, conversaId, "nova_conversa_crm", `usuario:${usuario.id}`, {
+    atualizado_em: new Date().toISOString(),
+  });
 
   // 4. Entrega pelo N8N → uazapi (mesmo webhook e formato do /api/chat/enviar)
   const service = createServiceClient();

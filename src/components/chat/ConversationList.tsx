@@ -10,25 +10,17 @@ import { Avatar } from "@/components/ui/Avatar";
 import { CLASSIFICACAO_POR_VALOR } from "./classificacao";
 import { SkeletonListaConversas } from "./Skeletons";
 import type { ConversaDaLista } from "@/lib/chat/conversas";
+import { estadoIa, type EstadoIa } from "@/lib/ia/estado";
 
-const STATUS_VARIANT = {
-  aberta: "blue",
-  aguardando_humano: "yellow",
-  fechada: "gray",
-} as const;
-
-const STATUS_LABEL = {
-  aberta: "IA ativa",
-  aguardando_humano: "Precisa de você",
-  fechada: "Fechada",
-} as const;
-
-/** Barrinha colorida na lateral do item, na cor do status da conversa. */
-const STATUS_BARRA = {
-  aberta: "bg-gradient-to-b from-brand-400 to-brand-600",
-  aguardando_humano: "bg-gradient-to-b from-amber-400 to-orange-500",
-  fechada: "bg-gradient-to-b from-slate-300 to-slate-400",
-} as const;
+/** Visual de cada estado da IA na lista (ver src/lib/ia/estado.ts). */
+const ESTADO_VISUAL: Record<EstadoIa, { variante: "blue" | "yellow" | "gray" | "purple" | "red"; rotulo: string; barra: string }> = {
+  IA_ATIVA: { variante: "blue", rotulo: "IA ativa", barra: "bg-gradient-to-b from-brand-400 to-brand-600" },
+  PAUSA_TEMPORARIA: { variante: "purple", rotulo: "IA pausada", barra: "bg-gradient-to-b from-violet-400 to-purple-500" },
+  HUMANO_ASSUMIU: { variante: "yellow", rotulo: "Precisa de você", barra: "bg-gradient-to-b from-amber-400 to-orange-500" },
+  // O bloqueio do número já tem ícone próprio; o selo mostra o estado da conversa.
+  BLOQUEADA: { variante: "red", rotulo: "IA bloqueada", barra: "bg-gradient-to-b from-red-400 to-red-500" },
+  ENCERRADA: { variante: "gray", rotulo: "Fechada", barra: "bg-gradient-to-b from-slate-300 to-slate-400" },
+};
 
 // Abas no estilo do WhatsApp: "Não lidos" olha o contador de mensagens não
 // abertas; as outras três olham a classificação escolhida pela equipe.
@@ -215,6 +207,8 @@ const ItemConversa = memo(function ItemConversa({
 }) {
   const naoLidas = conversa.nao_lidas ?? 0;
   const classificacao = CLASSIFICACAO_POR_VALOR[conversa.classificacao ?? "aberta"];
+  // O número bloqueado já aparece no ícone vermelho; aqui o selo é o da conversa.
+  const visual = ESTADO_VISUAL[estadoIa(conversa)];
   return (
     <Link
       href={`/chat/${conversa.id}`}
@@ -228,7 +222,7 @@ const ItemConversa = memo(function ItemConversa({
         aria-hidden
         className={cn(
           "absolute inset-y-2 left-1.5 w-1 rounded-full transition-opacity",
-          STATUS_BARRA[conversa.status],
+          visual.barra,
           selecionada ? "opacity-100" : "opacity-40"
         )}
       />
@@ -269,12 +263,12 @@ const ItemConversa = memo(function ItemConversa({
             <MessageSquare size={12} className="shrink-0 text-emerald-500 dark:text-emerald-400" />
           )}
           <Badge
-            variant={STATUS_VARIANT[conversa.status]}
+            variant={visual.variante}
             className="text-[10px]"
             comBolinha
-            pulsando={conversa.status === "aguardando_humano"}
+            pulsando={visual.rotulo === "Precisa de você"}
           >
-            {STATUS_LABEL[conversa.status]}
+            {visual.rotulo}
           </Badge>
           {classificacao.valor !== "aberta" && (
             <Badge variant={classificacao.variante} className="text-[10px]">

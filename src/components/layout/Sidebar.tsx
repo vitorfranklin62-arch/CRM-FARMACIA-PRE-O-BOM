@@ -14,6 +14,8 @@ import {
   Settings,
   Boxes,
   Store,
+  ListChecks,
+  Activity,
   ChevronLeft,
   ChevronRight,
   type LucideIcon,
@@ -36,12 +38,14 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, donaOnly: true },
   { href: "/pedidos", label: "Pedidos", icon: Package },
   { href: "/encomendas", label: "Encomendas", icon: PackageSearch },
+  { href: "/tarefas", label: "Tarefas", icon: ListChecks },
   { href: "/chat", label: "Chat ao vivo", icon: MessageCircle },
   { href: "/produtos", label: "Produtos", icon: Boxes },
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/campanhas", label: "Campanhas", icon: Megaphone, donaOnly: true },
   { href: "/vitrine", label: "Vitrine", icon: Store, donaOnly: true },
   { href: "/templates", label: "Templates", icon: FileText },
+  { href: "/operacoes", label: "Operações da IA", icon: Activity, donaOnly: true },
   { href: "/configuracoes", label: "Configurações", icon: Settings, donaOnly: true },
 ];
 
