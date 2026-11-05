@@ -578,4 +578,6 @@ begin
   else
     raise notice 'pg_cron não está disponível neste banco: ative em Database → Extensions → pg_cron e rode esta migração de novo, OU agende no N8N um POST diário às 22:00 para /api/automacoes/recuperacao-ia (ver docs/n8n-ajustes.md).';
   end if;
+exception when others then
+  raise notice 'Não foi possível agendar no pg_cron (%). Tudo o mais foi instalado; o agendamento da rotina das 22h (o fluxo do N8N "Reativar IA às 22h" cobre) fica pendente.', sqlerrm;
 end $$;

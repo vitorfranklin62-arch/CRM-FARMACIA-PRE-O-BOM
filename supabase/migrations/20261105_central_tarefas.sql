@@ -352,4 +352,6 @@ begin
   else
     raise notice 'pg_cron não está disponível neste banco: ative em Database → Extensions → pg_cron e rode esta migração de novo para agendar a verificação de pedidos atrasados.';
   end if;
+exception when others then
+  raise notice 'Não foi possível agendar no pg_cron (%). Tudo o mais foi instalado; o agendamento da verificação de pedidos atrasados fica pendente.', sqlerrm;
 end $$;
