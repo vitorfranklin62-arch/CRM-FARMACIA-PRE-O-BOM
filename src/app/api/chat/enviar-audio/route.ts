@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { gerarUrlAssinada, guardarAudioDaEquipe, removerMidia } from "@/lib/chat-midia";
+import { pausarIaPorRespostaHumana } from "@/lib/ia/pausa";
 
 const CONTEUDO_AUDIO = "[Áudio enviado pela equipe]";
 
@@ -135,10 +136,7 @@ export async function POST(request: Request) {
   } catch {
     // Sem resposta (timeout/rede): o N8N pode ter entregue. Mantém tudo salvo
     // e avisa a tela pra não reenviar às cegas.
-    await supabase
-      .from("conversas")
-      .update({ atualizado_em: new Date().toISOString(), status: "aguardando_humano" })
-      .eq("id", conversa_id);
+    await pausarIaPorRespostaHumana(supabase, conversa_id, usuario.id);
     return NextResponse.json({ id: mensagem.id, enviado: false, incerto: true }, { status: 201 });
   }
 
@@ -150,11 +148,8 @@ export async function POST(request: Request) {
     );
   }
 
-  // Mesmo efeito do envio de texto: humano assumiu, a IA não responde por cima.
-  await supabase
-    .from("conversas")
-    .update({ atualizado_em: new Date().toISOString(), status: "aguardando_humano" })
-    .eq("id", conversa_id);
+  // Mesmo efeito do envio de texto: pausa a IA por alguns minutos (volta sozinha).
+  await pausarIaPorRespostaHumana(supabase, conversa_id, usuario.id);
 
   return NextResponse.json({ id: mensagem.id, enviado: true }, { status: 201 });
 }

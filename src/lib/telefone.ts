@@ -36,3 +36,25 @@ export function formatarTelefone(telefone: string | null | undefined): string {
   if (nacional.length === 10) return `(${nacional.slice(0, 2)}) ${nacional.slice(2, 6)}-${nacional.slice(6)}`;
   return digitos ? `+${digitos}` : telefone;
 }
+
+/**
+ * Formas em que o MESMO número brasileiro pode estar salvo: com/sem 55 e
+ * com/sem o 9º dígito (o WhatsApp entrega números antigos sem o 9). Mesma
+ * regra da função `variantes_telefone_br` do banco.
+ */
+export function variantesTelefoneBr(telefone: string): string[] {
+  const d = normalizarTelefone(telefone);
+  if (!d) return [];
+  const v = new Set([d]);
+  const nacional = (d.length === 12 || d.length === 13) && d.startsWith("55") ? d.slice(2) : d;
+  if (nacional.length !== 10 && nacional.length !== 11) return Array.from(v);
+  v.add(nacional).add(`55${nacional}`);
+  if (nacional.length === 11 && nacional[2] === "9") {
+    const sem9 = nacional.slice(0, 2) + nacional.slice(3);
+    v.add(sem9).add(`55${sem9}`);
+  } else if (nacional.length === 10 && "6789".includes(nacional[2])) {
+    const com9 = `${nacional.slice(0, 2)}9${nacional.slice(2)}`;
+    v.add(com9).add(`55${com9}`);
+  }
+  return Array.from(v);
+}

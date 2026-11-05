@@ -38,6 +38,12 @@ const ACAO_LABEL: Record<AuditAcao, string> = {
   vitrine_item_criado: "Criou item na vitrine",
   vitrine_item_atualizado: "Atualizou item na vitrine",
   vitrine_item_excluido: "Excluiu item da vitrine",
+  tarefa_criada: "Criou tarefa",
+  tarefa_atualizada: "Atualizou tarefa",
+  ia_recuperacao_executada: "Reativou a IA nas conversas (painel Operações)",
+  ia_ferramenta_executada: "IA usou uma ferramenta do sistema",
+  mensagens_automaticas_atualizadas: "Editou mensagem automática",
+  notificacoes_pedido_alteradas: "Ligou/desligou avisos automáticos de pedido",
 };
 
 const ENTIDADE_LABEL: Record<string, string> = {

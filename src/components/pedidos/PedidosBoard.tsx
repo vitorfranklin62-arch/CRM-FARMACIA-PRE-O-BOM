@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { logAudit } from "@/lib/audit";
 import { ehHoje, formatCurrency } from "@/lib/utils";
 import { ColunaKanban } from "@/components/kanban/ColunaKanban";
 import { BarraFinalizar } from "@/components/kanban/BarraFinalizar";
@@ -51,13 +50,17 @@ export function PedidosBoard({ initialPedidos }: { initialPedidos: PedidoComplet
       // pode ficar esperando a ida e volta pra ver o cartão sair do lugar.
       setPedidos((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)));
 
-      const supabase = createClient();
-      const { error } = await supabase.from("pedidos").update({ status }).eq("id", id);
-
-      if (error) {
+      // A rota grava o status, registra no histórico e — se os avisos
+      // automáticos estiverem ligados — avisa o cliente pelo WhatsApp.
+      try {
+        const res = await fetch(`/api/pedidos/${id}/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        });
+        if (!res.ok) router.refresh();
+      } catch {
         router.refresh();
-      } else {
-        await logAudit(supabase, "pedido_status_atualizado", "pedidos", id, { status });
       }
       setUpdatingId(null);
     },

@@ -13,6 +13,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { codigoPedido } from "@/lib/mensagens/template";
 import { formatCurrency, formatDateTime, formatRelativeTime, cn } from "@/lib/utils";
 import { ETAPAS } from "./etapas";
 import type { PedidoCompleto } from "@/types/relations";
@@ -88,7 +89,10 @@ export function PedidoCard({
               {pedido.clientes?.nome ?? "Cliente"}
             </p>
             <p className="text-xs font-medium text-gray-400 dark:text-gray-500">
-              {formatRelativeTime(pedido.criado_em)}
+              <span className="font-mono" title="Código do pedido (o mesmo que vai nas mensagens ao cliente)">
+                #{codigoPedido(pedido.id)}
+              </span>{" "}
+              · {formatRelativeTime(pedido.criado_em)}
             </p>
           </div>
         </div>
