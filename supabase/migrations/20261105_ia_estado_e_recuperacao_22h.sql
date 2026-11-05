@@ -531,15 +531,27 @@ grant execute on function recuperar_atendimentos_ia(text, boolean, text) to serv
 -- ----------------------------------------------------------------------------
 create or replace function painel_operacoes_ia()
 returns jsonb as $$
+  -- Lê a última mensagem direto de `mensagens` (e não das colunas de prévia
+  -- de 20261024_chat_previa_ultima_mensagem.sql), pra funcionar mesmo em
+  -- banco onde aquela migração ainda não foi rodada.
   with ult as (
-    select c.status, c.ia_pausada_ate, c.ia_motivo, cl.ia_bloqueada,
-           c.ultima_mensagem_remetente, c.ultima_mensagem_em
+    select c.id, c.status, c.ia_pausada_ate, c.ia_motivo, cl.ia_bloqueada
     from (
-      select distinct on (cliente_id) *
+      select distinct on (cliente_id) id, cliente_id, status, ia_pausada_ate, ia_motivo
       from conversas
       order by cliente_id, criado_em desc
     ) c
     join clientes cl on cl.id = c.cliente_id
+  ),
+  com_ultima as (
+    select u.*, m.remetente as ult_remetente, m.criado_em as ult_em
+    from ult u
+    left join lateral (
+      select remetente, criado_em from mensagens
+      where conversa_id = u.id
+      order by criado_em desc
+      limit 1
+    ) m on true
   )
   select jsonb_build_object(
     'ativas', count(*) filter (where estado_ia(status, ia_pausada_ate, ia_bloqueada) = 'IA_ATIVA'),
@@ -551,13 +563,13 @@ returns jsonb as $$
     -- respondeu: forte sinal de falha no fluxo (erro no N8N, IA fora do ar).
     'sem_resposta', count(*) filter (
       where estado_ia(status, ia_pausada_ate, ia_bloqueada) = 'IA_ATIVA'
-        and ultima_mensagem_remetente = 'cliente'
-        and ultima_mensagem_em < now() - interval '15 minutes'
-        and ultima_mensagem_em > now() - interval '24 hours'
+        and ult_remetente = 'cliente'
+        and ult_em < now() - interval '15 minutes'
+        and ult_em > now() - interval '24 hours'
     ),
     'gerado_em', now()
   )
-  from ult;
+  from com_ultima;
 $$ language sql stable security definer set search_path = public;
 
 -- Só o servidor (service role) chama, depois de conferir que é a dona.
