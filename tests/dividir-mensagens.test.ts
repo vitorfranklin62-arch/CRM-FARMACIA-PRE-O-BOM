@@ -55,3 +55,8 @@ test("nome de produto em MAIÚSCULAS vira texto normal, siglas curtas ficam", ()
   assert.deepEqual(baloes("Tenho CLONAZEPAM 2MG 30 CP por R$ 13,95"), ["Tenho Clonazepam 2mg 30 CP por R$ 13,95"]);
   assert.deepEqual(baloes("Chave Pix (CNPJ): 13549736000165"), ["Chave Pix (CNPJ): 13549736000165"]);
 });
+
+test("siglas como CNPJ e SAMU não viram minúsculas", () => {
+  assert.deepEqual(baloes("Pix (CNPJ 13549736000165), dinheiro ou cartão."), ["Pix (CNPJ 13549736000165), dinheiro ou cartão."]);
+  assert.deepEqual(baloes("Liga pro SAMU 192 agora, tá?"), ["Liga pro SAMU 192 agora, tá?"]);
+});

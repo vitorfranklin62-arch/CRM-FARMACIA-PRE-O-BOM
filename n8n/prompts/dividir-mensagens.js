@@ -8,11 +8,14 @@ const NOME = '(?:,\\s*[A-ZÀ-Ý][a-zà-ÿ]+(?:\\s+[A-ZÀ-Ý][a-zà-ÿ]+)?)?';
 const MULETA = new RegExp('^(?:Perfeito|Ótimo|Ótima|Entendi)' + NOME + '(?:\\s*[!.,]+|\\s*(?=\\p{Extended_Pictographic})|\\s*$)\\s*', 'u');
 // Balão que é SÓ concordância ("Beleza, Marcos 😄", "Certo!"): sai se houver outros balões.
 const SO_CONCORDA = new RegExp('^(?:Beleza|Certo|Certinho|Tá certo|Show|Combinado|Ok|Opa|Oba|Massa)' + NOME + '\\s*[!.,]*\\s*[\\p{Extended_Pictographic}\\uFE0F\\s]*$', 'u');
+// Siglas que sempre ficam em maiúsculas.
+const SIGLAS = /^(?:CNPJ|CPF|PIX|SAMU|CEP|CRM|SUS|UPA|UBS|ANVISA|RG)$/;
 // "LOSARTANA POTASSICA EMS" -> "Losartana potassica EMS" (nome de produto copiado do cadastro).
 const suavizarMaiusculas = (s) => s.replace(/\b[A-ZÀ-Ý0-9]{2,}(?:[ \/.-]+[A-ZÀ-Ý0-9]{2,})+\b/g, (trecho) => {
   if (!/[A-ZÀ-Ý]{4,}/.test(trecho)) return trecho; // siglas curtas (CNPJ 123, SP) ficam como estão
   let primeira = true;
   return trecho.replace(/[A-ZÀ-Ý0-9]+/g, (p) => {
+    if (SIGLAS.test(p)) { primeira = false; return p; } // CNPJ, SAMU etc. nunca mudam
     let r = /\d/.test(p) || p.length > 3 ? p.toLowerCase() : p; // EMS, GE continuam em maiúscula
     if (primeira && /^[a-zà-ÿ]/.test(r)) r = r.charAt(0).toUpperCase() + r.slice(1);
     primeira = false;
