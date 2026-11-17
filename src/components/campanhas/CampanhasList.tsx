@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Megaphone, Send, Pause } from "lucide-react";
+import { Plus, Megaphone, Send, Pause, ImageIcon, Eye } from "lucide-react";
 import { Table, type Column } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { CampanhaForm } from "./CampanhaForm";
+import { CampanhaDetalhes } from "./CampanhaDetalhes";
 import { formatDateTime } from "@/lib/utils";
 import type { Campanha, CampanhaLote, FiltroCampanha } from "@/types/database";
 
@@ -50,13 +51,17 @@ export function CampanhasList({
   userId,
   resumo = {},
   loteAberto = {},
+  imagens = {},
 }: {
   campanhas: Campanha[];
   userId: string;
   resumo?: Record<string, ResumoEnvio>;
   loteAberto?: Record<string, CampanhaLote>;
+  /** midia_path → link temporário (1h) pra mostrar a imagem na tela. */
+  imagens?: Record<string, string>;
 }) {
   const [open, setOpen] = useState(false);
+  const [detalhe, setDetalhe] = useState<Campanha | null>(null);
   const [disparando, setDisparando] = useState<string | null>(null);
   const router = useRouter();
 
@@ -97,10 +102,19 @@ export function CampanhasList({
     {
       header: "Campanha",
       accessor: (c) => (
-        <div>
-          <p className="font-medium text-gray-900 dark:text-white">{c.titulo}</p>
-          <p className="max-w-sm truncate text-xs text-gray-400 dark:text-gray-500">{c.mensagem}</p>
-        </div>
+        <button type="button" onClick={() => setDetalhe(c)} className="text-left">
+          <p className="flex items-center gap-1.5 font-medium text-gray-900 hover:text-brand-700 dark:text-white">
+            {c.midia_path && (
+              <span title="Campanha com imagem" className="text-brand-600 dark:text-brand-300">
+                <ImageIcon size={14} aria-label="Com imagem" />
+              </span>
+            )}
+            {c.titulo}
+          </p>
+          <p className="max-w-sm truncate text-xs text-gray-400 dark:text-gray-500">
+            {c.mensagem || (c.midia_path ? "Somente imagem" : "")}
+          </p>
+        </button>
       ),
     },
     {
@@ -150,10 +164,20 @@ export function CampanhasList({
     {
       header: "",
       accessor: (c) => {
-        if (c.status === "enviada") return null;
+        const verDetalhes = (
+          <button
+            onClick={() => setDetalhe(c)}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/5"
+          >
+            <Eye size={13} /> Detalhes
+          </button>
+        );
+        if (c.status === "enviada") return <div className="flex justify-end">{verDetalhes}</div>;
         // Em andamento: dá pra pausar. Rascunho/pausada: dá pra disparar/retomar.
         if (c.status === "agendada" && (loteAberto[c.id] || resumo[c.id])) {
           return (
+            <div className="flex justify-end gap-1">
+            {verDetalhes}
             <button
               onClick={() => handlePausar(c)}
               disabled={disparando === c.id}
@@ -161,9 +185,12 @@ export function CampanhasList({
             >
               <Pause size={13} /> {disparando === c.id ? "Pausando..." : "Pausar"}
             </button>
+            </div>
           );
         }
         return (
+          <div className="flex justify-end gap-1">
+          {verDetalhes}
           <button
             onClick={() => handleDisparar(c)}
             disabled={disparando === c.id}
@@ -171,6 +198,7 @@ export function CampanhasList({
           >
             <Send size={13} /> {disparando === c.id ? "Disparando..." : c.status === "pausada" ? "Retomar" : "Disparar agora"}
           </button>
+          </div>
         );
       },
       className: "text-right",
@@ -198,6 +226,11 @@ export function CampanhasList({
       )}
 
       <CampanhaForm open={open} onClose={() => setOpen(false)} userId={userId} />
+      <CampanhaDetalhes
+        campanha={detalhe}
+        imagemUrl={detalhe?.midia_path ? (imagens[detalhe.midia_path] ?? null) : null}
+        onClose={() => setDetalhe(null)}
+      />
     </Card>
   );
 }

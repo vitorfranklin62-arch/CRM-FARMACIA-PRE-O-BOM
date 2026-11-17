@@ -57,6 +57,18 @@ uazapi messages_update ─→ /api/webhooks/uazapi → entregue_em / lido_em
 | 10 | Disjuntor: 5 falhas seguidas pausam a campanha | rodada |
 | 11 | Rodapé "responda SAIR" + filtro de opt-out | `regras.ts` + `aceita_campanhas` |
 
+### Campanhas com imagem (novembro/2026)
+
+Nada muda no N8N. A imagem entra no mesmo lote, no mesmo ritmo e com as
+mesmas travas: cada item do `/sender/advanced` vira
+`{ number, type: "image", file: <link assinado>, text: <legenda personalizada> }`.
+O link é gerado na hora de montar cada lote, vale 30 dias, e um lote com
+imagem pausado há quase isso é apagado na uazapi (`/sender/edit` `delete`) e
+refeito com link novo — quem já recebeu não recebe de novo. Se a imagem sumir
+do Storage, a campanha é pausada com o motivo em vez de mandar foto quebrada.
+Antes de disparar, use **Enviar teste** na Nova campanha (vai só pro número
+digitado).
+
 **Pausar / Retomar** na tela de Campanhas usam `POST /sender/edit` (`stop` /
 `continue`): o lote para na uazapi e continua de onde parou.
 

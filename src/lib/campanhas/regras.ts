@@ -172,20 +172,56 @@ function primeiroNome(nomeCliente: string | null | undefined): string {
   return primeiro;
 }
 
-/** Aplica {{nome}} e {{saudacao}} e acrescenta o rodapé de descadastro (uma vez só). */
-export function montarTexto(mensagem: string, nomeCliente: string | null | undefined): string {
+/** Variáveis que o disparo de campanhas entende. Qualquer outra iria literal pro cliente. */
+export const VARIAVEIS_CAMPANHA = ["nome", "saudacao"] as const;
+
+/** Variáveis {{...}} da mensagem que o disparo NÃO sabe preencher (ex.: "{{cupom}}"). */
+export function variaveisDesconhecidas(mensagem: string): string[] {
+  const conhecidas = new Set<string>(VARIAVEIS_CAMPANHA);
+  const achadas = Array.from(mensagem.matchAll(/\{\{\s*([^{}]*?)\s*\}\}/g), (m) => m[1].toLowerCase());
+  return Array.from(new Set(achadas.filter((v) => !conhecidas.has(v))));
+}
+
+/**
+ * Aplica {{nome}} e {{saudacao}} e acrescenta o rodapé de descadastro (uma vez só).
+ * Campanha só de imagem (mensagem vazia) vira legenda só com o rodapé.
+ * `saudacaoFixa` é pra prévia da tela não ficar trocando "Oi"/"Olá" a cada tecla.
+ */
+export function montarTexto(
+  mensagem: string,
+  nomeCliente: string | null | undefined,
+  opcoes: { saudacaoFixa?: string } = {}
+): string {
   const primeiro = primeiroNome(nomeCliente);
-  let texto = mensagem.replace(/\{\{\s*saudacao\s*\}\}/gi, sortear(CFG.saudacoes));
+  // Sorteado UMA vez por mensagem (igual a antes): duas {{saudacao}} saem iguais.
+  const saudacao = opcoes.saudacaoFixa ?? sortear(CFG.saudacoes);
+  const semNome = opcoes.saudacaoFixa ? `${opcoes.saudacaoFixa}!` : sortear(CFG.saudacoesSemNome);
+  let texto = mensagem.replace(/\{\{\s*saudacao\s*\}\}/gi, () => saudacao);
 
   if (primeiro) {
     texto = texto.replace(/\{\{\s*nome\s*\}\}/gi, primeiro);
   } else {
     // Sem nome no cadastro, "Oi, !" fica ridículo — troca a frase inteira.
-    texto = texto.replace(/(oi|olá|ola)[,\s]*\{\{\s*nome\s*\}\}\s*!?/gi, sortear(CFG.saudacoesSemNome));
+    texto = texto.replace(/(oi|olá|ola)[,\s]*\{\{\s*nome\s*\}\}\s*!?/gi, () => semNome);
     texto = texto.replace(/\{\{\s*nome\s*\}\}/gi, "");
   }
 
   texto = texto.replace(/[ \t]{2,}/g, " ").trim();
-  if (CFG.rodapeOptout && !/responda\s+sair/i.test(texto)) texto += CFG.rodapeOptout;
+  if (CFG.rodapeOptout && !/responda\s+sair/i.test(texto)) texto = texto ? texto + CFG.rodapeOptout : CFG.rodapeOptout.trim();
   return texto;
+}
+
+/** Uma mensagem no formato da uazapi — o MESMO para o lote (/sender/advanced) e para o teste (/send/media, /send/text). */
+export type ItemUazapi =
+  | { number: string; type: "text"; text: string }
+  | { number: string; type: "image"; file: string; text: string };
+
+/**
+ * Monta a mensagem de um destinatário. Com imagem, sai UMA mensagem de foto com
+ * a legenda dentro (type "image" + file + text, docs.uazapi.com v2.6.9) — nunca
+ * foto e texto separados, nem a foto como documento.
+ */
+export function itemDaUazapi(numero: string, texto: string, linkImagem: string | null): ItemUazapi {
+  if (linkImagem) return { number: numero, type: "image", file: linkImagem, text: texto };
+  return { number: numero, type: "text", text: texto };
 }

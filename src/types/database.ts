@@ -203,6 +203,10 @@ export type Campanha = {
   status: CampanhaStatus;
   enviada_em: string | null;
   motivo_pausa: string | null;
+  /** Imagem da campanha no bucket privado "campanha-midia". null = campanha só de texto. */
+  midia_path: string | null;
+  midia_mime: "image/jpeg" | "image/png" | null;
+  midia_tamanho: number | null;
   criado_em: string;
   criado_por: string;
 }
@@ -291,6 +295,7 @@ export type AuditAcao =
   | "produto_excluido"
   | "campanha_disparada"
   | "campanha_pausada"
+  | "campanha_teste_enviado"
   | "estoque_importado"
   | "produtos_duplicados_removidos"
   | "produtos_fora_do_arquivo_removidos"
