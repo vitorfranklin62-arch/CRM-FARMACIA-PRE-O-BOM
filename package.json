@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test \"tests/*.test.ts\"",
+    "test": "node --import ./tests/apoio/registrar.mjs --test \"tests/*.test.ts\"",
     "test:sql": "bash supabase/tests/rodar.sh",
     "typecheck": "tsc --noEmit -p ."
   },

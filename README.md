@@ -89,6 +89,11 @@ Todas as rotas abaixo exigem o header `Authorization: Bearer <N8N_WEBHOOK_SECRET
 
 As campanhas saem pela fila nativa de "Mensagem em massa" da uazapi: o CRM monta lotes pequenos, entrega com `POST /sender/advanced` e acompanha cada mensagem (enviada, falhou, entregue, lida). Detalhes, proteções anti-ban e passo a passo da implantação em `n8n/README.md`.
 
+**Campanhas com imagem.** A Nova campanha aceita só texto, só imagem ou imagem com legenda (JPG/PNG/WEBP; WEBP e PNG viram JPG no navegador; até 5 MB). A imagem fica no bucket **privado** `campanha-midia` do Supabase Storage (`{campanha_id}/{imagem_id}.jpg`); a cada lote o CRM gera um link assinado (30 dias) e manda à uazapi **uma** mensagem `type: "image"` com `file` + `text` (legenda personalizada) — nunca foto e texto separados. Texto e imagem ficam travados no banco depois que o disparo começa. Migração: `supabase/migrations/20261117_campanhas_imagem.sql`.
+
+- `POST /api/campanhas/midia` / `DELETE /api/campanhas/midia` — sobe (confere tamanho e a assinatura real do arquivo) e apaga a imagem de uma campanha ainda não salva. Só a dona.
+- `POST /api/campanhas/teste` — "Enviar teste": manda a campanha montada só para o número informado (`/send/media` ou `/send/text`) e devolve a resposta real da uazapi. Não grava nada na campanha nem conta na cota. Só a dona, 6 testes a cada 10 min.
+
 - `POST /api/webhooks/uazapi` — recebe **direto da uazapi** os eventos `sender` (lote começou/terminou) e `messages_update` (recibos). Não usa o Bearer do N8N: a origem é provada pelo `token` da instância que vem no corpo, conferido contra `UAIZAP_API_KEY`. É registrado pelo botão "Ativar" na tela de Campanhas, como um webhook adicional (o webhook que leva as mensagens pro N8N não muda).
 
 ### Chat ao vivo (CRM → N8N)

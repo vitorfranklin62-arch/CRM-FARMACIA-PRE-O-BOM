@@ -9,13 +9,21 @@ import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
 import { logAudit } from "@/lib/audit";
 import { campanhaCreateSchema } from "@/lib/validation";
+import { variaveisDesconhecidas } from "@/lib/campanhas/regras";
 import { cn } from "@/lib/utils";
+import { SeletorImagem, type MidiaCampanha } from "./SeletorImagem";
+import { PreviaWhatsapp } from "./PreviaWhatsapp";
+import { EnviarTeste } from "./EnviarTeste";
 import type { ClientesAlvo, FiltroCampanha, OrigemChat, Tag } from "@/types/database";
 
 type ClienteOpcao = { id: string; nome: string; telefone: string };
 type Atividade = "" | "ativos" | "inativos";
 
 export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose: () => void; userId: string }) {
+  // O id nasce aqui (e não no banco) pra imagem já subir na pasta da campanha.
+  const [campanhaId, setCampanhaId] = useState(() => crypto.randomUUID());
+  const [midia, setMidia] = useState<MidiaCampanha | null>(null);
+  const [enviandoImagem, setEnviandoImagem] = useState(false);
   const [titulo, setTitulo] = useState("");
   const [mensagem, setMensagem] = useState("");
   const [clientesAlvo, setClientesAlvo] = useState<ClientesAlvo>("todos");
@@ -34,6 +42,8 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
   const router = useRouter();
 
   function reset() {
+    setCampanhaId(crypto.randomUUID());
+    setMidia(null);
     setTitulo("");
     setMensagem("");
     setClientesAlvo("todos");
@@ -114,6 +124,22 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
     return lista.slice(0, 100);
   }, [clientes, busca]);
 
+  // Fechar sem salvar: a imagem que subiu não pertence a campanha nenhuma — apaga.
+  function fechar() {
+    if (midia && !saving) {
+      void fetch("/api/campanhas/midia", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ midia_path: midia.midia_path }),
+      }).catch(() => {});
+      setMidia(null);
+    }
+    onClose();
+  }
+
+  const desconhecidas = useMemo(() => variaveisDesconhecidas(mensagem), [mensagem]);
+  const modalidade = midia ? (mensagem.trim() ? "Imagem com legenda" : "Somente imagem") : "Somente texto";
+
   function alternar(lista: string[], id: string, definir: (v: string[]) => void) {
     definir(lista.includes(id) ? lista.filter((x) => x !== id) : [...lista, id]);
   }
@@ -131,16 +157,31 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
       return;
     }
 
+    if (enviandoImagem) {
+      setError("Espere a imagem terminar de enviar.");
+      return;
+    }
+    if (!mensagem.trim() && !midia) {
+      setError("Escreva a mensagem ou adicione uma imagem.");
+      return;
+    }
+    if (desconhecidas.length > 0) {
+      setError(`A mensagem usa ${desconhecidas.map((v) => `{{${v}}}`).join(", ")}, que o disparo não sabe preencher. Use só {{nome}} e {{saudacao}}.`);
+      return;
+    }
+
     const parsed = campanhaCreateSchema.safeParse({
+      id: campanhaId,
       titulo,
       mensagem,
       clientes_alvo: clientesAlvo,
       filtro_json: clientesAlvo === "por_filtro" ? filtro : null,
       agendada_para: agendadaPara ? new Date(agendadaPara).toISOString() : null,
+      midia: midia ? { midia_path: midia.midia_path, midia_mime: midia.midia_mime, midia_tamanho: midia.midia_tamanho } : null,
     });
 
     if (!parsed.success) {
-      setError("Preencha título e mensagem corretamente.");
+      setError("Preencha o título e a mensagem (ou a imagem) corretamente.");
       return;
     }
 
@@ -149,6 +190,7 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
     const { data, error: dbError } = await supabase
       .from("campanhas")
       .insert({
+        id: parsed.data.id,
         titulo: parsed.data.titulo,
         mensagem: parsed.data.mensagem,
         clientes_alvo: parsed.data.clientes_alvo,
@@ -156,18 +198,27 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
         agendada_para: parsed.data.agendada_para,
         status: parsed.data.agendada_para ? "agendada" : "rascunho",
         criado_por: userId,
+        // Só manda as colunas de imagem quando tem imagem: campanha de texto
+        // continua funcionando mesmo antes da migração 20261117 ser rodada.
+        ...(parsed.data.midia ?? {}),
       })
       .select("id")
       .single();
     setSaving(false);
 
     if (dbError) {
-      setError("Não foi possível criar a campanha.");
+      const semMigracao = /midia_|column|schema cache/i.test(dbError.message);
+      setError(
+        semMigracao && parsed.data.midia
+          ? "O banco ainda não aceita imagem em campanhas. Rode a migração supabase/migrations/20261117_campanhas_imagem.sql no Supabase."
+          : "Não foi possível criar a campanha."
+      );
       return;
     }
 
     await logAudit(supabase, "campanha_criada", "campanhas", data?.id, {
       titulo: parsed.data.titulo,
+      com_imagem: !!parsed.data.midia,
     });
 
     reset();
@@ -186,7 +237,7 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={fechar}
       title="Nova campanha"
       size="xl"
       footer={
@@ -206,10 +257,10 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
                 : `${previa} ${previa === 1 ? "cliente vai" : "clientes vão"} receber`}
           </p>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={onClose}>
+            <Button type="button" variant="secondary" onClick={fechar}>
               Cancelar
             </Button>
-            <Button type="submit" form="campanha-form" disabled={saving}>
+            <Button type="submit" form="campanha-form" disabled={saving || enviandoImagem}>
               {saving ? "Salvando..." : "Criar campanha"}
             </Button>
           </div>
@@ -225,15 +276,41 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
             </div>
 
             <div>
-              <Label htmlFor="mensagem">Mensagem</Label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <Label>Imagem</Label>
+                <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+                  {modalidade}
+                </span>
+              </div>
+              <SeletorImagem
+                campanhaId={campanhaId}
+                midia={midia}
+                onChange={setMidia}
+                onEnviandoChange={setEnviandoImagem}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="mensagem">{midia ? "Legenda da imagem (opcional)" : "Mensagem"}</Label>
               <Textarea
                 id="mensagem"
                 rows={9}
                 value={mensagem}
                 onChange={(e) => setMensagem(e.target.value)}
-                required
+                required={!midia}
                 maxLength={2000}
+                placeholder={"Olá, {{nome}}! 💚\n\n*Negrito*, _itálico_ e ~tachado~ funcionam como no WhatsApp."}
               />
+              <p className="mt-1 flex justify-between text-[11px] text-gray-400 dark:text-gray-500">
+                <span>Variáveis: {"{{nome}}"} e {"{{saudacao}}"}</span>
+                <span>{mensagem.length}/2000</span>
+              </p>
+              {desconhecidas.length > 0 && (
+                <p className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                  {desconhecidas.map((v) => `{{${v}}}`).join(", ")} não existe — o cliente receberia isso escrito assim. Use só{" "}
+                  {"{{nome}}"} e {"{{saudacao}}"}.
+                </p>
+              )}
             </div>
 
             <div>
@@ -363,6 +440,16 @@ export function CampanhaForm({ open, onClose, userId }: { open: boolean; onClose
                 </div>
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-6 border-t border-gray-100 pt-5 lg:grid-cols-2 dark:border-white/10">
+          <div>
+            <Label>Como vai chegar no WhatsApp</Label>
+            <PreviaWhatsapp mensagem={mensagem} imagemUrl={midia?.previaUrl ?? null} />
+          </div>
+          <div>
+            <EnviarTeste mensagem={mensagem} midiaPath={midia?.midia_path ?? null} bloqueado={enviandoImagem} />
           </div>
         </div>
 

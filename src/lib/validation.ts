@@ -54,13 +54,35 @@ const filtroCampanhaSchema = z.object({
   inativos_ha_dias: z.number().int().min(1).max(3650).optional(),
 });
 
-export const campanhaCreateSchema = z.object({
-  titulo: z.string().trim().min(1).max(200),
-  mensagem: z.string().trim().min(1).max(2000),
-  clientes_alvo: z.enum(["todos", "por_filtro"]),
-  filtro_json: filtroCampanhaSchema.nullable().optional(),
-  agendada_para: z.string().datetime().nullable().optional(),
+const midiaCampanhaSchema = z.object({
+  midia_path: z.string().regex(/^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png)$/),
+  midia_mime: z.enum(["image/jpeg", "image/png"]),
+  midia_tamanho: z.number().int().min(1).max(5 * 1024 * 1024),
 });
+
+/** Campanha: texto, imagem, ou imagem com legenda (o texto vira a legenda). */
+export const campanhaCreateSchema = z
+  .object({
+    id: z.string().uuid(),
+    titulo: z.string().trim().min(1).max(200),
+    mensagem: z.string().trim().max(2000),
+    clientes_alvo: z.enum(["todos", "por_filtro"]),
+    filtro_json: filtroCampanhaSchema.nullable().optional(),
+    agendada_para: z.string().datetime().nullable().optional(),
+    midia: midiaCampanhaSchema.nullable(),
+  })
+  .refine((c) => c.mensagem.length > 0 || c.midia !== null, { message: "Escreva a mensagem ou adicione uma imagem." })
+  .refine((c) => !c.midia || c.midia.midia_path.startsWith(`${c.id}/`), { message: "Imagem de outra campanha." });
+
+/** POST /api/campanhas/teste — envio de UMA mensagem de prova para um número informado pela dona. */
+export const campanhaTesteSchema = z
+  .object({
+    numero: z.string().trim().min(8).max(30),
+    nome: z.string().trim().max(60).optional(),
+    mensagem: z.string().trim().max(2000),
+    midia_path: z.string().regex(/^[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png)$/).nullable(),
+  })
+  .refine((t) => t.mensagem.length > 0 || t.midia_path !== null, { message: "Nada para enviar." });
 
 export const templateCreateSchema = z.object({
   titulo: z.string().trim().min(1).max(200),

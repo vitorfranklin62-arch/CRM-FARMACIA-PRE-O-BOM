@@ -1,10 +1,12 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { chamarUazapi, configUazapi, interpretarEstado } from "@/lib/uazapi";
+import { VALIDADE_LINK_ENVIO_SEG, linkDaImagemParaEnvio } from "@/lib/campanhas/midia";
 import {
   CFG,
   chaveDoTelefone,
   dentroDaJanela,
   inicioDoDiaSaoPaulo,
+  itemDaUazapi,
   montarTexto,
   segundosAteFimDaJanela,
   sortearInteiro,
@@ -30,7 +32,7 @@ import type { Campanha, CampanhaEnvio, CampanhaLote, CampanhaLoteStatus, FiltroC
  *   POST /sender/advanced     → { folder_id, count, status }
  *   GET  /sender/listfolders  → [{ id, info, status, log_total, ... }]
  *   POST /sender/listmessages → { messages: [...], pagination: { hasMore, nextOffset } }
- *   POST /sender/edit         → { folder_id, action: stop | continue }
+ *   POST /sender/edit         → { folder_id, action: stop | continue | delete }
  *   POST /chat/check          → [{ query, isInWhatsapp, ... }]
  *   GET  /instance/wa_messages_limits → { can_send_new_messages, message_ptbr, ... }
  */
@@ -194,7 +196,7 @@ function statusDaPasta(status: string): CampanhaLoteStatus | null {
   return null;
 }
 
-async function editarPasta(config: ConfigUazapi, folderId: string, action: "stop" | "continue") {
+async function editarPasta(config: ConfigUazapi, folderId: string, action: "stop" | "continue" | "delete") {
   return chamarUazapi(config, "/sender/edit", { method: "POST", body: { folder_id: folderId, action } });
 }
 
@@ -426,6 +428,28 @@ async function iniciarProximoLote(supabase: Supabase, config: ConfigUazapi, acoe
       .maybeSingle();
     if (pausado) {
       if (!pausado.folder_id) continue;
+
+      // Campanha com imagem: o lote guarda o link assinado da foto, que vence
+      // (VALIDADE_LINK_ENVIO_SEG). Lote pausado perto disso não é retomado —
+      // é apagado na uazapi e quem não recebeu volta pro próximo lote, que
+      // nasce com link novo. Quem já recebeu não recebe de novo.
+      const idadeSeg = (Date.now() - new Date(pausado.criado_em).getTime()) / 1000;
+      if (campanha.midia_path && idadeSeg > VALIDADE_LINK_ENVIO_SEG - 2 * 24 * 60 * 60) {
+        const apagou = await editarPasta(config, pausado.folder_id, "delete");
+        if (apagou.ok) {
+          await atualizarLote(supabase, pausado.id, {
+            status: "cancelado",
+            concluido_em: new Date().toISOString(),
+            erro: "Lote pausado por tempo demais: o link da imagem ia vencer. Recriado com link novo.",
+          });
+          await liberarReservas(supabase, pausado.id, "Lote antigo recriado com link novo da imagem.");
+          acoes.push(`Campanha "${campanha.titulo}": lote pausado há muito tempo foi recriado (link da imagem renovado).`);
+        } else {
+          acoes.push(`Campanha "${campanha.titulo}": não consegui recriar o lote antigo na uazapi (${apagou.erro}).`);
+        }
+        return;
+      }
+
       const retomou = await editarPasta(config, pausado.folder_id, "continue");
       if (retomou.ok) {
         await atualizarLote(supabase, pausado.id, {
@@ -530,6 +554,22 @@ async function criarLote(
     return "esperar";
   }
 
+  // Campanha com imagem: link assinado gerado AGORA, pra este lote (nunca o
+  // da hora em que a campanha foi criada — esse já poderia ter vencido).
+  let linkImagem: string | null = null;
+  if (campanha.midia_path) {
+    linkImagem = await linkDaImagemParaEnvio(campanha.midia_path);
+    if (!linkImagem) {
+      await pausarCampanhaComMotivo(
+        supabase,
+        campanha.id,
+        "A imagem desta campanha não foi encontrada no armazenamento (ou o Storage está fora do ar). Crie a campanha de novo com a imagem, ou clique em Retomar para tentar outra vez."
+      );
+      acoes.push(`Campanha "${campanha.titulo}" pausada: imagem não encontrada no Storage.`);
+      return "esperar";
+    }
+  }
+
   const { data: clientes, error: erroClientes } = await supabase.rpc("filtrar_clientes_campanha", {
     filtro: campanha.clientes_alvo === "por_filtro" ? ((campanha.filtro_json as FiltroCampanha | null) ?? null) : null,
   });
@@ -597,7 +637,7 @@ async function criarLote(
       .map((f) => ({ ...f, numero: conferidos.get(f.numero) ?? f.numero }));
     if (aptos.length === 0) continue;
 
-    return await entregarLote(supabase, config, campanha, aptos, inicio, acoes);
+    return await entregarLote(supabase, config, campanha, aptos, inicio, linkImagem, acoes);
   }
 
   return "esperar";
@@ -609,6 +649,7 @@ async function entregarLote(
   campanha: Campanha,
   aptos: Destinatario[],
   inicio: Date,
+  linkImagem: string | null,
   acoes: string[]
 ): Promise<"criado" | "esperar"> {
   // Grava o lote ANTES de chamar a uazapi. O índice único do banco só deixa
@@ -650,7 +691,8 @@ async function entregarLote(
       delayMax: CFG.pausaMaxSeg,
       info: `${campanha.titulo.slice(0, 80)} · ${marcadorDoLote(lote.id)}`,
       scheduled_for: inicio.getTime(),
-      messages: aptos.map((f) => ({ number: f.numero, type: "text", text: f.texto })),
+      // Com imagem: uma mensagem de foto com a legenda dentro. Sem: o mesmo texto de sempre.
+      messages: aptos.map((f) => itemDaUazapi(f.numero, f.texto, linkImagem)),
     },
   });
 

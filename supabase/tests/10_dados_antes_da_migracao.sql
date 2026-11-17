@@ -20,3 +20,11 @@ insert into conversas (id, cliente_id, status, atualizado_em) values
 alter table conversas disable trigger trg_conversas_atualizado_em;
 update conversas set atualizado_em = '2026-01-01T10:00:00Z' where id = '20000000-0000-0000-0000-000000000001';
 alter table conversas enable trigger trg_conversas_atualizado_em;
+
+-- Campanha de TEXTO criada antes da migração 20261117 (campanhas com imagem):
+-- tem que continuar exatamente igual depois dela.
+insert into campanhas (id, titulo, mensagem, clientes_alvo, status, criado_por) values
+  ('30000000-0000-0000-0000-000000000001', 'Campanha antiga', E'Oi, {{nome}}!\nPromoção antiga.', 'todos', 'enviada',
+   '00000000-0000-0000-0000-0000000000d1');
+insert into campanha_envios (campanha_id, cliente_id, telefone, status) values
+  ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '557100000001', 'enviado');

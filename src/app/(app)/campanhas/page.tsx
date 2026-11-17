@@ -2,6 +2,7 @@ import { requireDona } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { CampanhasList, type ResumoEnvio } from "@/components/campanhas/CampanhasList";
 import { AcompanhamentoEntrega } from "@/components/campanhas/AcompanhamentoEntrega";
+import { linksParaTela } from "@/lib/campanhas/midia";
 import type { Campanha, CampanhaLote } from "@/types/database";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,13 @@ export default async function CampanhasPage() {
   const loteAberto: Record<string, CampanhaLote> = {};
   for (const l of (lotes as CampanhaLote[] | null) ?? []) loteAberto[l.campanha_id] = l;
 
+  // Imagens das campanhas: bucket privado, então o servidor gera links de 1h
+  // (só pra quem já passou pelo requireDona acima).
+  const campanhas = (data as Campanha[]) ?? [];
+  const imagens = await linksParaTela(
+    campanhas.map((c) => c.midia_path).filter((caminho): caminho is string => !!caminho)
+  );
+
   return (
     <div className="space-y-6">
       <div>
@@ -53,10 +61,11 @@ export default async function CampanhasPage() {
       <AcompanhamentoEntrega />
 
       <CampanhasList
-        campanhas={(data as Campanha[]) ?? []}
+        campanhas={campanhas}
         userId={usuario.id}
         resumo={resumo}
         loteAberto={loteAberto}
+        imagens={imagens}
       />
     </div>
   );
